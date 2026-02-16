@@ -5,7 +5,7 @@ from logic import MrakOrchestrator
 
 @pytest.fixture
 def orch():
-    # Мокаем Groq при инициализации
+    # Мокаем Groq при инициализации по стандартам Black
     with patch("logic.Groq") as mock_groq:
         instance = MrakOrchestrator(api_key="gsk_test_123")
         instance.client = mock_groq.return_value
@@ -20,22 +20,31 @@ def test_pii_filter(orch):
 
 
 def test_stream_analysis_flow(orch):
-    # Создаем сложный мок для context manager (with client...raw_response)
+    # Создаем мок для объекта ответа
     mock_response = MagicMock()
-    mock_response.headers = {
-        "x-ratelimit-remaining-tokens": "500",
-        "x-ratelimit-remaining-requests": "10",
-    }
+
+    # Мокаем метод .get() у хедеров, чтобы он возвращал нужные строки
+    def side_effect(key, default=None):
+        if key == "x-ratelimit-remaining-tokens":
+            return "500"
+        if key == "x-ratelimit-remaining-requests":
+            return "10"
+        return default
+
+    mock_response.headers.get.side_effect = side_effect
 
     # Мокаем чанки данных
     mock_chunk = MagicMock()
-    mock_chunk.choices[0].delta.content = "AI_RESPONSE"
+    # Правильно имитируем структуру: chunk.choices[0].delta.content
+    mock_choice = MagicMock()
+    mock_choice.delta.content = "AI_RESPONSE"
+    mock_chunk.choices = [mock_choice]
+
+    # parse() должен возвращать итератор по чанкам
     mock_response.parse.return_value = [mock_chunk]
 
-    # Настраиваем вход в контекстный менеджер
-    orch.client.chat.completions.with_raw_response.create.return_value.__enter__.return_value = (
-        mock_response
-    )
+    # Настраиваем вызов: возвращаем мок-ответ напрямую (без __enter__)
+    orch.client.chat.completions.with_raw_response.create.return_value = mock_response
 
     gen = orch.stream_analysis("Hello", "System", "llama-model")
     results = list(gen)

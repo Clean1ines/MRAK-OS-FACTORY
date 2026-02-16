@@ -3,77 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MRAK-OS | CONTROL CENTER</title>
+    <title>MRAK-OS | DYNAMIC</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'JetBrains Mono', monospace; background-color: #0a0a0b; color: #d1d5db; }
         .markdown-body { font-size: 0.9rem; line-height: 1.7; }
-        .markdown-body h1 { color: #fff; font-weight: 600; font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #222; padding-bottom: 0.5rem; }
         .markdown-body code { color: #6ee7b7; background: #1a1a1c; padding: 0.2rem 0.4rem; border-radius: 4px; }
         .markdown-body pre { background: #000; border: 1px solid #222; padding: 1.5rem; border-radius: 12px; margin: 1.2rem 0; overflow-x: auto; }
-        .input-glow:focus-within { box-shadow: 0 0 20px rgba(5, 150, 105, 0.1); border-color: #059669; }
         .streaming::after { content: '▋'; animation: blink 1s infinite; color: #059669; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         select option { background: #111; color: #d1d5db; }
         ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
     </style>
 </head>
-<body class="h-screen flex flex-col antialiased">
-
+<body class="h-screen flex flex-col antialiased overflow-hidden">
     <nav class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl shrink-0">
         <div class="flex items-center gap-6">
             <div class="flex flex-col">
                 <span class="text-[8px] tracking-[0.3em] text-emerald-500 font-bold uppercase">Prompt_Mode</span>
-                <select id="mode-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer hover:text-emerald-500 transition-colors">
+                <select id="mode-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer">
                     <option value="01_CORE">01: CORE_SYSTEM</option>
+                    <option value="02_UI_UX">02: UI_UX_DESIGN</option>
                     <option value="03_SOFT_ENG">03: TITAN_DEV</option>
+                    <option value="04_FAILURE">04: FAILURE_ANALYSIS</option>
+                    <option value="05_ARCHITECT">05: ARCHITECT</option>
                     <option value="06_TRANSLATOR">06: PROMPT_ENG</option>
                     <option value="07_BYPASS">07: RAW_BYPASS</option>
                 </select>
             </div>
-            <div class="h-6 w-[1px] bg-white/10"></div>
             <div class="flex flex-col">
                 <span class="text-[8px] tracking-[0.3em] text-zinc-500 font-bold uppercase">Neural_Model</span>
-                <select id="model-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer hover:text-emerald-500 transition-colors">
-                    <option value="llama-3.3-70b-versatile">LLAMA 3.3 70B</option>
-                    <option value="deepseek-r1-distill-llama-70b">DEEPSEEK R1 (L70B)</option>
-                    <option value="llama-3.1-8b-instant">LLAMA 3.1 8B (FAST)</option>
+                <select id="model-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer">
+                    <option>Loading models...</option>
                 </select>
             </div>
         </div>
-        <div class="flex gap-6 items-center">
-            <div class="hidden md:flex gap-4 text-[9px] font-mono text-zinc-600">
-                <span>TOKENS: <b id="q-tokens" class="text-zinc-400">---</b></span>
-                <span>REQ: <b id="q-req" class="text-zinc-400">---</b></span>
-            </div>
-            <div class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
+        <div class="flex gap-4 text-[9px] font-mono text-zinc-600">
+            <span>TOKENS: <b id="q-tokens" class="text-zinc-400">---</b></span>
+            <span>REQ: <b id="q-req" class="text-zinc-400">---</b></span>
         </div>
     </nav>
 
-    <div id="model-banner" class="px-6 py-2 bg-emerald-500/5 border-b border-white/5 text-[9px] text-zinc-500 flex justify-between items-center">
-        <span id="model-desc">Универсальный флагман для глубокой аналитики.</span>
-        <span id="token-count" class="font-mono text-emerald-500/50">EST_COST: 0 TOKENS</span>
+    <div class="px-6 py-2 bg-emerald-500/5 border-b border-white/5 text-[9px] text-zinc-500 flex justify-between">
+        <span id="status-text">SYSTEM_READY</span>
+        <span id="token-count">EST_COST: 0 TOKENS</span>
     </div>
 
-    <main id="terminal" class="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_#0d0d0e_0%,_#0a0a0b_100%)]">
-        <div id="messages" class="max-w-3xl mx-auto py-12 px-6 space-y-12">
-            <div class="text-[10px] text-zinc-700 font-mono space-y-1 opacity-50">
-                <p>> MRAK-OS INIT: SUCCESS</p>
-                <p>> QUOTA_LISTENER: ACTIVE</p>
-            </div>
-        </div>
+    <main id="terminal" class="flex-1 overflow-y-auto px-6 scroll-smooth">
+        <div id="messages" class="max-w-3xl mx-auto py-12 space-y-12"></div>
         <div id="scroll-anchor" class="h-32"></div>
     </main>
 
     <footer class="p-6 bg-gradient-to-t from-black to-transparent shrink-0">
         <div class="max-w-3xl mx-auto">
-            <div class="input-glow flex items-end gap-3 bg-[#111113] border border-white/5 rounded-2xl p-3 transition-all duration-300">
-                <textarea id="input" class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-64 text-sm leading-relaxed" placeholder="Введите запрос..."></textarea>
-                <button id="send-btn" class="mb-1 p-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 rounded-xl transition-all">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <div class="flex items-end gap-3 bg-[#111113] border border-white/5 rounded-2xl p-3 transition-all duration-300 focus-within:border-emerald-500">
+                <textarea id="input" class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-[300px] text-sm" placeholder="Введите запрос..."></textarea>
+                <button id="send-btn" class="p-2 bg-emerald-600/10 text-emerald-500 rounded-xl hover:bg-emerald-600/20 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/></svg>
                 </button>
             </div>
         </div>
@@ -84,50 +74,53 @@
         const sendBtn = document.getElementById('send-btn');
         const messagesDiv = document.getElementById('messages');
         const scrollAnchor = document.getElementById('scroll-anchor');
-        const modeSelect = document.getElementById('mode-select');
         const modelSelect = document.getElementById('model-select');
-        const modelDesc = document.getElementById('model-desc');
-        const tokenCount = document.getElementById('token-count');
-        const qTokens = document.getElementById('q-tokens');
-        const qReq = document.getElementById('q-req');
-
-        const modelInfo = {
-            "llama-3.3-70b-versatile": "Универсальный флагман для глубокой аналитики.",
-            "deepseek-r1-distill-llama-70b": "DeepSeek R1: Глубокое логическое мышление и сложный код.",
-            "llama-3.1-8b-instant": "Максимальная скорость для простых задач и переводов."
-        };
+        const statusText = document.getElementById('status-text');
 
         marked.setOptions({ gfm: true, breaks: true });
-
-        modelSelect.onchange = () => { modelDesc.innerText = modelInfo[modelSelect.value]; };
 
         input.oninput = function() {
             this.style.height = 'auto';
             this.style.height = (this.scrollHeight) + 'px';
-            const tokens = Math.ceil(this.value.length / 4);
-            tokenCount.innerText = `EST_COST: ~${tokens} TOKENS`;
+            document.getElementById('token-count').innerText = `EST_COST: ~${Math.ceil(this.value.length / 4)} TOKENS`;
         };
+
+        async function fetchModels() {
+            try {
+                const res = await fetch('/api/models');
+                const models = await res.json();
+                modelSelect.innerHTML = '';
+                models.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.innerText = m.id.toUpperCase();
+                    if (m.id === 'openai/gpt-oss-120b' || m.id === 'llama-3.3-70b-versatile') opt.selected = true;
+                    modelSelect.appendChild(opt);
+                });
+            } catch (e) {
+                modelSelect.innerHTML = '<option value="llama-3.3-70b-versatile">LLAMA-3.3-70B (FALLBACK)</option>';
+            }
+        }
 
         async function start() {
             const prompt = input.value.trim();
-            const mode = modeSelect.value;
-            const model = modelSelect.value;
             if (!prompt) return;
+
+            const mode = document.getElementById('mode-select').value;
+            const model = modelSelect.value;
 
             input.value = ''; input.style.height = '44px';
             input.disabled = true; sendBtn.disabled = true;
+            statusText.innerText = "NEURAL_LINK_ESTABLISHED...";
 
             const u = document.createElement('div');
-            u.className = 'border-l-2 border-zinc-800 pl-6 py-2';
-            u.innerHTML = `<p class="text-sm text-zinc-400">${prompt}</p>`;
+            u.className = 'border-l-2 border-zinc-800 pl-6 text-sm text-zinc-400';
+            u.innerText = prompt;
             messagesDiv.appendChild(u);
 
             const a = document.createElement('div');
             a.className = 'markdown-body streaming';
             messagesDiv.appendChild(a);
-
-            let raw = "";
-            let metadataReceived = false;
 
             try {
                 const res = await fetch('/api/analyze', {
@@ -135,22 +128,24 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({prompt, mode, model})
                 });
+
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder();
+                let raw = "";
+                let metaDone = false;
 
                 while (true) {
                     const {done, value} = await reader.read();
                     if (done) break;
                     let chunk = decoder.decode(value);
 
-                    // Обработка метаданных лимитов
-                    if (!metadataReceived && chunk.includes("__METADATA__")) {
+                    if (!metaDone && chunk.includes("__METADATA__")) {
                         const parts = chunk.split("__");
                         const meta = parts[2].split("|");
-                        qTokens.innerText = meta[0];
-                        qReq.innerText = meta[1];
-                        chunk = parts.slice(3).join("__"); // Убираем метаданные из текста
-                        metadataReceived = true;
+                        document.getElementById('q-tokens').innerText = meta[0];
+                        document.getElementById('q-req').innerText = meta[1];
+                        chunk = parts.slice(3).join("__");
+                        metaDone = true;
                     }
 
                     raw += chunk;
@@ -162,10 +157,12 @@
             } finally {
                 a.classList.remove('streaming');
                 input.disabled = false; sendBtn.disabled = false;
+                statusText.innerText = "SYSTEM_READY";
                 input.focus();
             }
         }
 
+        window.onload = fetchModels;
         sendBtn.onclick = start;
         input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); start(); } };
     </script>

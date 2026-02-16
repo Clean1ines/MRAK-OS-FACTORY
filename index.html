@@ -8,44 +8,38 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body { 
-            font-family: 'JetBrains Mono', monospace; 
-            background-color: #0a0a0b; 
-            color: #d1d5db;
-        }
+        body { font-family: 'JetBrains Mono', monospace; background-color: #0a0a0b; color: #d1d5db; }
         .markdown-body { font-size: 0.9rem; line-height: 1.7; }
         .markdown-body h1 { color: #fff; font-weight: 600; font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #222; padding-bottom: 0.5rem; }
-        .markdown-body h2 { color: #f3f4f6; font-weight: 600; font-size: 1.1rem; margin-top: 1.5rem; }
-        .markdown-body code { color: #6ee7b7; background: #1a1a1c; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+        .markdown-body code { color: #6ee7b7; background: #1a1a1c; padding: 0.2rem 0.4rem; border-radius: 4px; }
         .markdown-body pre { background: #000; border: 1px solid #222; padding: 1.5rem; border-radius: 12px; margin: 1.2rem 0; overflow-x: auto; }
-        .markdown-body table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
-        .markdown-body th { background: #161618; text-align: left; padding: 12px; border: 1px solid #222; color: #fff; font-size: 0.8rem; }
-        .markdown-body td { padding: 12px; border: 1px solid #222; font-size: 0.85rem; }
-        .markdown-body blockquote { border-left: 3px solid #059669; padding-left: 1.5rem; color: #9ca3af; font-style: italic; }
-        
-        /* Стилизация ввода */
         .input-glow:focus-within { box-shadow: 0 0 20px rgba(5, 150, 105, 0.1); border-color: #059669; }
-        
-        /* Анимация потока */
         .streaming::after { content: '▋'; animation: blink 1s infinite; color: #059669; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        select option { background: #0a0a0b; color: #d1d5db; }
     </style>
 </head>
 <body class="h-screen flex flex-col antialiased">
 
     <nav class="h-12 border-b border-white/5 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl">
         <div class="flex items-center gap-4">
-            <span class="text-[10px] tracking-[0.4em] text-zinc-600 font-bold">MRAK-OS_FACTORY</span>
+            <span class="text-[10px] tracking-[0.4em] text-emerald-500 font-bold uppercase">Mrak-os</span>
+            <select id="mode-select" class="bg-transparent text-[10px] text-zinc-500 font-mono border-none outline-none cursor-pointer hover:text-emerald-500 transition-colors">
+                <option value="01_CORE">MODULE: 01_CORE</option>
+                <option value="06_TRANSLATOR">MODULE: 06_PROMPT_ENG</option>
+            </select>
+        </div>
+        <div class="text-[9px] text-zinc-600 font-mono flex items-center gap-2">
+            <span id="mode-status">ACTIVE</span>
             <div class="h-1 w-1 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
         </div>
-        <div class="text-[9px] text-zinc-500 font-mono">STABLE_3.3_V_TITAN</div>
     </nav>
 
-    <main id="terminal" class="flex-1 overflow-y-auto overflow-x-hidden">
+    <main id="terminal" class="flex-1 overflow-y-auto">
         <div id="messages" class="max-w-3xl mx-auto py-12 px-6 space-y-12">
             <div class="text-[10px] text-zinc-700 font-mono space-y-1">
                 <p>> SYSTEM CHECK: OK</p>
-                <p>> NEURAL_LINK: ENCRYPTED</p>
+                <p>> MODE_SELECTOR: READY</p>
             </div>
         </div>
         <div id="scroll-anchor" class="h-32"></div>
@@ -54,13 +48,8 @@
     <footer class="p-6 bg-gradient-to-t from-black to-transparent">
         <div class="max-w-3xl mx-auto">
             <div class="input-glow flex items-end gap-3 bg-[#111113] border border-white/5 rounded-2xl p-3 transition-all duration-300">
-                <textarea 
-                    id="input" 
-                    class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-64 text-sm leading-relaxed placeholder-zinc-600"
-                    placeholder="Запросить данные..."
-                    rows="1"
-                ></textarea>
-                <button id="send-btn" class="mb-1 p-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 rounded-xl transition-all disabled:opacity-0">
+                <textarea id="input" class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-64 text-sm leading-relaxed" placeholder="Запросить данные..."></textarea>
+                <button id="send-btn" class="mb-1 p-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 rounded-xl transition-all">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                 </button>
             </div>
@@ -72,6 +61,7 @@
         const sendBtn = document.getElementById('send-btn');
         const messagesDiv = document.getElementById('messages');
         const scrollAnchor = document.getElementById('scroll-anchor');
+        const modeSelect = document.getElementById('mode-select');
 
         marked.setOptions({ gfm: true, breaks: true });
 
@@ -80,26 +70,19 @@
             this.style.height = (this.scrollHeight) + 'px';
         };
 
-        input.onkeydown = (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); start(); }
-        };
-
-        sendBtn.onclick = start;
-
         async function start() {
             const prompt = input.value.trim();
+            const mode = modeSelect.value;
             if (!prompt) return;
 
             input.value = ''; input.style.height = '44px';
             input.disabled = true; sendBtn.disabled = true;
 
-            // User UI
             const u = document.createElement('div');
             u.className = 'border-l-2 border-zinc-800 pl-6 py-2';
-            u.innerHTML = `<p class="text-sm text-zinc-400 leading-relaxed">${prompt}</p>`;
+            u.innerHTML = `<p class="text-sm text-zinc-400">${prompt}</p>`;
             messagesDiv.appendChild(u);
 
-            // AI UI
             const a = document.createElement('div');
             a.className = 'markdown-body streaming';
             messagesDiv.appendChild(a);
@@ -109,7 +92,7 @@
                 const res = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({prompt})
+                    body: JSON.stringify({prompt, mode})
                 });
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder();
@@ -129,6 +112,9 @@
                 input.focus();
             }
         }
+
+        sendBtn.onclick = start;
+        input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); start(); } };
     </script>
 </body>
 </html>

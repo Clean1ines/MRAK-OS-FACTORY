@@ -1,0 +1,10 @@
+# .gitignore
+.env
+.streamlit/secrets.toml
+app.log
+system_prompt.txt
+__pycache__/
+venv/
+.pytest_cache/
+project_dump.txt
+dump_project.py

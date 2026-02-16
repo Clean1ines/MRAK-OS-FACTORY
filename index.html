@@ -2,63 +2,68 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MRAK-OS TERMINAL</title>
-    <link rel="manifest" href="/manifest.json">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MRAK-OS | TITAN EDITION</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'JetBrains Mono', monospace; background-color: #050505; }
-        /* Скрываем скроллбар но оставляем прокрутку */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        .typing-cursor::after {
-            content: '█';
-            animation: blink 1s step-start infinite;
-            color: #22c55e;
-            margin-left: 2px;
+        body { 
+            font-family: 'JetBrains Mono', monospace; 
+            background-color: #0a0a0b; 
+            color: #d1d5db;
         }
-        @keyframes blink { 50% { opacity: 0; } }
+        .markdown-body { font-size: 0.9rem; line-height: 1.7; }
+        .markdown-body h1 { color: #fff; font-weight: 600; font-size: 1.4rem; margin-top: 2rem; border-bottom: 1px solid #222; padding-bottom: 0.5rem; }
+        .markdown-body h2 { color: #f3f4f6; font-weight: 600; font-size: 1.1rem; margin-top: 1.5rem; }
+        .markdown-body code { color: #6ee7b7; background: #1a1a1c; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+        .markdown-body pre { background: #000; border: 1px solid #222; padding: 1.5rem; border-radius: 12px; margin: 1.2rem 0; overflow-x: auto; }
+        .markdown-body table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+        .markdown-body th { background: #161618; text-align: left; padding: 12px; border: 1px solid #222; color: #fff; font-size: 0.8rem; }
+        .markdown-body td { padding: 12px; border: 1px solid #222; font-size: 0.85rem; }
+        .markdown-body blockquote { border-left: 3px solid #059669; padding-left: 1.5rem; color: #9ca3af; font-style: italic; }
+        
+        /* Стилизация ввода */
+        .input-glow:focus-within { box-shadow: 0 0 20px rgba(5, 150, 105, 0.1); border-color: #059669; }
+        
+        /* Анимация потока */
+        .streaming::after { content: '▋'; animation: blink 1s infinite; color: #059669; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
     </style>
 </head>
-<body class="text-gray-300 h-screen flex flex-col overflow-hidden">
+<body class="h-screen flex flex-col antialiased">
 
-    <header class="border-b border-gray-800 p-4 flex justify-between items-center bg-[#0a0a0a] z-10">
-        <div class="flex items-center gap-3">
-            <div class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)] animate-pulse"></div>
-            <h1 class="font-bold tracking-widest text-gray-100">MRAK-OS <span class="text-green-600 text-xs align-top">v3.1</span></h1>
+    <nav class="h-12 border-b border-white/5 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl">
+        <div class="flex items-center gap-4">
+            <span class="text-[10px] tracking-[0.4em] text-zinc-600 font-bold">MRAK-OS_FACTORY</span>
+            <div class="h-1 w-1 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
         </div>
-        <div class="text-xs text-gray-600 hidden md:block">SYS.CONNECTED // PORT:8000</div>
-    </header>
+        <div class="text-[9px] text-zinc-500 font-mono">STABLE_3.3_V_TITAN</div>
+    </nav>
 
-    <main id="terminal" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 no-scrollbar scroll-smooth">
-        <div class="text-gray-500 text-sm mb-8">
-            > SYSTEM INITIALIZED...<br>
-            > CONNECTION ESTABLISHED.<br>
-            > WAITING FOR INPUT...
+    <main id="terminal" class="flex-1 overflow-y-auto overflow-x-hidden">
+        <div id="messages" class="max-w-3xl mx-auto py-12 px-6 space-y-12">
+            <div class="text-[10px] text-zinc-700 font-mono space-y-1">
+                <p>> SYSTEM CHECK: OK</p>
+                <p>> NEURAL_LINK: ENCRYPTED</p>
+            </div>
         </div>
-        <div id="messages" class="space-y-6"></div>
-        <div id="scroll-anchor"></div>
+        <div id="scroll-anchor" class="h-32"></div>
     </main>
 
-    <footer class="p-4 bg-[#0a0a0a] border-t border-gray-800">
-        <div class="relative max-w-4xl mx-auto">
-            <textarea 
-                id="input" 
-                class="w-full bg-[#111] text-gray-200 p-4 pr-16 rounded-lg border border-gray-700 focus:border-green-600 focus:ring-1 focus:ring-green-900 outline-none resize-none h-14 max-h-32 transition-all shadow-lg placeholder-gray-700"
-                placeholder="Введите команду..."
-                rows="1"
-            ></textarea>
-            
-            <button id="send-btn" class="absolute right-2 bottom-2 text-gray-500 hover:text-green-500 p-2 transition-colors disabled:opacity-50">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                </svg>
-            </button>
-        </div>
-        <div class="text-center mt-2 text-[10px] text-gray-700 uppercase tracking-widest">
-            Enter to send / Shift+Enter for new line
+    <footer class="p-6 bg-gradient-to-t from-black to-transparent">
+        <div class="max-w-3xl mx-auto">
+            <div class="input-glow flex items-end gap-3 bg-[#111113] border border-white/5 rounded-2xl p-3 transition-all duration-300">
+                <textarea 
+                    id="input" 
+                    class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-64 text-sm leading-relaxed placeholder-zinc-600"
+                    placeholder="Запросить данные..."
+                    rows="1"
+                ></textarea>
+                <button id="send-btn" class="mb-1 p-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 rounded-xl transition-all disabled:opacity-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </button>
+            </div>
         </div>
     </footer>
 
@@ -66,99 +71,63 @@
         const input = document.getElementById('input');
         const sendBtn = document.getElementById('send-btn');
         const messagesDiv = document.getElementById('messages');
-        const terminal = document.getElementById('terminal');
         const scrollAnchor = document.getElementById('scroll-anchor');
 
-        // Авто-высота textarea
-        input.addEventListener('input', function() {
+        marked.setOptions({ gfm: true, breaks: true });
+
+        input.oninput = function() {
             this.style.height = 'auto';
             this.style.height = (this.scrollHeight) + 'px';
-            if(this.value === '') this.style.height = '56px'; // Возврат к исходному
-        });
+        };
 
-        // Обработка Enter
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                startGeneration();
-            }
-        });
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); start(); }
+        };
 
-        sendBtn.addEventListener('click', startGeneration);
+        sendBtn.onclick = start;
 
-        async function startGeneration() {
-            const text = input.value.trim();
-            if (!text) return;
+        async function start() {
+            const prompt = input.value.trim();
+            if (!prompt) return;
 
-            // Блокируем ввод
-            input.value = '';
-            input.style.height = '56px';
-            input.disabled = true;
-            sendBtn.disabled = true;
+            input.value = ''; input.style.height = '44px';
+            input.disabled = true; sendBtn.disabled = true;
 
-            // 1. Рисуем сообщение пользователя
-            const userMsg = document.createElement('div');
-            userMsg.className = 'flex justify-end';
-            userMsg.innerHTML = `<div class="bg-[#1a1a1a] text-gray-300 px-4 py-3 rounded-2xl rounded-tr-sm border border-gray-800 max-w-[85%] whitespace-pre-wrap shadow-md">${escapeHtml(text)}</div>`;
-            messagesDiv.appendChild(userMsg);
-            scrollToBottom();
+            // User UI
+            const u = document.createElement('div');
+            u.className = 'border-l-2 border-zinc-800 pl-6 py-2';
+            u.innerHTML = `<p class="text-sm text-zinc-400 leading-relaxed">${prompt}</p>`;
+            messagesDiv.appendChild(u);
 
-            // 2. Создаем контейнер для ответа AI
-            const aiMsgContainer = document.createElement('div');
-            aiMsgContainer.className = 'flex justify-start';
-            const aiContent = document.createElement('div');
-            aiContent.className = 'text-green-400 max-w-[90%] leading-relaxed typing-cursor whitespace-pre-wrap'; 
-            // Префикс системы
-            aiContent.innerHTML = '<span class="text-green-800 font-bold select-none">MRAK-OS > </span>';
-            
-            aiMsgContainer.appendChild(aiContent);
-            messagesDiv.appendChild(aiMsgContainer);
+            // AI UI
+            const a = document.createElement('div');
+            a.className = 'markdown-body streaming';
+            messagesDiv.appendChild(a);
 
+            let raw = "";
             try {
-                const response = await fetch('/api/analyze', {
+                const res = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({prompt: text})
+                    body: JSON.stringify({prompt})
                 });
-
-                if (!response.ok) throw new Error("Network Error");
-
-                const reader = response.body.getReader();
+                const reader = res.body.getReader();
                 const decoder = new TextDecoder();
 
                 while (true) {
                     const {done, value} = await reader.read();
                     if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    // Добавляем текст
-                    aiContent.innerHTML += escapeHtml(chunk);
-                    scrollToBottom();
+                    raw += decoder.decode(value);
+                    a.innerHTML = marked.parse(raw);
+                    scrollAnchor.scrollIntoView({ behavior: "smooth" });
                 }
-
             } catch (e) {
-                aiContent.innerHTML += `<span class="text-red-500">\n[SYSTEM ERROR]: ${e.message}</span>`;
+                a.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
             } finally {
-                // Убираем курсор и разблокируем
-                aiContent.classList.remove('typing-cursor');
-                input.disabled = false;
-                sendBtn.disabled = false;
+                a.classList.remove('streaming');
+                input.disabled = false; sendBtn.disabled = false;
                 input.focus();
-                scrollToBottom();
             }
-        }
-
-        function scrollToBottom() {
-            scrollAnchor.scrollIntoView({ behavior: "smooth" });
-        }
-
-        function escapeHtml(text) {
-            return text
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
         }
     </script>
 </body>

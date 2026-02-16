@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <link rel="manifest" href="/manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>MRAK-OS Factory</title>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
+    <div class="max-w-2xl mx-auto space-y-4">
+        <header class="flex justify-between items-center py-4 border-b border-slate-700">
+            <h1 class="text-xl font-mono font-bold text-blue-400">FACTORY_OS_v3.0</h1>
+            <div id="status" class="text-xs bg-slate-800 px-2 py-1 rounded">READY</div>
+        </header>
+        
+        <textarea id="input" class="w-full h-48 bg-slate-800 border border-slate-700 p-4 rounded-md focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm" placeholder="ENTER_DATA_STREAM..."></textarea>
+        
+        <button id="btn" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-md font-bold transition-all active:scale-95">EXECUTE_PROCESS</button>
+        
+        <div class="bg-black/50 p-6 rounded-md border border-slate-800 min-h-[300px]">
+            <div id="out" class="prose prose-invert max-w-none font-sans leading-relaxed"></div>
+        </div>
+    </div>
+
+    <script>
+        const btn = document.getElementById('btn');
+        const out = document.getElementById('out');
+        
+        btn.onclick = async () => {
+            btn.disabled = true;
+            out.innerHTML = "<em>PROCESSING...</em>";
+            const response = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({prompt: document.getElementById('input').value})
+            });
+
+            const reader = response.body.getReader();
+            out.innerHTML = "";
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) break;
+                out.innerText += new TextDecoder().decode(value);
+            }
+            btn.disabled = false;
+        };
+    </script>
+</body>
+</html>

@@ -6,12 +6,18 @@
     <title>MRAK-OS | DYNAMIC</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <link 
+href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap"
+ rel="stylesheet">
     <style>
         body { font-family: 'JetBrains Mono', monospace; background-color: #0a0a0b; color: #d1d5db; }
         .markdown-body { font-size: 0.9rem; line-height: 1.7; }
         .markdown-body code { color: #6ee7b7; background: #1a1a1c; padding: 0.2rem 0.4rem; border-radius: 4px; }
-        .markdown-body pre { background: #000; border: 1px solid #222; padding: 1.5rem; border-radius: 12px; margin: 1.2rem 0; overflow-x: auto; }
+
+        .markdown-body pre { background: #000; border: 1px solid #222; 
+padding: 1.5rem; border-radius: 12px; margin: 1.2rem 0; overflow-x: 
+auto; }
         .streaming::after { content: '▋'; animation: blink 1s infinite; color: #059669; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         select option { background: #111; color: #d1d5db; }
@@ -21,23 +27,34 @@
     </style>
 </head>
 <body class="h-screen flex flex-col antialiased overflow-hidden">
-    <nav class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl shrink-0">
+
+    <nav class="h-14 border-b border-white/5 flex items-center 
+justify-between px-6 bg-black/40 backdrop-blur-xl shrink-0">
         <div class="flex items-center gap-6">
             <div class="flex flex-col">
                 <span class="text-[8px] tracking-[0.3em] text-emerald-500 font-bold uppercase">Prompt_Mode</span>
-                <select id="mode-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer">
+
+                <select id="mode-select" class="bg-transparent 
+text-[10px] text-white font-mono outline-none cursor-pointer">
                     <option value="01_CORE">01: CORE_SYSTEM</option>
                     <option value="02_UI_UX">02: UI_UX_DESIGN</option>
                     <option value="03_SOFT_ENG">03: TITAN_DEV</option>
                     <option value="04_FAILURE">04: FAILURE_ANALYSIS</option>
-                    <option value="05_ARCHITECT">05: ARCHITECT</option>
                     <option value="06_TRANSLATOR">06: PROMPT_ENG</option>
                     <option value="07_BYPASS">07: RAW_BYPASS</option>
+                    <option value="07_INTEGRATION_PLAN">07: INTEGRATION_PLAN</option>
+                    <option value="08_PROMPT_COUNCIL">08: PROMPT_COUNCIL</option>
+                    <option value="09_ALGO_COUNCIL">09: ALGO_COUNCIL</option>
+                    <option value="10_FULL_CODE_GEN">10: FULL_CODE_GEN</option>
+                    <option value="11_REQ_COUNCIL">11: REQ_COUNCIL</option>
+                    <option value="12_SELF_ANALYSIS_FACTORY">12: SELF_ANALYSIS_FACTORY</option>
                 </select>
             </div>
             <div class="flex flex-col">
                 <span class="text-[8px] tracking-[0.3em] text-zinc-500 font-bold uppercase">Neural_Model</span>
-                <select id="model-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer">
+
+                <select id="model-select" class="bg-transparent 
+text-[10px] text-white font-mono outline-none cursor-pointer">
                     <option>Loading models...</option>
                 </select>
             </div>
@@ -60,10 +77,21 @@
 
     <footer class="p-6 bg-gradient-to-t from-black to-transparent shrink-0">
         <div class="max-w-3xl mx-auto">
-            <div class="flex items-end gap-3 bg-[#111113] border border-white/5 rounded-2xl p-3 transition-all duration-300 focus-within:border-emerald-500">
-                <textarea id="input" class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-[300px] text-sm" placeholder="Введите запрос..."></textarea>
-                <button id="send-btn" class="p-2 bg-emerald-600/10 text-emerald-500 rounded-xl hover:bg-emerald-600/20 transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/></svg>
+
+            <div class="flex items-end gap-3 bg-[#111113] border 
+border-white/5 rounded-2xl p-3 transition-all duration-300 
+focus-within:border-emerald-500">
+                <textarea 
+id="input" class="w-full bg-transparent text-gray-200 py-2 px-3 
+outline-none resize-none h-[44px] max-h-[300px] text-sm" 
+placeholder="Введите запрос..."></textarea>
+                
+<button id="send-btn" class="p-2 bg-emerald-600/10 text-emerald-500 
+rounded-xl hover:bg-emerald-600/20 transition-colors">
+           
+         <svg class="w-5 h-5" fill="none" stroke="currentColor" 
+viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" 
+stroke-width="2"/></svg>
                 </button>
             </div>
         </div>

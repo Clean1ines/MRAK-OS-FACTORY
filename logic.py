@@ -10,36 +10,20 @@ load_dotenv()
 class MrakOrchestrator:
     def __init__(self, api_key=None):
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        self.gh_token = os.getenv("GH_TOKEN")
+        # Исправлено имя переменной для соответствия .env
+        self.gh_token = os.getenv("GITHUB_TOKEN")
         self.client = Groq(
             api_key=self.api_key, http_client=httpx.Client(timeout=120.0)
         )
         self.base_url = "https://api.groq.com/openai/v1"
 
-        # -----------------------------------------------------------------
-        # Обновлённый словарь режимов.
-        # Каждый ключ – условный код режима, а значение – имя переменной
-        # окружения, содержащей URL‑файла с системным промптом.
-        # Удалены ссылки на переменные, которых нет в .env,
-        # а также заменён устаревший GH_PROMPT_URL на SYSTEM_PROMPT_URL.
-        # -----------------------------------------------------------------
+        # Словарь маппинга режимов на переменные окружения с URL
         self.mode_map = {
-            # Core / базовый промпт
             "01_CORE": "SYSTEM_PROMPT_URL",
-
-            # UI/UX
             "02_UI_UX": "GH_URL_UI_UX",
-
-            # Software Engineering
             "03_SOFT_ENG": "GH_URL_SOFT_ENG",
-
-            # Failure detection
             "04_FAILURE": "GH_URL_FAILURE",
-
-            # Translator
             "06_TRANSLATOR": "GH_URL_TRANSLATOR",
-
-            # Дополнительные режимы, присутствующие в .env
             "07_INTEGRATION_PLAN": "GH_URL_INTEGRATION_PLAN",
             "08_PROMPT_COUNCIL": "GH_URL_PROMPT_COUNCIL",
             "09_ALGO_COUNCIL": "GH_URL_ALGO_COUNCIL",
@@ -48,9 +32,6 @@ class MrakOrchestrator:
             "12_SELF_ANALYSIS_FACTORY": "GH_URL_SELF_ANALYSIS_FACTORY",
         }
 
-    # -----------------------------------------------------------------
-    # Остальная часть класса оставлена без изменений.
-    # -----------------------------------------------------------------
     def get_active_models(self):
         fallback_models = [
             {"id": "openai/gpt-oss-120b"},
@@ -83,20 +64,26 @@ class MrakOrchestrator:
     async def get_system_prompt(self, mode: str):
         if mode == "07_BYPASS":
             return "You are a helpful assistant."
+
         env_var = self.mode_map.get(mode, "SYSTEM_PROMPT_URL")
         url = os.getenv(env_var)
-        if not (self.gh_token and url):
-            return "System Error: Config Missing."
+
+        if not url:
+            return f"System Error: URL for mode {mode} not found in environment."
+
+        # Подготовка заголовков для GitHub API (Raw content)
         headers = {
-            "Authorization": f"token {self.gh_token}",
             "Accept": "application/vnd.github.v3.raw",
         }
+        if self.gh_token:
+            headers["Authorization"] = f"token {self.gh_token}"
+
         async with httpx.AsyncClient() as c:
             try:
                 r = await c.get(url, headers=headers, timeout=15)
                 if r.status_code == 200:
                     return r.text.strip()
-                return f"Error: {r.status_code}"
+                return f"Error fetching prompt: {r.status_code} for mode {mode}"
             except Exception as e:
                 return f"Connection Error: {str(e)}"
 
@@ -108,7 +95,6 @@ class MrakOrchestrator:
     def stream_analysis(self, user_input: str, system_prompt: str, model_id: str):
         clean_input = self._pii_filter(user_input)
         try:
-            # Получаем сырой ответ для доступа к заголовкам
             raw_res = self.client.chat.completions.with_raw_response.create(
                 model=model_id,
                 messages=[
@@ -119,12 +105,10 @@ class MrakOrchestrator:
                 temperature=0.6,
             )
 
-            # Извлекаем лимиты
             rt = raw_res.headers.get("x-ratelimit-remaining-tokens", "---")
             rr = raw_res.headers.get("x-ratelimit-remaining-requests", "---")
             yield f"__METADATA__{rt}|{rr}__"
 
-            # Стримим контент
             for chunk in raw_res.parse():
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content

@@ -16,15 +16,41 @@ class MrakOrchestrator:
         )
         self.base_url = "https://api.groq.com/openai/v1"
 
+        # -----------------------------------------------------------------
+        # Обновлённый словарь режимов.
+        # Каждый ключ – условный код режима, а значение – имя переменной
+        # окружения, содержащей URL‑файла с системным промптом.
+        # Удалены ссылки на переменные, которых нет в .env,
+        # а также заменён устаревший GH_PROMPT_URL на SYSTEM_PROMPT_URL.
+        # -----------------------------------------------------------------
         self.mode_map = {
-            "01_CORE": "GH_PROMPT_URL",
+            # Core / базовый промпт
+            "01_CORE": "SYSTEM_PROMPT_URL",
+
+            # UI/UX
             "02_UI_UX": "GH_URL_UI_UX",
+
+            # Software Engineering
             "03_SOFT_ENG": "GH_URL_SOFT_ENG",
+
+            # Failure detection
             "04_FAILURE": "GH_URL_FAILURE",
-            "05_ARCHITECT": "GH_URL_ARCHITECT",
+
+            # Translator
             "06_TRANSLATOR": "GH_URL_TRANSLATOR",
+
+            # Дополнительные режимы, присутствующие в .env
+            "07_INTEGRATION_PLAN": "GH_URL_INTEGRATION_PLAN",
+            "08_PROMPT_COUNCIL": "GH_URL_PROMPT_COUNCIL",
+            "09_ALGO_COUNCIL": "GH_URL_ALGO_COUNCIL",
+            "10_FULL_CODE_GEN": "GH_URL_FULL_CODE_GEN",
+            "11_REQ_COUNCIL": "GH_URL_REQ_COUNCIL",
+            "12_SELF_ANALYSIS_FACTORY": "GH_URL_SELF_ANALYSIS_FACTORY",
         }
 
+    # -----------------------------------------------------------------
+    # Остальная часть класса оставлена без изменений.
+    # -----------------------------------------------------------------
     def get_active_models(self):
         fallback_models = [
             {"id": "openai/gpt-oss-120b"},
@@ -57,7 +83,7 @@ class MrakOrchestrator:
     async def get_system_prompt(self, mode: str):
         if mode == "07_BYPASS":
             return "You are a helpful assistant."
-        env_var = self.mode_map.get(mode, "GH_PROMPT_URL")
+        env_var = self.mode_map.get(mode, "SYSTEM_PROMPT_URL")
         url = os.getenv(env_var)
         if not (self.gh_token and url):
             return "System Error: Config Missing."

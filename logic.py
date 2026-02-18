@@ -2,7 +2,11 @@ from dotenv import load_dotenv
 import os
 import re
 import httpx
+import asyncio
 from groq import Groq
+
+# Импорт модуля для работы с БД (сохранение артефактов)
+import db
 
 load_dotenv()
 
@@ -30,6 +34,7 @@ class MrakOrchestrator:
             "10_FULL_CODE_GEN": "GH_URL_FULL_CODE_GEN",
             "11_REQ_COUNCIL": "GH_URL_REQ_COUNCIL",
             "12_SELF_ANALYSIS_FACTORY": "GH_URL_SELF_ANALYSIS_FACTORY",
+            "13_ARTIFACT_OUTPUT": "GH_URL_MPROMPT",
         }
 
     def get_active_models(self):
@@ -92,8 +97,12 @@ class MrakOrchestrator:
         text = re.sub(r"(gsk_|sk-)[a-zA-Z0-9]{20,}", "[KEY_REDACTED]", text)
         return text
 
-    def stream_analysis(self, user_input: str, system_prompt: str, model_id: str):
+    async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str):
+        """
+        Асинхронный генератор, который стримит ответ LLM и сохраняет полный ответ в БД.
+        """
         clean_input = self._pii_filter(user_input)
+        full_response = ""  # для накопления полного ответа
         try:
             raw_res = self.client.chat.completions.with_raw_response.create(
                 model=model_id,
@@ -111,8 +120,32 @@ class MrakOrchestrator:
 
             for chunk in raw_res.parse():
                 if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    yield content
 
+            # После успешной передачи всего ответа сохраняем его в БД
+            if full_response:
+                artifact_data = {
+                    "user_input": clean_input,
+                    "system_prompt": system_prompt[:500] + ("..." if len(system_prompt) > 500 else ""),  # обрезаем для читаемости
+                    "model": model_id,
+                    "mode": mode,
+                    "response": full_response,
+                    "metadata": {
+                        "tokens_remaining": rt,
+                        "requests_remaining": rr
+                    }
+                }
+                # Запускаем сохранение в фоне, чтобы не задерживать ответ
+                asyncio.create_task(
+                    db.save_artifact(
+                        artifact_type="LLMResponse",
+                        content=artifact_data,
+                        owner="system",
+                        status="GENERATED"
+                    )
+                )
         except Exception as e:
             err_msg = str(e).lower()
             if "403" in err_msg:

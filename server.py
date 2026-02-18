@@ -57,12 +57,13 @@ async def analyze(request: Request):
 
     logger.info(f"Starting stream: Mode={mode}, Model={model}")
 
+    # Передаём mode в stream_analysis для сохранения в артефакте
     return StreamingResponse(
-        orch.stream_analysis(prompt, sys_prompt, model),
+        orch.stream_analysis(prompt, sys_prompt, model, mode),
         media_type="text/plain",
     )
 
 
-# StaticFiles монтируется последним. 
+# StaticFiles монтируется последним.
 # directory="." означает, что index.html ищется в корне проекта.
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

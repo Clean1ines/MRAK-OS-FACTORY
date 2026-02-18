@@ -19,7 +19,8 @@ def test_pii_filter(orch):
     assert "[KEY_REDACTED]" in filtered
 
 
-def test_stream_analysis_flow(orch):
+@pytest.mark.asyncio
+async def test_stream_analysis_flow(orch):
     # Создаем мок для объекта ответа
     mock_response = MagicMock()
 
@@ -35,19 +36,17 @@ def test_stream_analysis_flow(orch):
 
     # Мокаем чанки данных
     mock_chunk = MagicMock()
-    # Правильно имитируем структуру: chunk.choices[0].delta.content
     mock_choice = MagicMock()
     mock_choice.delta.content = "AI_RESPONSE"
     mock_chunk.choices = [mock_choice]
 
-    # parse() должен возвращать итератор по чанкам
     mock_response.parse.return_value = [mock_chunk]
 
-    # Настраиваем вызов: возвращаем мок-ответ напрямую (без __enter__)
     orch.client.chat.completions.with_raw_response.create.return_value = mock_response
 
-    gen = orch.stream_analysis("Hello", "System", "llama-model")
-    results = list(gen)
+    # Вызываем асинхронный метод, передавая обязательный аргумент mode
+    gen = orch.stream_analysis("Hello", "System", "llama-model", mode="test_mode")
+    results = [chunk async for chunk in gen]
 
     # Проверка метаданных
     assert "__METADATA__500|10__" in results[0]

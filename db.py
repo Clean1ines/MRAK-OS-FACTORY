@@ -3,31 +3,44 @@ import json
 import asyncpg
 from typing import Optional, Dict, Any, List
 import uuid
-from datetime import datetime
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mrak_user:mrak_pass@localhost:5432/mrak_db")
 
 async def init_db():
-    """Создаёт таблицы, если их нет."""
+    """Создаёт таблицы, если их нет, без удаления старых данных."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        # Включаем расширение pgvector
         await conn.execute('CREATE EXTENSION IF NOT EXISTS vector;')
-        # Таблица артефактов
+        
+        # Таблица проектов
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS projects (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        ''')
+        
+        # Таблица артефактов с добавленным project_id
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS artifacts (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
                 type VARCHAR(50) NOT NULL,
                 version VARCHAR(20) NOT NULL DEFAULT '1.0',
                 status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
                 owner VARCHAR(100),
                 content JSONB NOT NULL,
-                embedding vector(384),  -- размерность для all-MiniLM-L6-v2, можно изменить
+                content_hash VARCHAR(64),
+                embedding vector(384),
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
         ''')
-        # Таблица связей (опционально, для будущего)
+        
+        # Таблица связей
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS links (
                 from_id UUID REFERENCES artifacts(id) ON DELETE CASCADE,
@@ -38,24 +51,117 @@ async def init_db():
                 PRIMARY KEY (from_id, to_id, link_type)
             );
         ''')
+        
+        # Индекс для поиска по пути
+        await conn.execute('''
+            CREATE INDEX IF NOT EXISTS idx_artifacts_file_path ON artifacts ((content->>'file_path')) WHERE type = 'CodeFile';
+        ''')
+        
+        print("DEBUG: Tables initialized (projects, artifacts with project_id)")
     finally:
         await conn.close()
 
-async def save_artifact(artifact_type: str, content: Dict[str, Any], owner: str = "system", version: str = "1.0", status: str = "DRAFT") -> str:
+async def get_projects() -> List[Dict[str, Any]]:
+    """Возвращает список всех проектов, отсортированных по дате создания (новые сверху)."""
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        rows = await conn.fetch('''
+            SELECT id, name, description, created_at, updated_at
+            FROM projects
+            ORDER BY created_at DESC
+        ''')
+        return [dict(r) for r in rows]
+    finally:
+        await conn.close()
+
+async def create_project(name: str, description: str = "") -> str:
+    """Создаёт новый проект и возвращает его ID."""
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        project_id = str(uuid.uuid4())
+        await conn.execute('''
+            INSERT INTO projects (id, name, description)
+            VALUES ($1, $2, $3)
+        ''', project_id, name, description)
+        return project_id
+    finally:
+        await conn.close()
+
+async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
+    """Получает проект по ID."""
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        row = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
+        return dict(row) if row else None
+    finally:
+        await conn.close()
+
+async def save_artifact(artifact_type: str, content: Dict[str, Any], owner: str = "system", 
+                        version: str = "1.0", status: str = "DRAFT", content_hash: Optional[str] = None,
+                        project_id: Optional[str] = None) -> str:
     """Сохраняет артефакт в БД и возвращает его ID."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         artifact_id = str(uuid.uuid4())
-        await conn.execute('''
-            INSERT INTO artifacts (id, type, version, status, owner, content)
-            VALUES ($1, $2, $3, $4, $5, $6)
-        ''', artifact_id, artifact_type, version, status, owner, json.dumps(content))
+        if project_id:
+            if content_hash:
+                await conn.execute('''
+                    INSERT INTO artifacts (id, project_id, type, version, status, owner, content, content_hash)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ''', artifact_id, project_id, artifact_type, version, status, owner, json.dumps(content), content_hash)
+            else:
+                await conn.execute('''
+                    INSERT INTO artifacts (id, project_id, type, version, status, owner, content)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ''', artifact_id, project_id, artifact_type, version, status, owner, json.dumps(content))
+        else:
+            # без проекта – вставляем с project_id = NULL
+            if content_hash:
+                await conn.execute('''
+                    INSERT INTO artifacts (id, type, version, status, owner, content, content_hash)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ''', artifact_id, artifact_type, version, status, owner, json.dumps(content), content_hash)
+            else:
+                await conn.execute('''
+                    INSERT INTO artifacts (id, type, version, status, owner, content)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                ''', artifact_id, artifact_type, version, status, owner, json.dumps(content))
         return artifact_id
     finally:
         await conn.close()
 
+async def find_artifact_by_path(file_path: str, artifact_type: str = "CodeFile", project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Ищет артефакт по типу и пути (хранится в content->>'file_path'). Если указан project_id, учитывает его."""
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        query = '''
+            SELECT * FROM artifacts 
+            WHERE type = $1 AND content->>'file_path' = $2
+        '''
+        params = [artifact_type, file_path]
+        if project_id:
+            query += ' AND project_id = $3'
+            params.append(project_id)
+        query += ' ORDER BY version DESC LIMIT 1'
+        row = await conn.fetchrow(query, *params)
+        if row:
+            return dict(row)
+        return None
+    finally:
+        await conn.close()
+
+async def update_artifact(artifact_id: str, new_content: Dict[str, Any], new_version: str, new_hash: str) -> None:
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await conn.execute('''
+            UPDATE artifacts
+            SET content = $1, version = $2, content_hash = $3, updated_at = NOW()
+            WHERE id = $4
+        ''', json.dumps(new_content), new_version, new_hash, artifact_id)
+    finally:
+        await conn.close()
+
 async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
-    """Получает артефакт по ID."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         row = await conn.fetchrow('SELECT * FROM artifacts WHERE id = $1', artifact_id)
@@ -64,5 +170,3 @@ async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
         return None
     finally:
         await conn.close()
-
-# Для векторов пока не реализуем, отложим до фазы 5.3

@@ -25,3 +25,14 @@ tests/
 # Артефакты сборки и документация
 *.md
 LICENSE
+requirements-dev.txt
+pytest.ini
+tests/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.env
+.git
+.gitignore
+README.md

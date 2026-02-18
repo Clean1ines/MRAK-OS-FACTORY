@@ -1,8 +1,7 @@
 FROM python:3.10-slim
 WORKDIR /app
-# Ставим только то, что в файле
-COPY requirements.txt .
+COPY requirements-prod.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8000
-ENTRYPOINT ["sh", "-c", "python3 keep_alive.py & uvicorn server:app --host 0.0.0.0 --port 8000"]
+ENTRYPOINT ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

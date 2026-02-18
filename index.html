@@ -116,6 +116,7 @@
                     <option value="11_REQ_COUNCIL">11: REQ_COUNCIL</option>
                     <option value="12_SELF_ANALYSIS_FACTORY">12: SELF_ANALYSIS_FACTORY</option>
                     <option value="13_ARTIFACT_OUTPUT">13_ARTIFACT_OURPUT</option>
+                    <option value="14_PRODUCT_COUNCIL">14: PRODUCT_COUNCIL</option>
                 </select>
             </div>
             <div class="flex flex-col">
@@ -135,6 +136,17 @@
     <div class="px-6 py-2 bg-emerald-500/5 border-b border-white/5 text-[9px] text-zinc-500 flex justify-between">
         <span id="status-text">SYSTEM_READY</span>
         <span id="token-count">EST_COST: 0 TOKENS</span>
+    </div>
+
+    <!-- Блок управления проектами -->
+    <div class="px-6 py-2 bg-zinc-900 border-b border-white/5 flex items-center gap-4">
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-zinc-400">Проект:</span>
+            <select id="project-select" class="bg-zinc-800 text-white text-sm px-3 py-1 rounded border border-white/10 w-64">
+                <option value="">-- Выберите проект --</option>
+            </select>
+            <button id="new-project-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30">+ Новый</button>
+        </div>
     </div>
 
     <main id="terminal" class="flex-1 overflow-y-auto px-6 scroll-smooth">
@@ -167,6 +179,10 @@
         const scrollAnchor = document.getElementById("scroll-anchor");
         const modelSelect = document.getElementById("model-select");
         const statusText = document.getElementById("status-text");
+        const projectSelect = document.getElementById("project-select");
+        const newProjectBtn = document.getElementById("new-project-btn");
+
+        let currentProjectId = localStorage.getItem("selectedProjectId") || "";
 
         marked.setOptions({ gfm: true, breaks: true });
 
@@ -175,6 +191,59 @@
             this.style.height = this.scrollHeight + "px";
             document.getElementById("token-count").innerText = `EST_COST: ~${Math.ceil(this.value.length / 4)} TOKENS`;
         };
+
+        // Загрузка списка проектов
+        async function loadProjects() {
+            try {
+                const res = await fetch("/api/projects");
+                const projects = await res.json();
+                projectSelect.innerHTML = '<option value="">-- Выберите проект --</option>';
+                projects.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p.id;
+                    opt.innerText = p.name;
+                    if (p.id === currentProjectId) opt.selected = true;
+                    projectSelect.appendChild(opt);
+                });
+                // Если текущий проект не в списке (например, удалён) — сбросить
+                if (currentProjectId && !projects.some(p => p.id === currentProjectId)) {
+                    currentProjectId = "";
+                    localStorage.removeItem("selectedProjectId");
+                }
+            } catch (e) {
+                console.error("Failed to load projects", e);
+            }
+        }
+
+        // Создание нового проекта
+        newProjectBtn.onclick = async () => {
+            const name = prompt("Введите название проекта:");
+            if (!name) return;
+            try {
+                const res = await fetch("/api/projects", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, description: "" })
+                });
+                const data = await res.json();
+                await loadProjects();
+                projectSelect.value = data.id;
+                currentProjectId = data.id;
+                localStorage.setItem("selectedProjectId", currentProjectId);
+            } catch (e) {
+                alert("Ошибка создания проекта");
+            }
+        };
+
+        // Сохраняем выбранный проект при изменении
+        projectSelect.addEventListener("change", function() {
+            currentProjectId = this.value;
+            if (currentProjectId) {
+                localStorage.setItem("selectedProjectId", currentProjectId);
+            } else {
+                localStorage.removeItem("selectedProjectId");
+            }
+        });
 
         async function fetchModels() {
             try {
@@ -200,6 +269,10 @@
             if (!prompt) {
                 return;
             }
+            if (!currentProjectId) {
+                alert("Сначала выберите или создайте проект");
+                return;
+            }
 
             const mode = document.getElementById("mode-select").value;
             const model = modelSelect.value;
@@ -219,10 +292,8 @@
             assistantDiv.className = "markdown-body streaming";
             messagesDiv.appendChild(assistantDiv);
 
-            // Store the original prompt for toolbar actions
             assistantDiv.dataset.originalPrompt = prompt;
 
-            // Add toolbar after the assistant message
             const toolbar = createMessageToolbar(assistantDiv);
             messagesDiv.appendChild(toolbar);
 
@@ -230,7 +301,7 @@
                 const res = await fetch("/api/analyze", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt, mode, model })
+                    body: JSON.stringify({ prompt, mode, model, project_id: currentProjectId })
                 });
 
                 const reader = res.body.getReader();
@@ -256,7 +327,6 @@
 
                     raw += chunk;
                     assistantDiv.innerHTML = marked.parse(raw);
-                    // keep raw markdown for edit action
                     assistantDiv.dataset.rawMarkdown = raw;
                     scrollAnchor.scrollIntoView({ behavior: "smooth" });
                 }
@@ -281,7 +351,6 @@
                 try {
                     await navigator.clipboard.writeText(messageElement.innerText);
                 } catch (_) {
-                    // fallback
                     const textarea = document.createElement("textarea");
                     textarea.value = messageElement.innerText;
                     document.body.appendChild(textarea);
@@ -348,7 +417,10 @@
             return toolbar;
         }
 
-        window.onload = fetchModels;
+        window.onload = async function() {
+            await fetchModels();
+            await loadProjects();
+        };
         sendBtn.onclick = start;
         input.onkeydown = (e) => {
             if (e.key === "Enter" && !e.shiftKey) {

@@ -1,3 +1,4 @@
+from typing import Optional
 from dotenv import load_dotenv
 import os
 import re
@@ -35,6 +36,7 @@ class MrakOrchestrator:
             "11_REQ_COUNCIL": "GH_URL_REQ_COUNCIL",
             "12_SELF_ANALYSIS_FACTORY": "GH_URL_SELF_ANALYSIS_FACTORY",
             "13_ARTIFACT_OUTPUT": "GH_URL_MPROMPT",
+            "14_PRODUCT_COUNCIL": "GH_URL_PRODUCT_COUNCIL",
         }
 
     def get_active_models(self):
@@ -97,7 +99,7 @@ class MrakOrchestrator:
         text = re.sub(r"(gsk_|sk-)[a-zA-Z0-9]{20,}", "[KEY_REDACTED]", text)
         return text
 
-    async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str):
+    async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str, project_id: Optional[str] = None):
         """
         Асинхронный генератор, который стримит ответ LLM и сохраняет полный ответ в БД.
         """
@@ -143,7 +145,8 @@ class MrakOrchestrator:
                         artifact_type="LLMResponse",
                         content=artifact_data,
                         owner="system",
-                        status="GENERATED"
+                        status="GENERATED",
+                        project_id=project_id
                     )
                 )
         except Exception as e:

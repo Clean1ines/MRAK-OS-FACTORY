@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
 Индексирует проект: сканирует файлы (с помощью generate_tree.py) и сохраняет каждый как артефакт CodeFile в БД.
-Используется для фазы 5.2.
+При повторном запуске проверяет изменения по хешу и обновляет артефакт, увеличивая версию.
 """
 
 import os
 import sys
 import asyncio
 import argparse
+import hashlib
 from pathlib import Path
 import json
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения из .env
+load_dotenv()
 
 # Добавляем путь к проекту для импорта generate_tree и db
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -79,23 +84,54 @@ async def index_project(project_path: str, owner: str = "system"):
             print(f"Ошибка чтения {file_path}: {e}")
             continue
 
-        # Формируем артефакт CodeFile
-        artifact_content = {
-            "file_path": str(file_path.relative_to(path)),
-            "file_name": file_path.name,
-            "extension": file_path.suffix,
-            "content": content,
-            "size": len(content)
-        }
+        content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
+        rel_path = str(file_path.relative_to(path))
 
-        # Сохраняем в БД
-        artifact_id = await db.save_artifact(
-            artifact_type="CodeFile",
-            content=artifact_content,
-            owner=owner,
-            status="INDEXED"
-        )
-        print(f"Сохранён {file_path} -> {artifact_id}")
+        existing = await db.find_artifact_by_path(rel_path, "CodeFile")
+
+        if existing:
+            # Используем .get() для безопасного доступа, если ключа нет (старая запись)
+            old_hash = existing.get('content_hash')
+            if old_hash == content_hash:
+                print(f"Файл {file_path} не изменился, пропускаем.")
+                continue
+            else:
+                # увеличиваем версию (простая логика: увеличиваем минорную часть)
+                old_version = existing['version']
+                try:
+                    major, minor = map(int, old_version.split('.'))
+                    new_version = f"{major}.{minor + 1}"
+                except:
+                    new_version = "1.1"  # fallback, если версия не в формате "x.y"
+
+                artifact_content = {
+                    "file_path": rel_path,
+                    "file_name": file_path.name,
+                    "extension": file_path.suffix,
+                    "content": content,
+                    "size": len(content)
+                }
+
+                await db.update_artifact(existing['id'], artifact_content, new_version, content_hash)
+                print(f"Обновлён {file_path} (версия {new_version}) -> {existing['id']}")
+        else:
+            # сохраняем новый артефакт
+            artifact_content = {
+                "file_path": rel_path,
+                "file_name": file_path.name,
+                "extension": file_path.suffix,
+                "content": content,
+                "size": len(content)
+            }
+            artifact_id = await db.save_artifact(
+                artifact_type="CodeFile",
+                content=artifact_content,
+                owner=owner,
+                status="INDEXED",
+                version="1.0",
+                content_hash=content_hash
+            )
+            print(f"Сохранён {file_path} -> {artifact_id}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Индексирует проект в базу знаний.")

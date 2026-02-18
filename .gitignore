@@ -8,3 +8,15 @@ venv/
 .pytest_cache/
 project_dump.txt
 dump_project.py
+# Служебные директории и скрипты
+.mypy_cache/
+.streamlit/
+app.log
+project_dump.txt
+check_db.py
+generate_tree.py
+index_project.py
+init_db.sql
+keep_alive.py
+pytest.ini
+tests/__pycache__/

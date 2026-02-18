@@ -1,6 +1,27 @@
-venv/
+# Системные и временные файлы
 .git/
+.mypy_cache/
 .pytest_cache/
 __pycache__/
-*.pyc
+venv/
 .env
+*.pyc
+*.log
+*.sql
+
+# Локальные скрипты и конфиги
+.pre-commit-config.yaml
+.streamlit/
+app.log
+check_db.py
+generate_tree.py
+index_project.py
+init_db.sql
+keep_alive.py
+project_dump.txt
+pytest.ini
+tests/
+
+# Артефакты сборки и документация
+*.md
+LICENSE

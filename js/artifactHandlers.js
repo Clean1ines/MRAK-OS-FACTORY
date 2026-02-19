@@ -61,3 +61,34 @@
     bindBtn();
     setTimeout(bindBtn, 1000);
 })();
+// ===== ДИАГНОСТИКА ARTIFACTHANDLERS =====
+console.log('[ARTIFACTHANDLERS] файл загружен');
+
+(function() {
+    const originalHandleSave = window.handleSave; // если есть
+    const originalHandleAddMore = window.handleAddMore;
+    const originalGenerateClick = document.getElementById('generate-artifact-btn')?.onclick;
+
+    // Если функции не глобальные, они внутри замыкания – нужно переопределить через хуки
+    // Просто добавим логи в существующие обработчики, переопределив их
+
+    const saveArtifactBtn = document.getElementById('save-artifact-btn');
+    if (saveArtifactBtn) {
+        const originalClick = saveArtifactBtn.onclick;
+        saveArtifactBtn.onclick = async function(e) {
+            console.log('[ARTIFACTHANDLERS] saveArtifactBtn onclick START');
+            if (originalClick) await originalClick(e);
+            console.log('[ARTIFACTHANDLERS] saveArtifactBtn onclick END');
+        };
+    }
+
+    const generateArtifactBtn = document.getElementById('generate-artifact-btn');
+    if (generateArtifactBtn) {
+        const originalClick = generateArtifactBtn.onclick;
+        generateArtifactBtn.onclick = async function(e) {
+            console.log('[ARTIFACTHANDLERS] generateArtifactBtn onclick START');
+            if (originalClick) await originalClick(e);
+            console.log('[ARTIFACTHANDLERS] generateArtifactBtn onclick END');
+        };
+    }
+})();

@@ -68,3 +68,14 @@ window.createMessageToolbar = function(messageElement) {
     toolbar.appendChild(shareBtn);
     return toolbar;
 };
+
+// ===== ДИАГНОСТИКА TOOLBAR =====
+console.log('[TOOLBAR] файл загружен');
+
+const originalCreateMessageToolbar = window.createMessageToolbar;
+if (originalCreateMessageToolbar) {
+    window.createMessageToolbar = function(messageElement) {
+        console.log('[TOOLBAR] createMessageToolbar', { messageId: messageElement?.id });
+        return originalCreateMessageToolbar(messageElement);
+    };
+}

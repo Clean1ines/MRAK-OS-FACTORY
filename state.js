@@ -103,3 +103,25 @@ function getCurrentParentId() {
 
 window.state.setCurrentParentId = setCurrentParentId;
 window.state.getCurrentParentId = getCurrentParentId;
+
+let packageCache = {};
+
+function setPackageCache(parentId, data) {
+    packageCache[parentId] = data;
+}
+
+function getPackageCache(parentId) {
+    return packageCache[parentId];
+}
+
+function clearPackageCache(parentId) {
+    if (parentId) {
+        delete packageCache[parentId];
+    } else {
+        packageCache = {};
+    }
+}
+
+window.state.setPackageCache = setPackageCache;
+window.state.getPackageCache = getPackageCache;
+window.state.clearPackageCache = clearPackageCache;

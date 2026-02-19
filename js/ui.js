@@ -1,16 +1,10 @@
-// ui.js - точка входа для UI-функций, собирает все модули
-
-// Импортируем функции из других модулей через window (они уже должны быть загружены)
-// Но мы просто переназначаем для удобства
-
+console.log('ui.js start');
 window.ui = {
-    // renderers
     renderProjectSelect: window.renderers.renderProjectSelect,
     renderParentSelect: window.renderers.renderParentSelect,
     updateGenerateButton: window.renderers.updateGenerateButton,
-    // notifications
     showNotification: window.notifications.showNotification,
-    // modals
     openRequirementsModal: window.modals.openRequirementsModal,
-    closeModal: window.modals.closeModal,
+    closeModal: window.modals.closeModal
 };
+console.log('ui.js end');

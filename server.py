@@ -26,6 +26,12 @@ class ArtifactCreate(BaseModel):
     generate: bool = False
     model: Optional[str] = None
 
+class BusinessReqGenRequest(BaseModel):
+    analysis_id: str
+    feedback: str = ""
+    model: Optional[str] = None
+    project_id: str
+
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -89,6 +95,23 @@ async def create_artifact(artifact: ArtifactCreate):
         logger.error(f"Error creating artifact: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+@app.post("/api/generate_business_requirements")
+async def generate_business_requirements(req: BusinessReqGenRequest):
+    """
+    Генерирует бизнес-требования на основе анализа продуктового совета.
+    """
+    try:
+        ids = await orch.generate_business_requirements(
+            analysis_id=req.analysis_id,
+            user_feedback=req.feedback,
+            model_id=req.model,
+            project_id=req.project_id
+        )
+        return JSONResponse(content={"ids": ids})
+    except Exception as e:
+        logger.error(f"Error generating business requirements: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 @app.get("/api/models")
 async def get_models():
     models = orch.get_active_models()
@@ -130,26 +153,3 @@ async def analyze(request: Request):
     )
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
-
-class BusinessReqGenRequest(BaseModel):
-    analysis_id: str
-    feedback: str = ""
-    model: Optional[str] = None
-    project_id: str
-
-@app.post("/api/generate_business_requirements")
-async def generate_business_requirements(req: BusinessReqGenRequest):
-    """
-    Генерирует бизнес-требования на основе анализа продуктового совета.
-    """
-    try:
-        ids = await orch.generate_business_requirements(
-            analysis_id=req.analysis_id,
-            user_feedback=req.feedback,
-            model_id=req.model,
-            project_id=req.project_id
-        )
-        return JSONResponse(content={"ids": ids})
-    except Exception as e:
-        logger.error(f"Error generating business requirements: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)

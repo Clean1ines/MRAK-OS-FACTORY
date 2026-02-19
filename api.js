@@ -43,8 +43,8 @@ async function saveArtifact(projectId, artifactType, content, parentId = null, g
     });
 }
 
-// Генерация бизнес-требований
-async function generateBusinessRequirements(analysisId, feedback = '', model = null, projectId) {
+// Генерация бизнес-требований (с поддержкой existingRequirements)
+async function generateBusinessRequirements(analysisId, feedback = '', model = null, projectId, existingRequirements = null) {
     return apiFetch('/api/generate_business_requirements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,7 +52,8 @@ async function generateBusinessRequirements(analysisId, feedback = '', model = n
             analysis_id: analysisId,
             feedback: feedback,
             model: model,
-            project_id: projectId
+            project_id: projectId,
+            existing_requirements: existingRequirements
         })
     });
 }
@@ -74,7 +75,6 @@ async function fetchModels() {
     return apiFetch('/api/models');
 }
 
-// Делаем функции глобальными (для обратной совместимости)
 window.api = {
     fetchProjects,
     createProject,

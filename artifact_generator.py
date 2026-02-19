@@ -64,7 +64,8 @@ class ArtifactGenerator:
         analysis_id: str,
         user_feedback: str = "",
         model_id: Optional[str] = None,
-        project_id: Optional[str] = None
+        project_id: Optional[str] = None,
+        existing_requirements: Optional[List[Dict]] = None   # новый параметр
     ) -> List[Dict[str, Any]]:
         analysis = await db.get_artifact(analysis_id)
         if not analysis:
@@ -86,6 +87,11 @@ class ArtifactGenerator:
 
         if user_feedback:
             prompt_parts.append(f"USER_FEEDBACK:\n{user_feedback}")
+
+        if existing_requirements:
+            # Передаём только описания, чтобы не дублировать
+            existing_descriptions = [req.get('description', '') for req in existing_requirements]
+            prompt_parts.append(f"EXISTING_REQUIREMENTS:\n{json.dumps(existing_descriptions)}")
 
         full_input = "\n\n".join(prompt_parts)
 

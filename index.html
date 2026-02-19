@@ -21,7 +21,6 @@
         .message-toolbar { display: flex; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: #9ca3af; }
         .message-toolbar button { background: transparent; border: none; cursor: pointer; padding: 0.2rem 0.4rem; border-radius: 4px; transition: background-color 0.2s; }
         .message-toolbar button:hover { background: #111; }
-        /* spinner */
         .spinner { border: 2px solid rgba(255,255,255,0.1); border-top-color: #10b981; border-radius: 50%; width: 1rem; height: 1rem; animation: spin 0.6s linear infinite; display: inline-block; margin-right: 0.25rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -149,7 +148,6 @@
                 document.getElementById("token-count").innerText = `EST_COST: ~${Math.ceil(this.value.length / 4)} TOKENS`;
             };
 
-            // Утилита для управления состоянием загрузки кнопки
             function setLoading(button, isLoading) {
                 if (!button) return;
                 if (isLoading) {
@@ -162,7 +160,6 @@
                 }
             }
 
-            // Загрузка проектов
             async function loadProjects() {
                 try {
                     const projects = await api.fetchProjects();
@@ -173,7 +170,6 @@
                 }
             }
 
-            // Создание проекта
             newProjectBtn.onclick = async () => {
                 const name = prompt("Введите название проекта:");
                 if (!name) return;
@@ -192,7 +188,6 @@
                 }
             };
 
-            // Загрузка артефактов
             async function loadParents() {
                 const pid = state.getCurrentProjectId();
                 if (!pid) return;
@@ -200,7 +195,8 @@
                 try {
                     const artifacts = await api.fetchArtifacts(pid);
                     state.setArtifacts(artifacts);
-                    ui.renderParentSelect(artifacts, state.getParentData());
+                    const currentType = artifactTypeSelect.value;
+                    ui.renderParentSelect(artifacts, currentType, state.getParentData());
                 } catch (e) {
                     ui.showNotification('Ошибка загрузки артефактов: ' + e.message, 'error');
                 } finally {
@@ -210,7 +206,6 @@
 
             refreshParentsBtn.onclick = loadParents;
 
-            // Смена проекта
             projectSelect.addEventListener("change", function() {
                 state.setCurrentProjectId(this.value);
                 if (this.value) {
@@ -221,13 +216,17 @@
                 }
             });
 
-            // Обновление кнопки генерации при выборе родителя
+            artifactTypeSelect.addEventListener('change', function() {
+                const artifacts = state.getArtifacts();
+                const currentType = this.value;
+                ui.renderParentSelect(artifacts, currentType, state.getParentData());
+            });
+
             parentSelect.addEventListener('change', function() {
                 const selectedId = this.value;
                 ui.updateGenerateBrButton(state.getParentData(), selectedId);
             });
 
-            // Сохранение артефакта
             saveArtifactBtn.onclick = async () => {
                 const content = input.value.trim();
                 if (!content) {
@@ -258,7 +257,6 @@
                 }
             };
 
-            // Генерация бизнес-требований
             generateBrBtn.onclick = async () => {
                 const analysisId = parentSelect.value;
                 if (!analysisId) return;
@@ -278,7 +276,7 @@
 
                     ui.openRequirementsModal(
                         requirements,
-                        async () => { // onSave
+                        async () => {
                             const reqs = state.getCurrentRequirements();
                             if (!reqs.length) return;
                             try {
@@ -290,7 +288,7 @@
                                 ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                             }
                         },
-                        async () => { // onRegenerate
+                        async () => {
                             const newFeedback = input.value.trim();
                             try {
                                 const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid);
@@ -305,7 +303,7 @@
                                 ui.showNotification('Ошибка перегенерации: ' + e.message, 'error');
                             }
                         },
-                        () => { // onCancel
+                        () => {
                             ui.closeModal();
                         }
                     );
@@ -316,7 +314,6 @@
                 }
             };
 
-            // Загрузка моделей
             async function loadModels() {
                 try {
                     const models = await api.fetchModels();
@@ -336,14 +333,12 @@
                 }
             }
 
-            // Инициализация
             window.onload = async function() {
                 await loadModels();
                 await loadProjects();
                 if (state.getCurrentProjectId()) await loadParents();
             };
 
-            // Отправка сообщения (чат)
             async function start() {
                 const prompt = input.value.trim();
                 if (!prompt) return;

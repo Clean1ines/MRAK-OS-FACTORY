@@ -1,5 +1,22 @@
 // ui.js - функции для обновления интерфейса
 
+// Правила родительства: для каждого типа артефакта перечислены допустимые типы родителей
+const PARENT_RULES = {
+    "BusinessRequirement": ["ProductCouncilAnalysis"],
+    "ReqEngineeringAnalysis": ["BusinessRequirement"],
+    "FunctionalRequirement": ["ReqEngineeringAnalysis", "BusinessRequirement"],
+    "CodeArtifact": ["FunctionalRequirement"], // можно расширить
+    // Для остальных типов родители не ограничены (показываем все)
+};
+
+function filterArtifactsByParentRule(artifacts, artifactType) {
+    if (!artifactType || !PARENT_RULES[artifactType]) {
+        return artifacts; // если правила нет, показываем все
+    }
+    const allowedParentTypes = PARENT_RULES[artifactType];
+    return artifacts.filter(a => allowedParentTypes.includes(a.type));
+}
+
 function renderProjectSelect(projects, currentId) {
     const select = document.getElementById('project-select');
     if (!select) return;
@@ -13,11 +30,12 @@ function renderProjectSelect(projects, currentId) {
     });
 }
 
-function renderParentSelect(artifacts, parentData) {
+function renderParentSelect(artifacts, currentArtifactType, parentData) {
     const select = document.getElementById('parent-select');
     if (!select) return;
+    const filtered = filterArtifactsByParentRule(artifacts, currentArtifactType);
     select.innerHTML = '<option value="">-- нет --</option>';
-    artifacts.forEach(a => {
+    filtered.forEach(a => {
         const opt = document.createElement('option');
         opt.value = a.id;
         opt.innerText = `${a.type} (${a.created_at}) : ${a.summary || ''}`;
@@ -41,7 +59,6 @@ function updateGenerateBrButton(parentData, selectedId) {
 
 // Уведомления
 function showNotification(message, type = 'info') {
-    // Создаём контейнер, если нет
     let container = document.getElementById('notification-container');
     if (!container) {
         container = document.createElement('div');
@@ -76,7 +93,6 @@ function closeModal() {
 }
 
 function openRequirementsModal(requirements, onSave, onRegenerate, onCancel) {
-    // Закрываем предыдущее, если есть
     if (currentModal) closeModal();
 
     const modal = document.createElement('div');
@@ -112,7 +128,6 @@ function openRequirementsModal(requirements, onSave, onRegenerate, onCancel) {
     reqContainer.id = 'requirements-container';
     content.appendChild(reqContainer);
 
-    // Кнопки
     const btnDiv = document.createElement('div');
     btnDiv.className = 'flex justify-end gap-3 mt-4';
 
@@ -146,7 +161,6 @@ function openRequirementsModal(requirements, onSave, onRegenerate, onCancel) {
     document.body.appendChild(modal);
     currentModal = modal;
 
-    // Рендерим требования
     renderRequirementsInContainer(reqContainer, requirements);
 }
 
@@ -177,7 +191,6 @@ function renderRequirementsInContainer(container, requirements) {
         header.appendChild(delBtn);
         card.appendChild(header);
 
-        // Поля
         const fields = [
             { label: 'Описание', field: 'description', type: 'input' },
             { label: 'Приоритет', field: 'priority', type: 'input' },
@@ -221,7 +234,6 @@ function renderRequirementsInContainer(container, requirements) {
     });
 }
 
-// Экспортируем в глобальную область
 window.ui = {
     renderProjectSelect,
     renderParentSelect,
@@ -229,4 +241,5 @@ window.ui = {
     showNotification,
     openRequirementsModal,
     closeModal,
+    filterArtifactsByParentRule, // экспортируем на всякий случай
 };

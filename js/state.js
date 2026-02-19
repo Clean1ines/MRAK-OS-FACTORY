@@ -1,43 +1,22 @@
 window.state = {
-    _pid: localStorage.getItem('selectedProjectId') || '',
-    projects: [],
-    models: ["llama-3.3-70b-versatile"],
-    artifacts: [],
-    parentData: {},
-
+    // Берем ID напрямую из DOM, если в памяти пусто. Это самый надежный костыль.
+    getCurrentProjectId() {
+        const sel = document.getElementById('project-select');
+        return sel ? sel.value : null;
+    },
+    getCurrentModel() {
+        const sel = document.getElementById('model-select');
+        return sel ? sel.value : 'llama-3.3-70b-versatile';
+    },
+    getCurrentParentId() {
+        const sel = document.getElementById('parent-select');
+        return sel ? sel.value : null;
+    },
+    getArtifactType() {
+        const sel = document.getElementById('artifact-type-select');
+        return sel ? sel.value : 'BusinessRequirementPackage';
+    },
     setProjects(l) { this.projects = l; },
-    
-    setCurrentProjectId(id) { 
-        this._pid = id; 
-        localStorage.setItem('selectedProjectId', id);
-    },
-    
-    getCurrentProjectId() { 
-        // Если в переменной пусто, пробуем взять из селекта напрямую
-        const s = document.getElementById('project-select');
-        return this._pid || (s ? s.value : ''); 
-    },
-
-    setArtifacts(l) { 
-        this.artifacts = l; 
-        this.parentData = {};
-        l.forEach(a => { this.parentData[a.id] = a.type; });
-    },
-    
-    getArtifacts() { return this.artifacts; },
-    getParentData() { return this.parentData; },
-    getCurrentParentId() { return document.getElementById('parent-select')?.value; },
-    
-    getAllowedParentTypes(c) {
-        const rules = {
-            'BusinessRequirementPackage': ['ProductCouncilAnalysis'],
-            'FunctionalRequirementPackage': ['BusinessRequirementPackage'],
-            'SystemArchitecture': ['FunctionalRequirementPackage']
-        };
-        return rules[c] || ['ProductCouncilAnalysis']; // Возвращаем хоть что-то, чтобы список не был пустым
-    },
-    
-    canGenerate(c, p) {
-        return true; // Временно разрешаем всё, чтобы кнопка НЕ ИСЧЕЗАЛА
-    }
+    setModels(l) { this.models = l; },
+    setArtifacts(l) { this.artifacts = l; }
 };

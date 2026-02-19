@@ -1,43 +1,40 @@
 (function() {
-    const input = document.getElementById("input");
-    const modelSelect = document.getElementById("model-select");
-    const genBtn = document.getElementById("generate-artifact-btn");
-    const pSelect = document.getElementById("parent-select");
-    const tSelect = document.getElementById("artifact-type-select");
-
-    if (!genBtn) return;
-
-    genBtn.onclick = async () => {
-        const model = modelSelect.value;
+    // Функция, которую вызывает кнопка "Создать"
+    window.handleGenerateArtifact = async function() {
+        const btn = document.getElementById('generate-artifact-btn');
         const pid = state.getCurrentProjectId();
-        const pId = pSelect.value;
-        const cType = tSelect.value;
+        const model = state.getCurrentModel();
+        const parentId = state.getCurrentParentId();
+        const type = state.getArtifactType();
 
-        if (!pid || !pId || model.includes("loading")) {
-            alert("Выберите проект, родителя и дождитесь загрузки модели");
+        if (!pid) {
+            alert("Сначала выбери проект, блядь!");
             return;
         }
 
-        genBtn.disabled = true;
-        genBtn.innerText = "Генерация...";
-
         try {
-            const data = await api.generateArtifact(cType, pId, input.value, model, pid);
-            state.setCurrentArtifact({ content: data.result });
-            ui.openRequirementsModal(cType, data.result, 
-                async () => {
-                    await api.saveArtifactPackage(pid, pId, cType, data.result);
-                    ui.showNotification("Сохранено!", "success");
-                    ui.closeModal();
-                },
-                null, 
-                () => ui.closeModal()
-            );
+            if (btn) btn.disabled = true;
+            console.log(`Generating ${type} for project ${pid} using ${model}...`);
+            
+            const result = await api.generateArtifact(type, parentId, "", model, pid);
+            
+            // Если это бизнес-требования, открываем модалку (как в твоем синтезе Титанов)
+            if (type === 'BusinessRequirementPackage' && window.ui && ui.showPreviewModal) {
+                ui.showPreviewModal(result);
+            } else {
+                alert("Готово! Проверь список артефактов.");
+            }
         } catch (e) {
-            alert("Ошибка: " + e.message);
+            console.error("Generation failed:", e);
+            alert("Ошибка при генерации: " + e.message);
         } finally {
-            genBtn.disabled = false;
-            genBtn.innerText = "Создать/редактировать";
+            if (btn) btn.disabled = false;
         }
     };
+    
+    // Привязываем к физической кнопке, если она уже в DOM
+    const btn = document.getElementById('generate-artifact-btn');
+    if (btn) {
+        btn.onclick = window.handleGenerateArtifact;
+    }
 })();

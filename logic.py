@@ -164,10 +164,10 @@ class MrakOrchestrator:
         user_feedback: str = "",
         model_id: Optional[str] = None,
         project_id: Optional[str] = None
-    ) -> List[str]:
+    ) -> List[Dict[str, Any]]:
         """
         Генерирует бизнес-требования на основе анализа продуктового совета.
-        Возвращает список ID созданных артефактов.
+        Возвращает список словарей (требования) без сохранения в БД.
         """
         analysis = await db.get_artifact(analysis_id)
         if not analysis:
@@ -222,19 +222,7 @@ class MrakOrchestrator:
             else:
                 raise ValueError(f"Failed to parse JSON from response: {result_text[:200]}")
 
-        ids = []
-        for req in requirements:
-            artifact_id = await db.save_artifact(
-                artifact_type="BusinessRequirement",
-                content=req,
-                owner="system",
-                status="GENERATED",
-                project_id=project_id,
-                parent_id=analysis_id
-            )
-            ids.append(artifact_id)
-
-        return ids
+        return requirements
 
     async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str, project_id: Optional[str] = None):
         clean_input = self._pii_filter(user_input)

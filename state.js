@@ -69,7 +69,6 @@ const generationRules = {
     "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
     "ReqEngineeringAnalysis": ["BusinessRequirementPackage"],
     "FunctionalRequirementPackage": ["ReqEngineeringAnalysis"],
-    // Добавляйте другие типы по мере необходимости
 };
 
 function canGenerate(childType, parentType) {
@@ -103,7 +102,6 @@ function clearArtifactCache(parentId, childType) {
     }
 }
 
-// Экспортируем в глобальную область
 window.state = {
     getProjects,
     setProjects,

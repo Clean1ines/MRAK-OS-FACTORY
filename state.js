@@ -5,11 +5,9 @@ const AppState = {
     currentProjectId: localStorage.getItem('selectedProjectId') || '',
     artifacts: [],
     parentData: {}, // id -> type
-    currentRequirements: [],
-    currentAnalysisId: null,
-    currentFeedback: '',
-    models: [],
+    currentArtifact: null, // текущий редактируемый артефакт (для модалки)
     currentParentId: null,
+    models: [],
 };
 
 const listeners = [];
@@ -27,11 +25,9 @@ function getProjects() { return AppState.projects; }
 function getCurrentProjectId() { return AppState.currentProjectId; }
 function getArtifacts() { return AppState.artifacts; }
 function getParentData() { return AppState.parentData; }
-function getCurrentRequirements() { return AppState.currentRequirements; }
-function getCurrentAnalysisId() { return AppState.currentAnalysisId; }
-function getCurrentFeedback() { return AppState.currentFeedback; }
-function getModels() { return AppState.models; }
+function getCurrentArtifact() { return AppState.currentArtifact; }
 function getCurrentParentId() { return AppState.currentParentId; }
+function getModels() { return AppState.models; }
 
 // Сеттеры
 function setProjects(projects) {
@@ -54,17 +50,13 @@ function setArtifacts(artifacts) {
     notify();
 }
 
-function setCurrentRequirements(req) {
-    AppState.currentRequirements = req;
+function setCurrentArtifact(artifact) {
+    AppState.currentArtifact = artifact;
     notify();
 }
 
-function setCurrentAnalysisId(id) {
-    AppState.currentAnalysisId = id;
-}
-
-function setCurrentFeedback(fb) {
-    AppState.currentFeedback = fb;
+function setCurrentParentId(id) {
+    AppState.currentParentId = id;
 }
 
 function setModels(models) {
@@ -72,8 +64,38 @@ function setModels(models) {
     notify();
 }
 
-function setCurrentParentId(id) {
-    AppState.currentParentId = id;
+// Конфигурация генерации: для каждого типа дочернего артефакта список допустимых родительских типов
+const generationRules = {
+    "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
+    "FunctionalRequirementPackage": ["BusinessRequirementPackage", "ReqEngineeringAnalysis"],
+    // Добавляйте другие типы по мере необходимости
+};
+
+function canGenerate(childType, parentType) {
+    const allowedParents = generationRules[childType];
+    return allowedParents ? allowedParents.includes(parentType) : false;
+}
+
+// Кеш для артефактов (parentId -> { childType: { id, content } })
+let artifactCache = {};
+
+function setArtifactCache(parentId, childType, data) {
+    if (!artifactCache[parentId]) artifactCache[parentId] = {};
+    artifactCache[parentId][childType] = data;
+}
+
+function getArtifactCache(parentId, childType) {
+    return artifactCache[parentId]?.[childType];
+}
+
+function clearArtifactCache(parentId, childType) {
+    if (parentId && childType) {
+        if (artifactCache[parentId]) delete artifactCache[parentId][childType];
+    } else if (parentId) {
+        delete artifactCache[parentId];
+    } else {
+        artifactCache = {};
+    }
 }
 
 // Экспортируем в глобальную область
@@ -85,35 +107,15 @@ window.state = {
     getArtifacts,
     setArtifacts,
     getParentData,
-    getCurrentRequirements,
-    setCurrentRequirements,
-    getCurrentAnalysisId,
-    setCurrentAnalysisId,
-    getCurrentFeedback,
-    setCurrentFeedback,
-    getModels,
-    setModels,
+    getCurrentArtifact,
+    setCurrentArtifact,
     getCurrentParentId,
     setCurrentParentId,
+    getModels,
+    setModels,
+    canGenerate,
+    setArtifactCache,
+    getArtifactCache,
+    clearArtifactCache,
     subscribe,
 };
-
-// Пакетный кеш (parentId -> { package_id, requirements })
-let packageCache = {};
-
-function setPackageCache(parentId, data) {
-    packageCache[parentId] = data;
-}
-
-function getPackageCache(parentId) {
-    return packageCache[parentId];
-}
-
-function clearPackageCache(parentId) {
-    if (parentId) delete packageCache[parentId];
-    else packageCache = {};
-}
-
-window.state.setPackageCache = setPackageCache;
-window.state.getPackageCache = getPackageCache;
-window.state.clearPackageCache = clearPackageCache;

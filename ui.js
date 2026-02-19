@@ -26,16 +26,18 @@ function renderParentSelect(artifacts, parentData, currentParentId) {
     if (currentParentId && parentData[currentParentId]) {
         select.value = currentParentId;
     }
-    const selectedId = select.value;
-    updateGenerateBrButton(parentData, selectedId);
+    updateGenerateButton(parentData, select.value);
 }
 
-function updateGenerateBrButton(parentData, selectedId) {
-    const btn = document.getElementById('generate-br-btn');
-    if (!btn) return;
-    const selectedType = parentData[selectedId];
-    if (selectedType === 'ProductCouncilAnalysis') {
+function updateGenerateButton(parentData, selectedId) {
+    const btn = document.getElementById('generate-artifact-btn');
+    const artifactTypeSelect = document.getElementById('artifact-type-select');
+    if (!btn || !artifactTypeSelect) return;
+    const childType = artifactTypeSelect.value;
+    const parentType = parentData[selectedId];
+    if (parentType && state.canGenerate(childType, parentType)) {
         btn.style.display = 'inline-block';
+        btn.innerText = `Создать/редактировать ${childType}`;
     } else {
         btn.style.display = 'none';
     }
@@ -74,7 +76,7 @@ function closeModal() {
     }
 }
 
-function openRequirementsModal(requirements, onSave, onAddMore, onCancel) {
+function openRequirementsModal(artifactType, requirements, onSave, onAddMore, onCancel) {
     if (currentModal) closeModal();
 
     const modal = document.createElement('div');
@@ -103,7 +105,7 @@ function openRequirementsModal(requirements, onSave, onAddMore, onCancel) {
 
     const title = document.createElement('h2');
     title.className = 'text-lg font-bold mb-4';
-    title.innerText = 'Бизнес-требования';
+    title.innerText = `${artifactType}`;
     content.appendChild(title);
 
     const reqContainer = document.createElement('div');
@@ -219,7 +221,7 @@ function renderRequirementsInContainer(container, requirements) {
 window.ui = {
     renderProjectSelect,
     renderParentSelect,
-    updateGenerateBrButton,
+    updateGenerateButton,
     showNotification,
     openRequirementsModal,
     closeModal,

@@ -43,29 +43,37 @@ async function saveArtifact(projectId, artifactType, content, parentId = null, g
     });
 }
 
-// Генерация бизнес-требований (с поддержкой existingRequirements)
-async function generateBusinessRequirements(analysisId, feedback = '', model = null, projectId, existingRequirements = null) {
-    return apiFetch('/api/generate_business_requirements', {
+// Универсальный эндпоинт для получения последнего артефакта по типу и родителю
+async function fetchLatestArtifact(parentId, artifactType) {
+    return apiFetch(`/api/latest_artifact?parent_id=${encodeURIComponent(parentId)}&type=${encodeURIComponent(artifactType)}`);
+}
+
+// Универсальный эндпоинт для генерации артефакта (замена generate_business_requirements)
+async function generateArtifact(artifactType, parentId, feedback = '', model = null, projectId, existingContent = null) {
+    return apiFetch('/api/generate_artifact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            analysis_id: analysisId,
+            artifact_type: artifactType,
+            parent_id: parentId,
             feedback: feedback,
             model: model,
             project_id: projectId,
-            existing_requirements: existingRequirements
+            existing_content: existingContent
         })
     });
 }
 
-async function saveBusinessRequirements(projectId, parentId, requirements) {
-    return apiFetch('/api/save_business_requirements', {
+// Сохранение пакета (общий для всех типов)
+async function saveArtifactPackage(projectId, parentId, artifactType, content) {
+    return apiFetch('/api/save_artifact_package', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             project_id: projectId,
             parent_id: parentId,
-            requirements: requirements
+            artifact_type: artifactType,
+            content: content
         })
     });
 }
@@ -80,13 +88,8 @@ window.api = {
     createProject,
     fetchArtifacts,
     saveArtifact,
-    generateBusinessRequirements,
-    saveBusinessRequirements,
+    fetchLatestArtifact,
+    generateArtifact,
+    saveArtifactPackage,
     fetchModels
 };
-
-async function fetchLatestRequirementPackage(parentId) {
-    return apiFetch(`/api/latest_requirement_package?parent_id=${encodeURIComponent(parentId)}`);
-}
-
-window.api.fetchLatestRequirementPackage = fetchLatestRequirementPackage;

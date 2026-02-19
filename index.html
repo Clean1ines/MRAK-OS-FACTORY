@@ -99,7 +99,7 @@
                 <input type="checkbox" id="generate-checkbox" class="form-checkbox h-4 w-4 text-emerald-500 bg-zinc-800 border-white/10 rounded"> Генерировать
             </label>
         </div>
-        <button id="generate-br-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30" style="display:none;">Создать бизнес-требования</button>
+        <button id="generate-artifact-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30" style="display:none;">Создать/редактировать</button>
         <button id="save-artifact-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30">Сохранить артефакт</button>
     </div>
 
@@ -138,7 +138,7 @@
             const refreshParentsBtn = document.getElementById("refresh-parents");
             const generateCheckbox = document.getElementById("generate-checkbox");
             const saveArtifactBtn = document.getElementById("save-artifact-btn");
-            const generateBrBtn = document.getElementById("generate-br-btn");
+            const generateArtifactBtn = document.getElementById("generate-artifact-btn");
 
             marked.setOptions({ gfm: true, breaks: true });
 
@@ -211,14 +211,21 @@
                     loadParents();
                 } else {
                     parentSelect.innerHTML = '<option value="">-- нет --</option>';
-                    generateBrBtn.style.display = 'none';
+                    generateArtifactBtn.style.display = 'none';
                 }
             });
 
             parentSelect.addEventListener('change', function() {
                 const selectedId = this.value;
                 state.setCurrentParentId(selectedId);
-                ui.updateGenerateBrButton(state.getParentData(), selectedId);
+                ui.updateGenerateButton(state.getParentData(), selectedId);
+            });
+
+            artifactTypeSelect.addEventListener('change', function() {
+                const selectedParentId = parentSelect.value;
+                if (selectedParentId) {
+                    ui.updateGenerateButton(state.getParentData(), selectedParentId);
+                }
             });
 
             saveArtifactBtn.onclick = async () => {
@@ -251,65 +258,62 @@
                 }
             };
 
-            // Обработчик с клиентским кешем
-            generateBrBtn.onclick = async () => {
-                const analysisId = parentSelect.value;
-                if (!analysisId) return;
+            // Универсальный обработчик генерации/редактирования
+            generateArtifactBtn.onclick = async () => {
+                const parentId = parentSelect.value;
+                const childType = artifactTypeSelect.value;
+                if (!parentId || !childType) return;
                 const feedback = input.value.trim();
                 const model = modelSelect.value;
                 const pid = state.getCurrentProjectId();
                 if (!pid) return;
 
-                setLoading(generateBrBtn, true);
+                setLoading(generateArtifactBtn, true);
                 try {
-                    // 1. Проверяем кеш
-                    let cached = state.getPackageCache(analysisId);
-                    let requirementsToShow;
+                    // Проверяем кеш
+                    let cached = state.getArtifactCache(parentId, childType);
+                    let contentToShow;
 
-                    if (cached && cached.requirements && cached.requirements.length > 0) {
-                        // Используем кешированные требования
-                        requirementsToShow = cached.requirements;
-                        state.setCurrentRequirements(requirementsToShow);
-                        state.setCurrentAnalysisId(analysisId);
-                        state.setCurrentFeedback(feedback);
+                    if (cached && cached.content && cached.content.requirements) {
+                        contentToShow = cached.content.requirements;
+                        state.setCurrentArtifact(cached);
                     } else {
-                        // Кеша нет, идём на сервер
-                        const pkgData = await api.fetchLatestRequirementPackage(analysisId);
-                        if (pkgData.exists) {
-                            // Сохраняем в кеш
-                            state.setPackageCache(analysisId, {
-                                package_id: pkgData.package_id,
-                                requirements: pkgData.requirements
+                        // Кеша нет, запрос к серверу
+                        const data = await api.fetchLatestArtifact(parentId, childType);
+                        if (data.exists) {
+                            state.setArtifactCache(parentId, childType, {
+                                id: data.artifact_id,
+                                content: data.content
                             });
-                            requirementsToShow = pkgData.requirements;
-                            state.setCurrentRequirements(requirementsToShow);
-                            state.setCurrentAnalysisId(analysisId);
-                            state.setCurrentFeedback(feedback);
+                            contentToShow = data.content.requirements || data.content; // предполагаем, что у пакетов есть поле requirements
+                            state.setCurrentArtifact({
+                                id: data.artifact_id,
+                                content: data.content
+                            });
                         } else {
-                            // Пакета нет, генерируем с нуля
-                            state.setCurrentAnalysisId(analysisId);
-                            state.setCurrentFeedback(feedback);
-                            const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid, null);
-                            requirementsToShow = data.requirements;
-                            state.setCurrentRequirements(requirementsToShow);
-                            // Кеш пока не сохраняем – сохранится после успешного сохранения
+                            // Нет существующего артефакта, генерируем
+                            const genData = await api.generateArtifact(childType, parentId, feedback, model, pid, null);
+                            contentToShow = genData.requirements;
+                            state.setCurrentArtifact(null); // пока не сохранено
                         }
                     }
 
-                    // Определяем функции-обработчики для модального окна
+                    // Если contentToShow не массив, пытаемся извлечь
+                    let requirementsArray = Array.isArray(contentToShow) ? contentToShow : (contentToShow?.requirements || []);
+
                     const handleSave = async () => {
-                        const reqs = state.getCurrentRequirements();
-                        if (!reqs.length) return;
+                        const currentReqs = state.getCurrentArtifact()?.content?.requirements || [];
+                        if (currentReqs.length === 0) return;
                         try {
-                            const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
-                            // Обновляем кеш после сохранения
-                            state.setPackageCache(analysisId, {
-                                package_id: saved.id,
-                                requirements: reqs
+                            const saved = await api.saveArtifactPackage(pid, parentId, childType, currentReqs);
+                            // Обновляем кеш
+                            state.setArtifactCache(parentId, childType, {
+                                id: saved.id,
+                                content: { requirements: currentReqs }
                             });
-                            ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
+                            ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
                             ui.closeModal();
-                            await loadParents(); // обновляем список артефактов
+                            await loadParents();
                         } catch (e) {
                             ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                         }
@@ -317,26 +321,27 @@
 
                     const handleAddMore = async () => {
                         const newFeedback = input.value.trim();
+                        const currentReqs = state.getCurrentArtifact()?.content?.requirements || [];
                         try {
-                            const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid, state.getCurrentRequirements());
+                            const newData = await api.generateArtifact(childType, parentId, newFeedback, model, pid, currentReqs);
                             const newReqs = newData.requirements;
-                            const combined = state.getCurrentRequirements().concat(newReqs);
-                            state.setCurrentRequirements(combined);
-                            // Переоткрываем модалку с обновлёнными требованиями (кеш не обновляем до сохранения)
+                            const combined = currentReqs.concat(newReqs);
+                            state.setCurrentArtifact({ content: { requirements: combined } });
                             ui.openRequirementsModal(
+                                childType,
                                 combined,
                                 handleSave,
                                 handleAddMore,
                                 () => { ui.closeModal(); }
                             );
                         } catch (e) {
-                            ui.showNotification('Ошибка генерации дополнительных требований: ' + e.message, 'error');
+                            ui.showNotification('Ошибка генерации: ' + e.message, 'error');
                         }
                     };
 
-                    // Открываем модальное окно с текущими требованиями
                     ui.openRequirementsModal(
-                        state.getCurrentRequirements(),
+                        childType,
+                        requirementsArray,
                         handleSave,
                         handleAddMore,
                         () => { ui.closeModal(); }
@@ -344,7 +349,7 @@
                 } catch (e) {
                     ui.showNotification('Ошибка: ' + e.message, 'error');
                 } finally {
-                    setLoading(generateBrBtn, false);
+                    setLoading(generateArtifactBtn, false);
                 }
             };
 

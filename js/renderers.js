@@ -1,5 +1,4 @@
-// renderers.js - функции рендеринга элементов интерфейса
-
+// js/renderers.js - функции отрисовки UI
 function renderProjectSelect(projects, currentId) {
     const select = document.getElementById('project-select');
     if (!select) return;
@@ -36,9 +35,9 @@ function renderParentSelect(artifacts, parentData, currentParentId, childType) {
         opt.innerText = `${a.type} (v${a.version}) : ${a.summary || ''}`;
         select.appendChild(opt);
     });
-    if (currentParentId && parentData[currentParentId] && allowedTypes.includes(parentData[currentParentId])) {
-        const exists = latestArtifacts.some(a => a.id === currentParentId);
-        if (exists) select.value = currentParentId;
+    
+    if (currentParentId && latestArtifacts.some(a => a.id === currentParentId)) {
+        select.value = currentParentId;
     }
     updateGenerateButton(parentData, select.value, childType);
 }
@@ -47,6 +46,7 @@ function updateGenerateButton(parentData, selectedId, childType) {
     const parentType = parentData[selectedId];
     const btn = document.getElementById('generate-artifact-btn');
     if (!btn) return;
+
     if (parentType && state.canGenerate(childType, parentType)) {
         btn.style.display = 'inline-block';
         btn.innerText = `Создать/редактировать ${childType}`;
@@ -56,21 +56,16 @@ function updateGenerateButton(parentData, selectedId, childType) {
 }
 
 function renderRequirementsInContainer(container, requirements) {
-    if (requirements && requirements.requirements && Array.isArray(requirements.requirements)) {
-        requirements = requirements.requirements;
-    }
-    if (!Array.isArray(requirements)) {
-        container.innerHTML = '<div class="text-red-500">Ошибка данных</div>';
+    const data = requirements?.requirements || requirements;
+    if (!Array.isArray(data)) {
+        container.innerHTML = '<div class="text-red-500">Ошибка данных требований</div>';
         return;
     }
     container.innerHTML = '';
-    requirements.forEach((req, index) => {
+    data.forEach((req, index) => {
         const card = document.createElement('div');
-        card.style.border = '1px solid #333';
-        card.style.padding = '1rem';
-        card.style.marginBottom = '1rem';
-        card.style.background = '#1a1a1c';
-        card.innerHTML = `<div><strong>Требование #${index+1}</strong><br>${req.description || ''}</div>`;
+        card.className = "p-4 mb-4 bg-zinc-900 border border-zinc-800 rounded";
+        card.innerHTML = `<div><strong>#${index+1}</strong><br>${req.description || ''}</div>`;
         container.appendChild(card);
     });
 }

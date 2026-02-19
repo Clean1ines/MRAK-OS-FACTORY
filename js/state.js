@@ -1,125 +1,50 @@
-// state.js - управление состоянием приложения
-
-const AppState = {
-    projects: [],
-    currentProjectId: localStorage.getItem('selectedProjectId') || '',
+// js/state.js - управление состоянием приложения
+window.mrakState = {
+    currentProjectId: null,
     artifacts: [],
-    parentData: {}, // id -> type
+    parentData: {}, // Мапа ID -> Type
     currentArtifact: null,
-    currentParentId: null,
-    models: [],
-};
+    artifactCache: {},
 
-const listeners = [];
+    getCurrentProjectId() { return this.currentProjectId; },
+    setCurrentProjectId(id) { this.currentProjectId = id; },
+    
+    setArtifacts(list) { 
+        this.artifacts = list; 
+        this.parentData = {};
+        list.forEach(a => { this.parentData[a.id] = a.type; });
+    },
+    
+    getParentData() { return this.parentData; },
+    
+    setCurrentArtifact(a) { this.currentArtifact = a; },
+    getCurrentArtifact() { return this.currentArtifact; },
 
-function subscribe(listener) {
-    listeners.push(listener);
-}
+    setArtifactCache(parentId, type, data) {
+        const key = `${parentId}_${type}`;
+        this.artifactCache[key] = data;
+    },
+    getArtifactCache(parentId, type) {
+        return this.artifactCache[`${parentId}_${type}`];
+    },
 
-function notify() {
-    listeners.forEach(fn => fn());
-}
+    // ПРАВИЛА: Что можно генерировать
+    canGenerate(childType, parentType) {
+        const rules = {
+            'BusinessRequirementPackage': ['ProductCouncilAnalysis'],
+            'FunctionalRequirementPackage': ['BusinessRequirementPackage'],
+            'CodePackage': ['FunctionalRequirementPackage', 'SystemArchitecture']
+        };
+        return rules[childType] ? rules[childType].includes(parentType) : false;
+    },
 
-// Геттеры
-function getProjects() { return AppState.projects; }
-function getCurrentProjectId() { return AppState.currentProjectId; }
-function getArtifacts() { return AppState.artifacts; }
-function getParentData() { return AppState.parentData; }
-function getCurrentArtifact() { return AppState.currentArtifact; }
-function getCurrentParentId() { return AppState.currentParentId; }
-function getModels() { return AppState.models; }
-
-// Сеттеры
-function setProjects(projects) {
-    AppState.projects = projects;
-    notify();
-}
-
-function setCurrentProjectId(id) {
-    AppState.currentProjectId = id;
-    if (id) localStorage.setItem('selectedProjectId', id);
-    else localStorage.removeItem('selectedProjectId');
-    notify();
-}
-
-function setArtifacts(artifacts) {
-    AppState.artifacts = artifacts;
-    const newParentData = {};
-    artifacts.forEach(a => { newParentData[a.id] = a.type; });
-    AppState.parentData = newParentData;
-    notify();
-}
-
-function setCurrentArtifact(artifact) {
-    AppState.currentArtifact = artifact;
-    notify();
-}
-
-function setCurrentParentId(id) {
-    AppState.currentParentId = id;
-}
-
-function setModels(models) {
-    AppState.models = models;
-    notify();
-}
-
-// Конфигурация генерации
-const generationRules = {
-    "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
-    "ReqEngineeringAnalysis": ["BusinessRequirementPackage"],
-    "FunctionalRequirementPackage": ["ReqEngineeringAnalysis"],
-};
-
-function canGenerate(childType, parentType) {
-    const allowedParents = generationRules[childType];
-    return allowedParents ? allowedParents.includes(parentType) : false;
-}
-
-function getAllowedParentTypes(childType) {
-    return generationRules[childType] || [];
-}
-
-// Кеш для артефактов
-let artifactCache = {};
-
-function setArtifactCache(parentId, childType, data) {
-    if (!artifactCache[parentId]) artifactCache[parentId] = {};
-    artifactCache[parentId][childType] = data;
-}
-
-function getArtifactCache(parentId, childType) {
-    return artifactCache[parentId]?.[childType];
-}
-
-function clearArtifactCache(parentId, childType) {
-    if (parentId && childType) {
-        if (artifactCache[parentId]) delete artifactCache[parentId][childType];
-    } else if (parentId) {
-        delete artifactCache[parentId];
-    } else {
-        artifactCache = {};
+    getAllowedParentTypes(childType) {
+        const rules = {
+            'BusinessRequirementPackage': ['ProductCouncilAnalysis'],
+            'FunctionalRequirementPackage': ['BusinessRequirementPackage'],
+            'CodePackage': ['FunctionalRequirementPackage', 'SystemArchitecture']
+        };
+        return rules[childType] || [];
     }
-}
-
-window.state = {
-    getProjects,
-    setProjects,
-    getCurrentProjectId,
-    setCurrentProjectId,
-    getArtifacts,
-    setArtifacts,
-    getParentData,
-    getCurrentArtifact,
-    setCurrentArtifact,
-    getCurrentParentId,
-    setCurrentParentId,
-    getModels,
-    setModels,
-    canGenerate,
-    getAllowedParentTypes,
-    setArtifactCache,
-    getArtifactCache,
-    clearArtifactCache,
-    subscribe,
 };
+window.state = window.mrakState;

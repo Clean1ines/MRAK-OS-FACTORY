@@ -251,7 +251,7 @@
                 }
             };
 
-            // Упрощённый обработчик без кеша
+            // Исправленный обработчик
             generateBrBtn.onclick = async () => {
                 const analysisId = parentSelect.value;
                 if (!analysisId) return;
@@ -262,50 +262,54 @@
 
                 setLoading(generateBrBtn, true);
                 try {
-                    // Всегда запрашиваем сервер
                     const pkgData = await api.fetchLatestRequirementPackage(analysisId);
+                    
+                    // Определяем функции-обработчики, чтобы использовать замыкания
+                    const handleSave = async () => {
+                        const reqs = state.getCurrentRequirements();
+                        if (!reqs.length) return;
+                        try {
+                            const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
+                            ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
+                            ui.closeModal();
+                            await loadParents(); // обновляем список артефактов
+                        } catch (e) {
+                            ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                        }
+                    };
+
+                    const handleAddMore = async () => {
+                        const newFeedback = input.value.trim();
+                        try {
+                            const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid, state.getCurrentRequirements());
+                            const newReqs = newData.requirements;
+                            const combined = state.getCurrentRequirements().concat(newReqs);
+                            state.setCurrentRequirements(combined);
+                            // Переоткрываем модалку с обновлёнными требованиями
+                            ui.openRequirementsModal(
+                                combined,
+                                handleSave,
+                                handleAddMore,
+                                () => { ui.closeModal(); }
+                            );
+                        } catch (e) {
+                            ui.showNotification('Ошибка генерации дополнительных требований: ' + e.message, 'error');
+                        }
+                    };
+
                     if (pkgData.exists) {
-                        // Пакет уже есть – открываем модалку с существующими требованиями
+                        // Если пакет уже есть, загружаем его требования
                         state.setCurrentRequirements(pkgData.requirements);
                         state.setCurrentAnalysisId(analysisId);
                         state.setCurrentFeedback(feedback);
                         ui.openRequirementsModal(
                             pkgData.requirements,
-                            async () => { // onSave
-                                const reqs = state.getCurrentRequirements();
-                                if (!reqs.length) return;
-                                try {
-                                    const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
-                                    ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
-                                    ui.closeModal();
-                                    await loadParents(); // обновляем список артефактов
-                                } catch (e) {
-                                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
-                                }
-                            },
-                            async () => { // onRegenerate
-                                const newFeedback = input.value.trim();
-                                try {
-                                    const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid, state.getCurrentRequirements());
-                                    const newReqs = newData.requirements;
-                                    const combined = state.getCurrentRequirements().concat(newReqs);
-                                    state.setCurrentRequirements(combined);
-                                    ui.openRequirementsModal(
-                                        combined,
-                                        arguments.callee,
-                                        arguments.callee,
-                                        ui.closeModal
-                                    );
-                                } catch (e) {
-                                    ui.showNotification('Ошибка перегенерации: ' + e.message, 'error');
-                                }
-                            },
-                            () => { // onCancel
-                                ui.closeModal();
-                            }
+                            handleSave,
+                            handleAddMore,
+                            () => { ui.closeModal(); }
                         );
                     } else {
-                        // Пакета нет – генерация с нуля
+                        // Генерация с нуля
                         state.setCurrentAnalysisId(analysisId);
                         state.setCurrentFeedback(feedback);
                         const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid, null);
@@ -313,38 +317,9 @@
                         state.setCurrentRequirements(requirements);
                         ui.openRequirementsModal(
                             requirements,
-                            async () => { // onSave
-                                const reqs = state.getCurrentRequirements();
-                                if (!reqs.length) return;
-                                try {
-                                    const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
-                                    ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
-                                    ui.closeModal();
-                                    await loadParents();
-                                } catch (e) {
-                                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
-                                }
-                            },
-                            async () => { // onRegenerate
-                                const newFeedback = input.value.trim();
-                                try {
-                                    const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid, state.getCurrentRequirements());
-                                    const newReqs = newData.requirements;
-                                    const combined = state.getCurrentRequirements().concat(newReqs);
-                                    state.setCurrentRequirements(combined);
-                                    ui.openRequirementsModal(
-                                        combined,
-                                        arguments.callee,
-                                        arguments.callee,
-                                        ui.closeModal
-                                    );
-                                } catch (e) {
-                                    ui.showNotification('Ошибка перегенерации: ' + e.message, 'error');
-                                }
-                            },
-                            () => { // onCancel
-                                ui.closeModal();
-                            }
+                            handleSave,
+                            handleAddMore,
+                            () => { ui.closeModal(); }
                         );
                     }
                 } catch (e) {

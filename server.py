@@ -4,8 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from logic import MrakOrchestrator
 import logging
 from pydantic import BaseModel
-from typing import Optional
-from db import init_db, get_projects, create_project
+from typing import Optional, List
+from db import init_db, get_projects, create_project, get_artifacts, save_artifact, get_artifact
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
@@ -16,6 +17,14 @@ orch = MrakOrchestrator()
 class ProjectCreate(BaseModel):
     name: str
     description: str = ""
+
+class ArtifactCreate(BaseModel):
+    project_id: str
+    artifact_type: str
+    content: str
+    parent_id: Optional[str] = None
+    generate: bool = False
+    model: Optional[str] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -34,6 +43,51 @@ async def list_projects():
 async def create_project_endpoint(project: ProjectCreate):
     project_id = await create_project(project.name, project.description)
     return JSONResponse(content={"id": project_id, "name": project.name})
+
+@app.get("/api/projects/{project_id}/artifacts")
+async def list_artifacts(project_id: str, type: Optional[str] = None):
+    artifacts = await get_artifacts(project_id, type)
+    return JSONResponse(content=artifacts)
+
+@app.post("/api/artifact")
+async def create_artifact(artifact: ArtifactCreate):
+    """
+    Создаёт артефакт. Если generate=True, то вместо сохранения content
+    вызывается соответствующий промпт для генерации артефакта данного типа.
+    """
+    try:
+        if artifact.generate:
+            # Получаем родительский артефакт, если указан
+            parent = None
+            if artifact.parent_id:
+                parent = await get_artifact(artifact.parent_id)
+                if not parent:
+                    return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
+
+            # Вызываем генерацию
+            new_id = await orch.generate_artifact(
+                artifact_type=artifact.artifact_type,
+                user_input=artifact.content,
+                parent_artifact=parent,
+                model_id=artifact.model,
+                project_id=artifact.project_id
+            )
+            return JSONResponse(content={"id": new_id, "generated": True})
+        else:
+            # Просто сохраняем как артефакт
+            content_data = {"text": artifact.content}
+            new_id = await save_artifact(
+                artifact_type=artifact.artifact_type,
+                content=content_data,
+                owner="user",
+                status="DRAFT",
+                project_id=artifact.project_id,
+                parent_id=artifact.parent_id
+            )
+            return JSONResponse(content={"id": new_id, "generated": False})
+    except Exception as e:
+        logger.error(f"Error creating artifact: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.get("/api/models")
 async def get_models():

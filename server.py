@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from logic import MrakOrchestrator
 import logging
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from db import init_db, get_projects, create_project, get_artifacts, save_artifact, get_artifact
 import json
 
@@ -32,6 +32,11 @@ class BusinessReqGenRequest(BaseModel):
     model: Optional[str] = None
     project_id: str
 
+class SaveRequirementsRequest(BaseModel):
+    project_id: str
+    parent_id: str
+    requirements: List[Dict[str, Any]]
+
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -57,20 +62,13 @@ async def list_artifacts(project_id: str, type: Optional[str] = None):
 
 @app.post("/api/artifact")
 async def create_artifact(artifact: ArtifactCreate):
-    """
-    Создаёт артефакт. Если generate=True, то вместо сохранения content
-    вызывается соответствующий промпт для генерации артефакта данного типа.
-    """
     try:
         if artifact.generate:
-            # Получаем родительский артефакт, если указан
             parent = None
             if artifact.parent_id:
                 parent = await get_artifact(artifact.parent_id)
                 if not parent:
                     return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
-
-            # Вызываем генерацию
             new_id = await orch.generate_artifact(
                 artifact_type=artifact.artifact_type,
                 user_input=artifact.content,
@@ -80,7 +78,6 @@ async def create_artifact(artifact: ArtifactCreate):
             )
             return JSONResponse(content={"id": new_id, "generated": True})
         else:
-            # Просто сохраняем как артефакт
             content_data = {"text": artifact.content}
             new_id = await save_artifact(
                 artifact_type=artifact.artifact_type,
@@ -98,18 +95,40 @@ async def create_artifact(artifact: ArtifactCreate):
 @app.post("/api/generate_business_requirements")
 async def generate_business_requirements(req: BusinessReqGenRequest):
     """
-    Генерирует бизнес-требования на основе анализа продуктового совета.
+    Генерирует бизнес-требования и возвращает их (без сохранения).
     """
     try:
-        ids = await orch.generate_business_requirements(
+        requirements = await orch.generate_business_requirements(
             analysis_id=req.analysis_id,
             user_feedback=req.feedback,
             model_id=req.model,
             project_id=req.project_id
         )
-        return JSONResponse(content={"ids": ids})
+        return JSONResponse(content={"requirements": requirements})
     except Exception as e:
         logger.error(f"Error generating business requirements: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/save_business_requirements")
+async def save_business_requirements(req: SaveRequirementsRequest):
+    """
+    Сохраняет список требований как артефакты BusinessRequirement.
+    """
+    ids = []
+    try:
+        for req_data in req.requirements:
+            artifact_id = await save_artifact(
+                artifact_type="BusinessRequirement",
+                content=req_data,
+                owner="user",
+                status="DRAFT",  # можно потом менять на VALIDATED
+                project_id=req.project_id,
+                parent_id=req.parent_id
+            )
+            ids.append(artifact_id)
+        return JSONResponse(content={"ids": ids})
+    except Exception as e:
+        logger.error(f"Error saving requirements: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.get("/api/models")

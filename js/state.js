@@ -5,7 +5,7 @@ const AppState = {
     currentProjectId: localStorage.getItem('selectedProjectId') || '',
     artifacts: [],
     parentData: {}, // id -> type
-    currentArtifact: null, // текущий редактируемый артефакт (для модалки)
+    currentArtifact: null,
     currentParentId: null,
     models: [],
 };
@@ -64,7 +64,7 @@ function setModels(models) {
     notify();
 }
 
-// Конфигурация генерации: для каждого типа дочернего артефакта список допустимых родительских типов
+// Конфигурация генерации
 const generationRules = {
     "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
     "ReqEngineeringAnalysis": ["BusinessRequirementPackage"],
@@ -80,7 +80,7 @@ function getAllowedParentTypes(childType) {
     return generationRules[childType] || [];
 }
 
-// Кеш для артефактов (parentId -> { childType: { id, content } })
+// Кеш для артефактов
 let artifactCache = {};
 
 function setArtifactCache(parentId, childType, data) {

@@ -130,3 +130,26 @@ async def analyze(request: Request):
     )
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
+
+class BusinessReqGenRequest(BaseModel):
+    analysis_id: str
+    feedback: str = ""
+    model: Optional[str] = None
+    project_id: str
+
+@app.post("/api/generate_business_requirements")
+async def generate_business_requirements(req: BusinessReqGenRequest):
+    """
+    Генерирует бизнес-требования на основе анализа продуктового совета.
+    """
+    try:
+        ids = await orch.generate_business_requirements(
+            analysis_id=req.analysis_id,
+            user_feedback=req.feedback,
+            model_id=req.model,
+            project_id=req.project_id
+        )
+        return JSONResponse(content={"ids": ids})
+    except Exception as e:
+        logger.error(f"Error generating business requirements: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)

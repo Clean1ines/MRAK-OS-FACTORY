@@ -152,6 +152,7 @@
                 <input type="checkbox" id="generate-checkbox" class="form-checkbox h-4 w-4 text-emerald-500 bg-zinc-800 border-white/10 rounded"> Генерировать
             </label>
         </div>
+        <button id="generate-br-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30" style="display:none;">Создать бизнес-требования</button>
         <button id="save-artifact-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30">Сохранить артефакт</button>
     </div>
 
@@ -192,8 +193,10 @@
         const refreshParentsBtn = document.getElementById("refresh-parents");
         const generateCheckbox = document.getElementById("generate-checkbox");
         const saveArtifactBtn = document.getElementById("save-artifact-btn");
+        const generateBrBtn = document.getElementById("generate-br-btn");
 
         let currentProjectId = localStorage.getItem("selectedProjectId") || "";
+        const parentData = {}; // хранит информацию о типах родителей
 
         marked.setOptions({ gfm: true, breaks: true });
 
@@ -253,12 +256,17 @@
                 const res = await fetch(`/api/projects/${currentProjectId}/artifacts`);
                 const artifacts = await res.json();
                 parentSelect.innerHTML = '<option value="">-- нет --</option>';
+                // Очищаем parentData и заполняем заново
+                for (let key in parentData) delete parentData[key];
                 artifacts.forEach(a => {
+                    parentData[a.id] = a.type;
                     const opt = document.createElement("option");
                     opt.value = a.id;
                     opt.innerText = `${a.type} (${a.created_at}) : ${a.summary}`;
                     parentSelect.appendChild(opt);
                 });
+                // После загрузки обновляем видимость кнопки генерации
+                updateGenerateBrButton();
             } catch (e) {
                 console.error("Failed to load parents", e);
             }
@@ -275,10 +283,24 @@
             } else {
                 localStorage.removeItem("selectedProjectId");
                 parentSelect.innerHTML = '<option value="">-- нет --</option>';
+                generateBrBtn.style.display = 'none';
             }
         });
 
-        // Сохранение артефакта
+        // При изменении выбора родителя показываем/скрываем кнопку генерации
+        parentSelect.addEventListener('change', updateGenerateBrButton);
+
+        function updateGenerateBrButton() {
+            const selectedId = parentSelect.value;
+            const selectedType = parentData[selectedId];
+            if (selectedType === 'ProductCouncilAnalysis') {
+                generateBrBtn.style.display = 'inline-block';
+            } else {
+                generateBrBtn.style.display = 'none';
+            }
+        }
+
+        // Сохранение артефакта (обычное или с генерацией)
         saveArtifactBtn.onclick = async () => {
             const content = input.value.trim();
             if (!content) {
@@ -313,6 +335,37 @@
                     input.value = "";
                     input.style.height = "44px";
                     await loadParents(); // обновляем список родителей
+                } else {
+                    alert(`Ошибка: ${data.error}`);
+                }
+            } catch (e) {
+                alert(`Ошибка сети: ${e}`);
+            }
+        };
+
+        // Генерация бизнес-требований по анализу
+        generateBrBtn.onclick = async () => {
+            const analysisId = parentSelect.value;
+            if (!analysisId) return;
+            const feedback = input.value.trim(); // можно использовать поле ввода как feedback
+            const model = modelSelect.value;
+            try {
+                const res = await fetch("/api/generate_business_requirements", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        analysis_id: analysisId,
+                        feedback: feedback,
+                        model: model,
+                        project_id: currentProjectId
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(`Создано требований: ${data.ids.length}`);
+                    input.value = ""; // очищаем поле ввода
+                    input.style.height = "44px";
+                    await loadParents(); // обновляем список артефактов
                 } else {
                     alert(`Ошибка: ${data.error}`);
                 }

@@ -1,7 +1,3 @@
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
-
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,14 +7,9 @@ from app.schemas import (
     GenerateArtifactRequest, SavePackageRequest
 )
 from app.utils import compute_content_hash
-from db import (
-    init_db, get_projects, create_project,
-    get_artifacts, save_artifact, get_artifact,
-    get_last_package
-)
+import db
 import logging
 import os
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
@@ -28,27 +19,31 @@ orch = MrakOrchestrator()
 
 @app.on_event("startup")
 async def startup_event():
+    logger.info("Starting up... Database schema is managed separately.")
+    # Проверяем подключение, но не создаём таблицы
     try:
-        await init_db()
-        logger.info("Database initialized successfully.")
+        conn = await db.get_connection()
+        await conn.execute('SELECT 1')
+        await conn.close()
+        logger.info("Database connection OK.")
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
+        logger.error(f"Database connection failed: {e}")
 
 # ==================== Project endpoints ====================
 @app.get("/api/projects")
 async def list_projects():
-    projects = await get_projects()
+    projects = await db.get_projects()
     return JSONResponse(content=projects)
 
 @app.post("/api/projects")
 async def create_project_endpoint(project: ProjectCreate):
-    project_id = await create_project(project.name, project.description)
+    project_id = await db.create_project(project.name, project.description)
     return JSONResponse(content={"id": project_id, "name": project.name})
 
 # ==================== Artifact endpoints ====================
 @app.get("/api/projects/{project_id}/artifacts")
 async def list_artifacts(project_id: str, type: Optional[str] = None):
-    artifacts = await get_artifacts(project_id, type)
+    artifacts = await db.get_artifacts(project_id, type)
     return JSONResponse(content=artifacts)
 
 @app.post("/api/artifact")
@@ -57,7 +52,7 @@ async def create_artifact(artifact: ArtifactCreate):
         if artifact.generate:
             parent = None
             if artifact.parent_id:
-                parent = await get_artifact(artifact.parent_id)
+                parent = await db.get_artifact(artifact.parent_id)
                 if not parent:
                     return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
             new_id = await orch.generate_artifact(
@@ -70,7 +65,7 @@ async def create_artifact(artifact: ArtifactCreate):
             return JSONResponse(content={"id": new_id, "generated": True})
         else:
             content_data = {"text": artifact.content}
-            new_id = await save_artifact(
+            new_id = await db.save_artifact(
                 artifact_type=artifact.artifact_type,
                 content=content_data,
                 owner="user",
@@ -85,7 +80,7 @@ async def create_artifact(artifact: ArtifactCreate):
 
 @app.get("/api/latest_artifact")
 async def latest_artifact(parent_id: str, type: str):
-    pkg = await get_last_package(parent_id, type)
+    pkg = await db.get_last_package(parent_id, type)
     if pkg:
         return JSONResponse(content={
             "exists": True,
@@ -136,11 +131,11 @@ async def save_artifact_package(req: SavePackageRequest):
     try:
         new_hash = compute_content_hash(req.content)
 
-        last_pkg = await get_last_package(req.parent_id, req.artifact_type)
+        last_pkg = await db.get_last_package(req.parent_id, req.artifact_type)
         if last_pkg and last_pkg.get('content_hash') == new_hash:
             return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
 
-        last_pkg = await get_last_package(req.parent_id, req.artifact_type)
+        last_pkg = await db.get_last_package(req.parent_id, req.artifact_type)
         if last_pkg:
             try:
                 last_version = int(last_pkg['version'])
@@ -157,7 +152,7 @@ async def save_artifact_package(req: SavePackageRequest):
                 if 'id' not in r:
                     r['id'] = str(uuid.uuid4())
 
-        artifact_id = await save_artifact(
+        artifact_id = await db.save_artifact(
             artifact_type=req.artifact_type,
             content=content_to_save,
             owner="user",

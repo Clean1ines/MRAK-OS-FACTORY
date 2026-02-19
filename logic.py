@@ -1,12 +1,11 @@
-from typing import Optional
 from dotenv import load_dotenv
 import os
 import re
 import httpx
 import asyncio
 from groq import Groq
+from typing import Optional, Dict, Any
 
-# Импорт модуля для работы с БД (сохранение артефактов)
 import db
 
 load_dotenv()
@@ -15,14 +14,13 @@ load_dotenv()
 class MrakOrchestrator:
     def __init__(self, api_key=None):
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        # Исправлено имя переменной для соответствия .env
         self.gh_token = os.getenv("GITHUB_TOKEN")
         self.client = Groq(
             api_key=self.api_key, http_client=httpx.Client(timeout=120.0)
         )
         self.base_url = "https://api.groq.com/openai/v1"
 
-        # Словарь маппинга режимов на переменные окружения с URL
+        # Маппинг режимов на переменные окружения с URL
         self.mode_map = {
             "01_CORE": "SYSTEM_PROMPT_URL",
             "02_UI_UX": "GH_URL_UI_UX",
@@ -37,6 +35,18 @@ class MrakOrchestrator:
             "12_SELF_ANALYSIS_FACTORY": "GH_URL_SELF_ANALYSIS_FACTORY",
             "13_ARTIFACT_OUTPUT": "GH_URL_MPROMPT",
             "14_PRODUCT_COUNCIL": "GH_URL_PRODUCT_COUNCIL",
+            "15_BUSINESS_REQ_GEN": "GH_URL_BUSINESS_REQ_GEN",   # Новый режим
+            "16_REQ_ENG_COUNCIL": "GH_URL_REQ_ENG_COUNCIL",     # Новый режим
+        }
+
+        # Маппинг типа артефакта на режим промпта для генерации
+        self.type_to_mode = {
+            "BusinessIdea": "14_PRODUCT_COUNCIL",          # идея -> совет титанов
+            "ProductCouncilAnalysis": None,                 # анализ не генерируется (это результат)
+            "BusinessRequirement": "15_BUSINESS_REQ_GEN",   # анализ -> бизнес-требования
+            "ReqEngineeringAnalysis": "16_REQ_ENG_COUNCIL", # бизнес-требования -> анализ инженерии
+            "FunctionalRequirement": None,                  # может генерироваться отдельно
+            "CodeArtifact": "10_FULL_CODE_GEN",             # требования -> код
         }
 
     def get_active_models(self):
@@ -78,7 +88,6 @@ class MrakOrchestrator:
         if not url:
             return f"System Error: URL for mode {mode} not found in environment."
 
-        # Подготовка заголовков для GitHub API (Raw content)
         headers = {
             "Accept": "application/vnd.github.v3.raw",
         }
@@ -99,12 +108,72 @@ class MrakOrchestrator:
         text = re.sub(r"(gsk_|sk-)[a-zA-Z0-9]{20,}", "[KEY_REDACTED]", text)
         return text
 
+    async def generate_artifact(
+        self,
+        artifact_type: str,
+        user_input: str,
+        parent_artifact: Optional[Dict[str, Any]] = None,
+        model_id: Optional[str] = None,
+        project_id: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Генерирует артефакт указанного типа на основе входных данных и родительского артефакта.
+        Возвращает ID созданного артефакта или None.
+        """
+        mode = self.type_to_mode.get(artifact_type)
+        if not mode:
+            raise ValueError(f"No generation mode defined for artifact type {artifact_type}")
+
+        # Получаем системный промпт
+        sys_prompt = await self.get_system_prompt(mode)
+        if sys_prompt.startswith("Error") or sys_prompt.startswith("System Error"):
+            raise Exception(f"Failed to get system prompt: {sys_prompt}")
+
+        # Формируем входной текст для LLM
+        if parent_artifact:
+            # Если есть родитель, передаём его содержимое как контекст
+            prompt = f"Parent artifact ({parent_artifact['type']}):\n{json.dumps(parent_artifact['content'])}\n\nUser input:\n{user_input}"
+        else:
+            prompt = user_input
+
+        # Вызываем LLM и получаем полный ответ (не потоковый)
+        try:
+            response = self.client.chat.completions.create(
+                model=model_id or "llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": self._pii_filter(prompt)},
+                ],
+                temperature=0.6,
+            )
+            result_text = response.choices[0].message.content
+        except Exception as e:
+            raise Exception(f"LLM call failed: {e}")
+
+        # Пытаемся распарсить JSON, если ожидается структурированный ответ
+        try:
+            # Пробуем найти JSON в ответе (если промпт возвращает JSON)
+            # В простом случае считаем, что результат — это и есть JSON
+            result_data = json.loads(result_text)
+        except json.JSONDecodeError:
+            # Если не JSON, сохраняем как текст
+            result_data = {"text": result_text}
+
+        # Сохраняем результат как новый артефакт
+        artifact_id = await db.save_artifact(
+            artifact_type=artifact_type,
+            content=result_data,
+            owner="system",
+            status="GENERATED",
+            project_id=project_id,
+            parent_id=parent_artifact['id'] if parent_artifact else None
+        )
+        return artifact_id
+
     async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str, project_id: Optional[str] = None):
-        """
-        Асинхронный генератор, который стримит ответ LLM и сохраняет полный ответ в БД.
-        """
+        """(без изменений)"""
         clean_input = self._pii_filter(user_input)
-        full_response = ""  # для накопления полного ответа
+        full_response = ""
         try:
             raw_res = self.client.chat.completions.with_raw_response.create(
                 model=model_id,
@@ -126,11 +195,10 @@ class MrakOrchestrator:
                     full_response += content
                     yield content
 
-            # После успешной передачи всего ответа сохраняем его в БД
             if full_response:
                 artifact_data = {
                     "user_input": clean_input,
-                    "system_prompt": system_prompt[:500] + ("..." if len(system_prompt) > 500 else ""),  # обрезаем для читаемости
+                    "system_prompt": system_prompt[:500] + ("..." if len(system_prompt) > 500 else ""),
                     "model": model_id,
                     "mode": mode,
                     "response": full_response,
@@ -139,7 +207,6 @@ class MrakOrchestrator:
                         "requests_remaining": rr
                     }
                 }
-                # Запускаем сохранение в фоне, чтобы не задерживать ответ
                 asyncio.create_task(
                     db.save_artifact(
                         artifact_type="LLMResponse",

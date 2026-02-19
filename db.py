@@ -23,11 +23,12 @@ async def init_db():
             );
         ''')
         
-        # Таблица артефактов с добавленным project_id
+        # Таблица артефактов с parent_id
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS artifacts (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+                parent_id UUID REFERENCES artifacts(id) ON DELETE SET NULL,
                 type VARCHAR(50) NOT NULL,
                 version VARCHAR(20) NOT NULL DEFAULT '1.0',
                 status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
@@ -40,7 +41,7 @@ async def init_db():
             );
         ''')
         
-        # Таблица связей
+        # Таблица связей (можно оставить, но parent_id покрывает простые иерархии)
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS links (
                 from_id UUID REFERENCES artifacts(id) ON DELETE CASCADE,
@@ -57,7 +58,7 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_artifacts_file_path ON artifacts ((content->>'file_path')) WHERE type = 'CodeFile';
         ''')
         
-        print("DEBUG: Tables initialized (projects, artifacts with project_id)")
+        print("DEBUG: Tables initialized (projects, artifacts with parent_id)")
     finally:
         await conn.close()
 
@@ -74,7 +75,6 @@ async def get_projects() -> List[Dict[str, Any]]:
         for row in rows:
             proj = dict(row)
             proj['id'] = str(proj['id'])
-            # Преобразуем datetime в ISO строку
             proj['created_at'] = proj['created_at'].isoformat() if proj['created_at'] else None
             proj['updated_at'] = proj['updated_at'].isoformat() if proj['updated_at'] else None
             projects.append(proj)
@@ -83,7 +83,6 @@ async def get_projects() -> List[Dict[str, Any]]:
         await conn.close()
 
 async def create_project(name: str, description: str = "") -> str:
-    """Создаёт новый проект и возвращает его ID (строку)."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         project_id = str(uuid.uuid4())
@@ -96,7 +95,6 @@ async def create_project(name: str, description: str = "") -> str:
         await conn.close()
 
 async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
-    """Получает проект по ID. Возвращает словарь со строковыми полями."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         row = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
@@ -110,35 +108,76 @@ async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
     finally:
         await conn.close()
 
-async def save_artifact(artifact_type: str, content: Dict[str, Any], owner: str = "system", 
-                        version: str = "1.0", status: str = "DRAFT", content_hash: Optional[str] = None,
-                        project_id: Optional[str] = None) -> str:
+async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Возвращает список артефактов проекта с преобразованием дат."""
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        query = 'SELECT id, type, parent_id, content, created_at, updated_at FROM artifacts WHERE project_id = $1'
+        params = [project_id]
+        if artifact_type:
+            query += ' AND type = $2'
+            params.append(artifact_type)
+        query += ' ORDER BY created_at DESC'
+        rows = await conn.fetch(query, *params)
+        artifacts = []
+        for row in rows:
+            art = dict(row)
+            art['id'] = str(art['id'])
+            art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
+            art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
+            art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
+            # Для отображения в списке можно добавить краткое содержание
+            content = art['content']
+            if isinstance(content, dict):
+                art['summary'] = content.get('text', '')[:100] if 'text' in content else str(content)[:100]
+            else:
+                art['summary'] = str(content)[:100]
+            artifacts.append(art)
+        return artifacts
+    finally:
+        await conn.close()
+
+async def save_artifact(
+    artifact_type: str,
+    content: Dict[str, Any],
+    owner: str = "system",
+    version: str = "1.0",
+    status: str = "DRAFT",
+    content_hash: Optional[str] = None,
+    project_id: Optional[str] = None,
+    parent_id: Optional[str] = None
+) -> str:
     """Сохраняет артефакт в БД и возвращает его ID."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         artifact_id = str(uuid.uuid4())
+        # Базовые поля
+        insert_fields = ['id', 'type', 'version', 'status', 'owner', 'content']
+        insert_values = [artifact_id, artifact_type, version, status, owner, json.dumps(content)]
+        placeholders = ['$1', '$2', '$3', '$4', '$5', '$6']
+        idx = 6
+
         if project_id:
-            if content_hash:
-                await conn.execute('''
-                    INSERT INTO artifacts (id, project_id, type, version, status, owner, content, content_hash)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ''', artifact_id, project_id, artifact_type, version, status, owner, json.dumps(content), content_hash)
-            else:
-                await conn.execute('''
-                    INSERT INTO artifacts (id, project_id, type, version, status, owner, content)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ''', artifact_id, project_id, artifact_type, version, status, owner, json.dumps(content))
-        else:
-            if content_hash:
-                await conn.execute('''
-                    INSERT INTO artifacts (id, type, version, status, owner, content, content_hash)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ''', artifact_id, artifact_type, version, status, owner, json.dumps(content), content_hash)
-            else:
-                await conn.execute('''
-                    INSERT INTO artifacts (id, type, version, status, owner, content)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                ''', artifact_id, artifact_type, version, status, owner, json.dumps(content))
+            insert_fields.append('project_id')
+            insert_values.append(project_id)
+            idx += 1
+            placeholders.append(f'${idx}')
+        if parent_id:
+            insert_fields.append('parent_id')
+            insert_values.append(parent_id)
+            idx += 1
+            placeholders.append(f'${idx}')
+        if content_hash:
+            insert_fields.append('content_hash')
+            insert_values.append(content_hash)
+            idx += 1
+            placeholders.append(f'${idx}')
+
+        query = f'''
+            INSERT INTO artifacts ({', '.join(insert_fields)})
+            VALUES ({', '.join(placeholders)})
+        '''
+        await conn.execute(query, *insert_values)
         return artifact_id
     finally:
         await conn.close()

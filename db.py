@@ -4,56 +4,14 @@ import asyncpg
 from typing import Optional, Dict, Any, List
 import uuid
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mrak_user:mrak_pass@localhost:5432/mrak_db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-async def init_db():
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        await conn.execute('CREATE EXTENSION IF NOT EXISTS vector;')
-        await conn.execute('''
-            CREATE TABLE IF NOT EXISTS projects (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                name TEXT NOT NULL,
-                description TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-        ''')
-        await conn.execute('''
-            CREATE TABLE IF NOT EXISTS artifacts (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-                parent_id UUID REFERENCES artifacts(id) ON DELETE SET NULL,
-                type VARCHAR(50) NOT NULL,
-                version VARCHAR(20) NOT NULL DEFAULT '1.0',
-                status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
-                owner VARCHAR(100),
-                content JSONB NOT NULL,
-                content_hash VARCHAR(64),
-                embedding vector(384),
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-        ''')
-        await conn.execute('''
-            CREATE TABLE IF NOT EXISTS links (
-                from_id UUID REFERENCES artifacts(id) ON DELETE CASCADE,
-                to_id UUID REFERENCES artifacts(id) ON DELETE CASCADE,
-                link_type VARCHAR(50) NOT NULL,
-                description TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                PRIMARY KEY (from_id, to_id, link_type)
-            );
-        ''')
-        await conn.execute('''
-            CREATE INDEX IF NOT EXISTS idx_artifacts_file_path ON artifacts ((content->>'file_path')) WHERE type = 'CodeFile';
-        ''')
-        print("DEBUG: Tables initialized (projects, artifacts with parent_id)")
-    finally:
-        await conn.close()
+async def get_connection():
+    return await asyncpg.connect(DATABASE_URL)
 
+# ==================== ПРОЕКТЫ ====================
 async def get_projects() -> List[Dict[str, Any]]:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         rows = await conn.fetch('''
             SELECT id, name, description, created_at, updated_at
@@ -72,7 +30,7 @@ async def get_projects() -> List[Dict[str, Any]]:
         await conn.close()
 
 async def create_project(name: str, description: str = "") -> str:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         project_id = str(uuid.uuid4())
         await conn.execute('''
@@ -84,7 +42,7 @@ async def create_project(name: str, description: str = "") -> str:
         await conn.close()
 
 async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         row = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
         if row:
@@ -97,8 +55,9 @@ async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
     finally:
         await conn.close()
 
+# ==================== АРТЕФАКТЫ ====================
 async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) -> List[Dict[str, Any]]:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         query = 'SELECT id, type, parent_id, content, created_at, updated_at, version, content_hash FROM artifacts WHERE project_id = $1'
         params = [project_id]
@@ -127,7 +86,7 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) ->
         await conn.close()
 
 async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict[str, Any]]:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         row = await conn.fetchrow('''
             SELECT * FROM artifacts 
@@ -149,7 +108,6 @@ async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict[
         await conn.close()
 
 async def get_last_version_by_parent_and_type(parent_id: str, artifact_type: str) -> Optional[Dict[str, Any]]:
-    """Синоним get_last_package, возвращает последнюю версию артефакта по родителю и типу."""
     return await get_last_package(parent_id, artifact_type)
 
 async def save_artifact(
@@ -162,7 +120,7 @@ async def save_artifact(
     project_id: Optional[str] = None,
     parent_id: Optional[str] = None
 ) -> str:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         artifact_id = str(uuid.uuid4())
         insert_fields = ['id', 'type', 'version', 'status', 'owner', 'content']
@@ -196,7 +154,7 @@ async def save_artifact(
         await conn.close()
 
 async def find_artifact_by_path(file_path: str, artifact_type: str = "CodeFile", project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         query = '''
             SELECT * FROM artifacts 
@@ -222,7 +180,7 @@ async def find_artifact_by_path(file_path: str, artifact_type: str = "CodeFile",
         await conn.close()
 
 async def update_artifact(artifact_id: str, new_content: Dict[str, Any], new_version: str, new_hash: str) -> None:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         await conn.execute('''
             UPDATE artifacts
@@ -233,7 +191,7 @@ async def update_artifact(artifact_id: str, new_content: Dict[str, Any], new_ver
         await conn.close()
 
 async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await get_connection()
     try:
         row = await conn.fetchrow('SELECT * FROM artifacts WHERE id = $1', artifact_id)
         if row:

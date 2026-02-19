@@ -382,3 +382,166 @@ window.ui.openRequirementsModal = function(artifactType, content, onSave, onAddM
         originalOpenModal(artifactType, content, onSave, onAddMore, onCancel);
     }
 };
+
+// Улучшенная версия renderReqEngineeringAnalysis с отладкой
+function renderReqEngineeringAnalysis(container, analysis) {
+    container.innerHTML = '';
+    
+    // Если analysis не объект или null, покажем как есть
+    if (!analysis || typeof analysis !== 'object') {
+        const pre = document.createElement('pre');
+        pre.className = 'text-red-400 whitespace-pre-wrap';
+        pre.innerText = JSON.stringify(analysis, null, 2) || 'пустой ответ';
+        container.appendChild(pre);
+        return;
+    }
+
+    // Если анализ пустой, покажем сообщение
+    if (Object.keys(analysis).length === 0) {
+        container.innerText = 'Анализ пуст';
+        return;
+    }
+
+    // Пытаемся отобразить структуру рекурсивно
+    const renderObject = (obj, level = 0) => {
+        const indent = '  '.repeat(level);
+        for (const [key, value] of Object.entries(obj)) {
+            const div = document.createElement('div');
+            div.className = 'mb-2';
+            
+            const label = document.createElement('div');
+            label.className = 'text-xs text-zinc-400 font-bold';
+            label.innerText = key;
+            div.appendChild(label);
+            
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+                // Вложенный объект
+                const nestedDiv = document.createElement('div');
+                nestedDiv.className = 'ml-4 border-l border-zinc-700 pl-2';
+                renderObject(value, level + 1);
+                div.appendChild(nestedDiv);
+            } else if (Array.isArray(value)) {
+                // Массив
+                value.forEach((item, idx) => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'flex items-center gap-2 mb-1';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1';
+                    input.value = item || '';
+                    input.oninput = (e) => { value[idx] = e.target.value; };
+                    itemDiv.appendChild(input);
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'text-red-500 text-xs';
+                    delBtn.innerText = '✕';
+                    delBtn.onclick = () => {
+                        value.splice(idx, 1);
+                        renderReqEngineeringAnalysis(container, analysis);
+                    };
+                    itemDiv.appendChild(delBtn);
+                    div.appendChild(itemDiv);
+                });
+                const addBtn = document.createElement('button');
+                addBtn.className = 'text-xs bg-emerald-600/20 text-emerald-500 px-2 py-1 rounded mt-1';
+                addBtn.innerText = '+ Добавить элемент';
+                addBtn.onclick = () => {
+                    value.push('');
+                    renderReqEngineeringAnalysis(container, analysis);
+                };
+                div.appendChild(addBtn);
+            } else {
+                // Простое значение
+                const input = document.createElement('textarea');
+                input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1';
+                input.rows = 2;
+                input.value = value || '';
+                input.oninput = (e) => { obj[key] = e.target.value; };
+                div.appendChild(input);
+            }
+            container.appendChild(div);
+        }
+    };
+    
+    renderObject(analysis);
+}
+
+// Переопределяем openRequirementsModal (если ещё не переопределено)
+if (!window.ui._originalOpenModal) {
+    window.ui._originalOpenModal = window.ui.openRequirementsModal;
+}
+
+window.ui.openRequirementsModal = function(artifactType, content, onSave, onAddMore, onCancel) {
+    if (artifactType === 'ReqEngineeringAnalysis') {
+        if (window.ui.currentModal) window.ui.closeModal();
+
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'flex';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0,0,0,0.8)';
+        modal.style.zIndex = '1000';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+
+        const modalContent = document.createElement('div');
+        modalContent.className = 'modal-content';
+        modalContent.style.background = '#111';
+        modalContent.style.border = '1px solid #222';
+        modalContent.style.borderRadius = '12px';
+        modalContent.style.width = '80%';
+        modalContent.style.maxWidth = '800px';
+        modalContent.style.maxHeight = '80%';
+        modalContent.style.overflowY = 'auto';
+        modalContent.style.padding = '1.5rem';
+
+        const title = document.createElement('h2');
+        title.className = 'text-lg font-bold mb-4';
+        title.innerText = artifactType;
+        modalContent.appendChild(title);
+
+        const container = document.createElement('div');
+        container.id = 'analysis-container';
+        modalContent.appendChild(container);
+
+        const btnDiv = document.createElement('div');
+        btnDiv.className = 'flex justify-end gap-3 mt-4';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'px-3 py-1 bg-zinc-700 rounded';
+        cancelBtn.innerText = 'Отмена';
+        cancelBtn.onclick = () => {
+            if (onCancel) onCancel();
+            window.ui.closeModal();
+        };
+        btnDiv.appendChild(cancelBtn);
+
+        const addMoreBtn = document.createElement('button');
+        addMoreBtn.className = 'px-3 py-1 bg-blue-600/20 text-blue-500 rounded';
+        addMoreBtn.innerText = 'Добавить ещё';
+        addMoreBtn.onclick = () => {
+            if (onAddMore) onAddMore();
+        };
+        btnDiv.appendChild(addMoreBtn);
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'px-3 py-1 bg-emerald-600/20 text-emerald-500 rounded';
+        saveBtn.innerText = 'Сохранить';
+        saveBtn.onclick = () => {
+            if (onSave) onSave();
+        };
+        btnDiv.appendChild(saveBtn);
+
+        modalContent.appendChild(btnDiv);
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        window.ui.currentModal = modal;
+
+        renderReqEngineeringAnalysis(container, content);
+    } else {
+        window.ui._originalOpenModal(artifactType, content, onSave, onAddMore, onCancel);
+    }
+};

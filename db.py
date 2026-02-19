@@ -62,7 +62,7 @@ async def init_db():
         await conn.close()
 
 async def get_projects() -> List[Dict[str, Any]]:
-    """Возвращает список всех проектов, преобразуя UUID в строки."""
+    """Возвращает список всех проектов с преобразованием UUID и datetime в строки."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         rows = await conn.fetch('''
@@ -70,12 +70,13 @@ async def get_projects() -> List[Dict[str, Any]]:
             FROM projects
             ORDER BY created_at DESC
         ''')
-        # Преобразуем UUID в строку для JSON-сериализации
         projects = []
         for row in rows:
             proj = dict(row)
             proj['id'] = str(proj['id'])
-            # created_at и updated_at уже являются datetime, они сериализуются нормально
+            # Преобразуем datetime в ISO строку
+            proj['created_at'] = proj['created_at'].isoformat() if proj['created_at'] else None
+            proj['updated_at'] = proj['updated_at'].isoformat() if proj['updated_at'] else None
             projects.append(proj)
         return projects
     finally:
@@ -95,13 +96,15 @@ async def create_project(name: str, description: str = "") -> str:
         await conn.close()
 
 async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
-    """Получает проект по ID. Возвращает словарь со строковым id."""
+    """Получает проект по ID. Возвращает словарь со строковыми полями."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         row = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
         if row:
             proj = dict(row)
             proj['id'] = str(proj['id'])
+            proj['created_at'] = proj['created_at'].isoformat() if proj['created_at'] else None
+            proj['updated_at'] = proj['updated_at'].isoformat() if proj['updated_at'] else None
             return proj
         return None
     finally:
@@ -126,7 +129,6 @@ async def save_artifact(artifact_type: str, content: Dict[str, Any], owner: str 
                     VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ''', artifact_id, project_id, artifact_type, version, status, owner, json.dumps(content))
         else:
-            # без проекта – вставляем с project_id = NULL
             if content_hash:
                 await conn.execute('''
                     INSERT INTO artifacts (id, type, version, status, owner, content, content_hash)

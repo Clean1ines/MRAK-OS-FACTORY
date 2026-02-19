@@ -14,3 +14,9 @@ window.setLoading = function(button, isLoading) {
         button.innerText = button.dataset.originalText || button.innerText;
     }
 };
+
+// Автоматическое расширение textarea
+window.autoResize = function(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = (textarea.scrollHeight) + 'px';
+};

@@ -140,6 +140,9 @@
             const saveArtifactBtn = document.getElementById("save-artifact-btn");
             const generateArtifactBtn = document.getElementById("generate-artifact-btn");
 
+            // Флаг для блокировки повторных сохранений
+            let isSaving = false;
+
             marked.setOptions({ gfm: true, breaks: true });
 
             input.oninput = function () {
@@ -231,6 +234,7 @@
             });
 
             saveArtifactBtn.onclick = async () => {
+                if (isSaving) return;
                 const content = input.value.trim();
                 if (!content) {
                     ui.showNotification("Введите содержимое артефакта", 'error');
@@ -246,6 +250,7 @@
                 const generate = generateCheckbox.checked;
                 const model = modelSelect.value;
 
+                isSaving = true;
                 setLoading(saveArtifactBtn, true);
                 try {
                     const data = await api.saveArtifact(pid, artifactType, content, parentId, generate, model);
@@ -257,6 +262,7 @@
                     ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                 } finally {
                     setLoading(saveArtifactBtn, false);
+                    isSaving = false;
                 }
             };
 
@@ -302,6 +308,8 @@
                     }
 
                     const handleSave = async () => {
+                        if (isSaving) return;
+                        isSaving = true;
                         let currentContent = state.getCurrentArtifact()?.content;
                         if (currentContent === undefined) {
                             currentContent = (childType === 'BusinessRequirementPackage' || childType === 'FunctionalRequirementPackage') ? [] : {};
@@ -322,10 +330,14 @@
                             await loadParents();
                         } catch (e) {
                             ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                        } finally {
+                            isSaving = false;
                         }
                     };
 
                     const handleAddMore = async () => {
+                        if (isSaving) return;
+                        isSaving = true;
                         const newFeedback = input.value.trim();
                         const existingContent = state.getCurrentArtifact()?.content;
                         try {
@@ -349,6 +361,8 @@
                             );
                         } catch (e) {
                             ui.showNotification('Ошибка генерации: ' + e.message, 'error');
+                        } finally {
+                            isSaving = false;
                         }
                     };
 

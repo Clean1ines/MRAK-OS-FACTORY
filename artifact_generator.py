@@ -153,6 +153,7 @@ class ArtifactGenerator:
         if user_feedback:
             prompt_parts.append(f"USER_FEEDBACK:\n{user_feedback}")
         if existing_analysis:
+            # Передаём существующий анализ для дополнения
             prompt_parts.append(f"EXISTING_ANALYSIS:\n{json.dumps(existing_analysis)}")
 
         full_input = "\n\n".join(prompt_parts)

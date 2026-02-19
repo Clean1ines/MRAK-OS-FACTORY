@@ -100,7 +100,7 @@ async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
 async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) -> List[Dict[str, Any]]:
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        query = 'SELECT id, type, parent_id, content, created_at, updated_at FROM artifacts WHERE project_id = $1'
+        query = 'SELECT id, type, parent_id, content, created_at, updated_at, version, content_hash FROM artifacts WHERE project_id = $1'
         params = [project_id]
         if artifact_type:
             query += ' AND type = $2'
@@ -147,6 +147,10 @@ async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict[
         return None
     finally:
         await conn.close()
+
+async def get_last_version_by_parent_and_type(parent_id: str, artifact_type: str) -> Optional[Dict[str, Any]]:
+    """Синоним get_last_package, возвращает последнюю версию артефакта по родителю и типу."""
+    return await get_last_package(parent_id, artifact_type)
 
 async def save_artifact(
     artifact_type: str,

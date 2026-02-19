@@ -20,11 +20,11 @@ function renderParentSelect(artifacts, parentData, currentParentId, childType) {
     const allowedTypes = state.getAllowedParentTypes(childType);
     // Фильтруем артефакты по разрешённым типам
     let filtered = artifacts.filter(a => allowedTypes.includes(a.type));
-    // Группируем по типу и оставляем только последнюю версию (по version или created_at)
+    
+    // Группируем по типу и оставляем только последнюю версию (наибольшая версия)
     const latestByType = {};
     filtered.forEach(a => {
         const type = a.type;
-        // Версию нужно сравнивать как числа (если возможно)
         const verNum = parseInt(a.version) || 0;
         if (!latestByType[type] || verNum > (parseInt(latestByType[type].version) || 0)) {
             latestByType[type] = a;

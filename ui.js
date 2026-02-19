@@ -1,22 +1,5 @@
 // ui.js - функции для обновления интерфейса
 
-// Правила родительства: для каждого типа артефакта перечислены допустимые типы родителей
-const PARENT_RULES = {
-    "BusinessRequirement": ["ProductCouncilAnalysis"],
-    "ReqEngineeringAnalysis": ["BusinessRequirement"],
-    "FunctionalRequirement": ["ReqEngineeringAnalysis", "BusinessRequirement"],
-    "CodeArtifact": ["FunctionalRequirement"], // можно расширить
-    // Для остальных типов родители не ограничены (показываем все)
-};
-
-function filterArtifactsByParentRule(artifacts, artifactType) {
-    if (!artifactType || !PARENT_RULES[artifactType]) {
-        return artifacts; // если правила нет, показываем все
-    }
-    const allowedParentTypes = PARENT_RULES[artifactType];
-    return artifacts.filter(a => allowedParentTypes.includes(a.type));
-}
-
 function renderProjectSelect(projects, currentId) {
     const select = document.getElementById('project-select');
     if (!select) return;
@@ -30,12 +13,11 @@ function renderProjectSelect(projects, currentId) {
     });
 }
 
-function renderParentSelect(artifacts, currentArtifactType, parentData) {
+function renderParentSelect(artifacts, parentData) {
     const select = document.getElementById('parent-select');
     if (!select) return;
-    const filtered = filterArtifactsByParentRule(artifacts, currentArtifactType);
     select.innerHTML = '<option value="">-- нет --</option>';
-    filtered.forEach(a => {
+    artifacts.forEach(a => {
         const opt = document.createElement('option');
         opt.value = a.id;
         opt.innerText = `${a.type} (${a.created_at}) : ${a.summary || ''}`;
@@ -234,6 +216,7 @@ function renderRequirementsInContainer(container, requirements) {
     });
 }
 
+// Экспортируем в глобальную область
 window.ui = {
     renderProjectSelect,
     renderParentSelect,
@@ -241,5 +224,4 @@ window.ui = {
     showNotification,
     openRequirementsModal,
     closeModal,
-    filterArtifactsByParentRule, // экспортируем на всякий случай
 };

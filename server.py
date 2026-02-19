@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from logic import MrakOrchestrator
+from orchestrator import MrakOrchestrator
 import logging
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -112,21 +112,24 @@ async def generate_business_requirements(req: BusinessReqGenRequest):
 @app.post("/api/save_business_requirements")
 async def save_business_requirements(req: SaveRequirementsRequest):
     """
-    Сохраняет список требований как артефакты BusinessRequirement.
+    Сохраняет список требований как один артефакт-пакет BusinessRequirementPackage.
     """
-    ids = []
     try:
-        for req_data in req.requirements:
-            artifact_id = await save_artifact(
-                artifact_type="BusinessRequirement",
-                content=req_data,
-                owner="user",
-                status="DRAFT",  # можно потом менять на VALIDATED
-                project_id=req.project_id,
-                parent_id=req.parent_id
-            )
-            ids.append(artifact_id)
-        return JSONResponse(content={"ids": ids})
+        # Формируем содержимое пакета
+        package_content = {
+            "requirements": req.requirements,
+            "generated_from": req.parent_id,
+            "model": None  # можно сохранять модель, если нужно
+        }
+        artifact_id = await save_artifact(
+            artifact_type="BusinessRequirementPackage",
+            content=package_content,
+            owner="user",
+            status="DRAFT",
+            project_id=req.project_id,
+            parent_id=req.parent_id
+        )
+        return JSONResponse(content={"id": artifact_id})
     except Exception as e:
         logger.error(f"Error saving requirements: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)

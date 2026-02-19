@@ -13,7 +13,7 @@ function renderProjectSelect(projects, currentId) {
     });
 }
 
-function renderParentSelect(artifacts, parentData) {
+function renderParentSelect(artifacts, parentData, currentParentId) {
     const select = document.getElementById('parent-select');
     if (!select) return;
     select.innerHTML = '<option value="">-- нет --</option>';
@@ -23,7 +23,10 @@ function renderParentSelect(artifacts, parentData) {
         opt.innerText = `${a.type} (${a.created_at}) : ${a.summary || ''}`;
         select.appendChild(opt);
     });
-    // обновляем кнопку генерации
+    // восстанавливаем выбранное значение
+    if (currentParentId && parentData[currentParentId]) {
+        select.value = currentParentId;
+    }
     const selectedId = select.value;
     updateGenerateBrButton(parentData, selectedId);
 }
@@ -216,7 +219,6 @@ function renderRequirementsInContainer(container, requirements) {
     });
 }
 
-// Экспортируем в глобальную область
 window.ui = {
     renderProjectSelect,
     renderParentSelect,

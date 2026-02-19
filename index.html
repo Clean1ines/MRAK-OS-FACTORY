@@ -195,7 +195,7 @@
                 try {
                     const artifacts = await api.fetchArtifacts(pid);
                     state.setArtifacts(artifacts);
-                    ui.renderParentSelect(artifacts, state.getParentData());
+                    ui.renderParentSelect(artifacts, state.getParentData(), state.getCurrentParentId());
                 } catch (e) {
                     ui.showNotification('Ошибка загрузки артефактов: ' + e.message, 'error');
                 } finally {
@@ -218,7 +218,8 @@
             parentSelect.addEventListener('change', function() {
                 const selectedId = this.value;
                 ui.updateGenerateBrButton(state.getParentData(), selectedId);
-            });
+                state.setCurrentParentId(this.value);
+    });
 
             saveArtifactBtn.onclick = async () => {
                 const content = input.value.trim();

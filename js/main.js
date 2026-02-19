@@ -1,14 +1,7 @@
-// main.js - инициализация приложения
+// main.js - точка входа, инициализация
 
-(function() {
-    // Убедимся, что все модули загружены (api, state, ui, handlers, toolbar)
-    // Загружаем начальные данные
-    window.onload = async function() {
-        await window.loadModels();
-        await window.loadProjects();
-        if (state.getCurrentProjectId()) await window.loadParents();
-    };
-
-    // Экспонируем глобальные функции, если их ещё нет
-    // (они уже объявлены в handlers.js, но дублирование не повредит)
-})();
+window.onload = async function() {
+    await window.loadModels();   // из projectHandlers
+    await window.loadProjects(); // из projectHandlers
+    if (state.getCurrentProjectId()) await window.loadParents(); // из projectHandlers
+};

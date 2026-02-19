@@ -28,18 +28,19 @@ class ArtifactCreate(BaseModel):
     generate: bool = False
     model: Optional[str] = None
 
-class BusinessReqGenRequest(BaseModel):
-    analysis_id: str
+class GenerateArtifactRequest(BaseModel):
+    artifact_type: str
+    parent_id: str
     feedback: str = ""
     model: Optional[str] = None
     project_id: str
-    existing_requirements: Optional[List[Dict]] = None
-    existing_package_id: Optional[str] = None
+    existing_content: Optional[List[Dict]] = None  # для пакетов
 
-class SaveRequirementsRequest(BaseModel):
+class SavePackageRequest(BaseModel):
     project_id: str
     parent_id: str
-    requirements: List[Dict[str, Any]]
+    artifact_type: str
+    content: List[Dict[str, Any]]  # для пакетов
 
 @app.on_event("startup")
 async def startup_event():
@@ -96,33 +97,54 @@ async def create_artifact(artifact: ArtifactCreate):
         logger.error(f"Error creating artifact: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-@app.post("/api/generate_business_requirements")
-async def generate_business_requirements(req: BusinessReqGenRequest):
-    try:
-        existing = None
-        if req.existing_package_id:
-            pkg = await get_artifact(req.existing_package_id)
-            if pkg and 'requirements' in pkg['content']:
-                existing = pkg['content']['requirements']
-        elif req.existing_requirements:
-            existing = req.existing_requirements
+@app.get("/api/latest_artifact")
+async def latest_artifact(parent_id: str, type: str):
+    """Возвращает последний артефакт указанного типа с заданным parent_id."""
+    pkg = await get_last_package(parent_id, type)
+    if pkg:
+        return JSONResponse(content={
+            "exists": True,
+            "artifact_id": pkg['id'],
+            "content": pkg['content']
+        })
+    else:
+        return JSONResponse(content={"exists": False})
 
-        requirements = await orch.generate_business_requirements(
-            analysis_id=req.analysis_id,
-            user_feedback=req.feedback,
-            model_id=req.model,
-            project_id=req.project_id,
-            existing_requirements=existing
-        )
-        return JSONResponse(content={"requirements": requirements})
+@app.post("/api/generate_artifact")
+async def generate_artifact_endpoint(req: GenerateArtifactRequest):
+    """Универсальный эндпоинт для генерации артефактов (например, пакетов требований)."""
+    try:
+        # Определяем, какой метод генерации использовать на основе artifact_type
+        if req.artifact_type == "BusinessRequirementPackage":
+            result = await orch.generate_business_requirements(
+                analysis_id=req.parent_id,
+                user_feedback=req.feedback,
+                model_id=req.model,
+                project_id=req.project_id,
+                existing_requirements=req.existing_content
+            )
+        elif req.artifact_type == "FunctionalRequirementPackage":
+            # Здесь нужно будет добавить аналогичный метод
+            result = await orch.generate_functional_requirements(
+                parent_id=req.parent_id,
+                user_feedback=req.feedback,
+                model_id=req.model,
+                project_id=req.project_id,
+                existing_requirements=req.existing_content
+            )
+        else:
+            return JSONResponse(content={"error": "Unsupported artifact type"}, status_code=400)
+
+        return JSONResponse(content={"requirements": result})
     except Exception as e:
-        logger.error(f"Error generating business requirements: {e}")
+        logger.error(f"Error generating artifact: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-@app.post("/api/save_business_requirements")
-async def save_business_requirements(req: SaveRequirementsRequest):
+@app.post("/api/save_artifact_package")
+async def save_artifact_package(req: SavePackageRequest):
+    """Сохраняет пакет требований (список) как артефакт указанного типа."""
     try:
-        last_pkg = await get_last_package(req.parent_id, "BusinessRequirementPackage")
+        last_pkg = await get_last_package(req.parent_id, req.artifact_type)
         if last_pkg:
             try:
                 last_version = int(last_pkg['version'])
@@ -134,19 +156,20 @@ async def save_business_requirements(req: SaveRequirementsRequest):
             version = "1"
             previous_versions = []
 
-        for i, r in enumerate(req.requirements):
+        # Добавляем локальные ID каждому требованию, если нужно
+        for i, r in enumerate(req.content):
             if 'id' not in r:
                 r['id'] = f"req-{i+1:03d}"
 
         package_content = {
-            "requirements": req.requirements,
+            "requirements": req.content,
             "generated_from": req.parent_id,
             "model": None,
             "version": version,
             "previous_versions": previous_versions
         }
         artifact_id = await save_artifact(
-            artifact_type="BusinessRequirementPackage",
+            artifact_type=req.artifact_type,
             content=package_content,
             owner="user",
             status="DRAFT",
@@ -155,20 +178,8 @@ async def save_business_requirements(req: SaveRequirementsRequest):
         )
         return JSONResponse(content={"id": artifact_id})
     except Exception as e:
-        logger.error(f"Error saving requirements: {e}")
+        logger.error(f"Error saving package: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.get("/api/latest_requirement_package")
-async def latest_requirement_package(parent_id: str):
-    pkg = await get_last_package(parent_id, "BusinessRequirementPackage")
-    if pkg:
-        return JSONResponse(content={
-            "exists": True,
-            "package_id": pkg['id'],
-            "requirements": pkg['content'].get('requirements', [])
-        })
-    else:
-        return JSONResponse(content={"exists": False})
 
 @app.get("/api/models")
 async def get_models():

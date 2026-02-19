@@ -74,7 +74,7 @@ function closeModal() {
     }
 }
 
-function openRequirementsModal(requirements, onSave, onRegenerate, onCancel) {
+function openRequirementsModal(requirements, onSave, onAddMore, onCancel) {
     if (currentModal) closeModal();
 
     const modal = document.createElement('div');
@@ -103,7 +103,7 @@ function openRequirementsModal(requirements, onSave, onRegenerate, onCancel) {
 
     const title = document.createElement('h2');
     title.className = 'text-lg font-bold mb-4';
-    title.innerText = 'Сгенерированные бизнес-требования';
+    title.innerText = 'Бизнес-требования';
     content.appendChild(title);
 
     const reqContainer = document.createElement('div');
@@ -122,17 +122,17 @@ function openRequirementsModal(requirements, onSave, onRegenerate, onCancel) {
     };
     btnDiv.appendChild(cancelBtn);
 
-    const regenerateBtn = document.createElement('button');
-    regenerateBtn.className = 'px-3 py-1 bg-blue-600/20 text-blue-500 rounded';
-    regenerateBtn.innerText = 'Перегенерировать';
-    regenerateBtn.onclick = () => {
-        if (onRegenerate) onRegenerate();
+    const addMoreBtn = document.createElement('button');
+    addMoreBtn.className = 'px-3 py-1 bg-blue-600/20 text-blue-500 rounded';
+    addMoreBtn.innerText = 'Добавить ещё';
+    addMoreBtn.onclick = () => {
+        if (onAddMore) onAddMore();
     };
-    btnDiv.appendChild(regenerateBtn);
+    btnDiv.appendChild(addMoreBtn);
 
     const saveBtn = document.createElement('button');
     saveBtn.className = 'px-3 py-1 bg-emerald-600/20 text-emerald-500 rounded';
-    saveBtn.innerText = 'Сохранить все';
+    saveBtn.innerText = 'Сохранить';
     saveBtn.onclick = () => {
         if (onSave) onSave();
     };

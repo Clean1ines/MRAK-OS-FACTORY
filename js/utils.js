@@ -1,22 +1,21 @@
-// utils.js - общие утилиты
+// js/utils.js - Общие вспомогательные функции
+window.utils = {
+    setLoading(btn, isLoading) {
+        if (!btn) return;
+        if (isLoading) {
+            btn.disabled = true;
+            btn.dataset.originalText = btn.innerText;
+            btn.innerHTML = '<span class="animate-spin mr-2">🌀</span> Обработка...';
+        } else {
+            btn.disabled = false;
+            btn.innerText = btn.dataset.originalText || "Готово";
+        }
+    },
 
-// Флаг для блокировки повторных сохранений (глобальный)
-window.isSaving = false;
-
-window.setLoading = function(button, isLoading) {
-    if (!button) return;
-    if (isLoading) {
-        button.disabled = true;
-        button.dataset.originalText = button.innerText;
-        button.innerHTML = '<span class="spinner"></span> Загрузка...';
-    } else {
-        button.disabled = false;
-        button.innerText = button.dataset.originalText || button.innerText;
+    formatDate(dateStr) {
+        return new Date(dateStr).toLocaleString();
     }
 };
 
-// Автоматическое расширение textarea
-window.autoResize = function(textarea) {
-    textarea.style.height = 'auto';
-    textarea.style.height = (textarea.scrollHeight) + 'px';
-};
+// Для обратной совместимости, если где-то вызывается без utils.
+window.setLoading = window.utils.setLoading;

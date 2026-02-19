@@ -90,3 +90,16 @@ window.state = {
     setModels,
     subscribe,
 };
+
+let currentParentId = null;
+
+function setCurrentParentId(id) {
+    currentParentId = id;
+}
+
+function getCurrentParentId() {
+    return currentParentId;
+}
+
+window.state.setCurrentParentId = setCurrentParentId;
+window.state.getCurrentParentId = getCurrentParentId;

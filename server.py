@@ -2,50 +2,25 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from orchestrator import MrakOrchestrator
+from app.schemas import (
+    ProjectCreate, ArtifactCreate,
+    GenerateArtifactRequest, SavePackageRequest
+)
+from app.utils import compute_content_hash
+from db import (
+    init_db, get_projects, create_project,
+    get_artifacts, save_artifact, get_artifact,
+    get_last_package
+)
 import logging
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-from db import init_db, get_projects, create_project, get_artifacts, save_artifact, get_artifact, get_last_package
-import json
-import asyncpg
 import os
-import hashlib
+from typing import Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
 
 app = FastAPI(title="MRAK-OS Factory API")
 orch = MrakOrchestrator()
-
-class ProjectCreate(BaseModel):
-    name: str
-    description: str = ""
-
-class ArtifactCreate(BaseModel):
-    project_id: str
-    artifact_type: str
-    content: str
-    parent_id: Optional[str] = None
-    generate: bool = False
-    model: Optional[str] = None
-
-class GenerateArtifactRequest(BaseModel):
-    artifact_type: str
-    parent_id: str
-    feedback: str = ""
-    model: Optional[str] = None
-    project_id: str
-    existing_content: Optional[Any] = None
-
-class SavePackageRequest(BaseModel):
-    project_id: str
-    parent_id: str
-    artifact_type: str
-    content: Any
-
-def compute_content_hash(content):
-    """Вычисляет SHA256 от канонического JSON представления."""
-    return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 @app.on_event("startup")
 async def startup_event():
@@ -55,6 +30,7 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
 
+# ==================== Project endpoints ====================
 @app.get("/api/projects")
 async def list_projects():
     projects = await get_projects()
@@ -65,6 +41,7 @@ async def create_project_endpoint(project: ProjectCreate):
     project_id = await create_project(project.name, project.description)
     return JSONResponse(content={"id": project_id, "name": project.name})
 
+# ==================== Artifact endpoints ====================
 @app.get("/api/projects/{project_id}/artifacts")
 async def list_artifacts(project_id: str, type: Optional[str] = None):
     artifacts = await get_artifacts(project_id, type)
@@ -114,6 +91,7 @@ async def latest_artifact(parent_id: str, type: str):
     else:
         return JSONResponse(content={"exists": False})
 
+# ==================== Generation endpoints ====================
 @app.post("/api/generate_artifact")
 async def generate_artifact_endpoint(req: GenerateArtifactRequest):
     try:
@@ -152,18 +130,12 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
 @app.post("/api/save_artifact_package")
 async def save_artifact_package(req: SavePackageRequest):
     try:
-        # Вычисляем хеш содержимого
         new_hash = compute_content_hash(req.content)
 
-        # Проверяем, есть ли уже пакет с таким же хешем для этого родителя и типа
         last_pkg = await get_last_package(req.parent_id, req.artifact_type)
-        if last_pkg:
-            # Сравниваем хеши (нужно хранить content_hash в БД)
-            if last_pkg.get('content_hash') == new_hash:
-                # Контент идентичен – возвращаем существующий ID
-                return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
+        if last_pkg and last_pkg.get('content_hash') == new_hash:
+            return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
 
-        # Получаем последний пакет для версионирования
         last_pkg = await get_last_package(req.parent_id, req.artifact_type)
         if last_pkg:
             try:
@@ -171,12 +143,9 @@ async def save_artifact_package(req: SavePackageRequest):
             except (ValueError, TypeError):
                 last_version = 0
             version = str(last_version + 1)
-            previous_versions = [last_pkg['id']]
         else:
             version = "1"
-            previous_versions = []
 
-        # Для пакетов требований: присваиваем постоянные ID (UUID), если их нет
         content_to_save = req.content
         if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"] and isinstance(content_to_save, list):
             import uuid
@@ -191,13 +160,14 @@ async def save_artifact_package(req: SavePackageRequest):
             status="DRAFT",
             project_id=req.project_id,
             parent_id=req.parent_id,
-            content_hash=new_hash  # передаём хеш для сохранения
+            content_hash=new_hash
         )
         return JSONResponse(content={"id": artifact_id})
     except Exception as e:
         logger.error(f"Error saving package: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+# ==================== Model & analysis endpoints ====================
 @app.get("/api/models")
 async def get_models():
     models = orch.get_active_models()
@@ -218,12 +188,10 @@ async def analyze(request: Request):
 
     if not prompt:
         return JSONResponse(content={"error": "Prompt is required"}, status_code=400)
-
     if not model:
         model = "llama-3.3-70b-versatile"
 
     sys_prompt = await orch.get_system_prompt(mode)
-
     if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
         logger.error(f"Prompt fetch failed for mode {mode}: {sys_prompt}")
         async def error_stream():
@@ -232,10 +200,10 @@ async def analyze(request: Request):
         return StreamingResponse(error_stream(), media_type="text/plain")
 
     logger.info(f"Starting stream: Mode={mode}, Model={model}, Project={project_id}")
-
     return StreamingResponse(
         orch.stream_analysis(prompt, sys_prompt, model, mode, project_id=project_id),
         media_type="text/plain",
     )
 
+# ==================== Static files ====================
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

@@ -27,3 +27,9 @@ generate_tree.py
 index_project.py
 init_db.sql
 backups/
+
+# Игнорируем временные файлы и бэкапы
+tree_output.txt
+restore_last_backup.sh
+scripts/
+backups/

@@ -1,0 +1,37 @@
+/
+├── app/
+│   ├── __init__.py (0 B)
+│   ├── schemas.py (703.0 B)
+│   └── utils.py (248.0 B)
+│       function compute_content_hash: Вычисляет SHA256 от канонического JSON представления.
+├── js/
+│   ├── api.js (2.7 KB)
+│   ├── artifactHandlers.js (6.5 KB)
+│   ├── chatHandlers.js (3.3 KB)
+│   ├── main.js (305.0 B)
+│   ├── modals.js (3.1 KB)
+│   ├── notifications.js (1.0 KB)
+│   ├── projectHandlers.js (6.0 KB)
+│   ├── renderers.js (10.2 KB)
+│   ├── state.js (3.4 KB)
+│   ├── toolbar.js (2.7 KB)
+│   ├── ui.js (749.0 B)
+│   └── utils.js (768.0 B)
+├── public/
+├── scripts/
+├── tests/
+│   ├── __init__.py (0 B)
+│   ├── test_api.py (1.6 KB)
+│   └── test_logic.py (1.5 KB)
+├── artifact_generator.py (9.6 KB)
+│   method ArtifactGenerator.generate_functional_requirements: Генерирует функциональные требования на основе анализа инженерии требований.
+│   function generate_functional_requirements: Генерирует функциональные требования на основе анализа инженерии требований.
+├── db.py (10.0 KB)
+│   function get_last_version_by_parent_and_type: Синоним get_last_package, возвращает последнюю версию артефакта по родителю и типу.
+├── groq_client.py (1.6 KB)
+├── logic.py (296.0 B)
+├── manifest.json (290.0 B)
+├── migrate.py (777.0 B)
+├── orchestrator.py (6.7 KB)
+├── prompt_loader.py (1012.0 B)
+└── server.py (7.9 KB)

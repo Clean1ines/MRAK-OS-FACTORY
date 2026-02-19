@@ -6,115 +6,25 @@
     <title>MRAK-OS | DYNAMIC</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-    <link 
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'JetBrains Mono', monospace;
-            background-color: #0a0a0b;
-            color: #d1d5db;
-        }
-        .markdown-body {
-            font-size: 1.2rem;
-            line-height: 1.7;
-        }
-        .markdown-body code {
-            color: #6ee7b7;
-            background: #1a1a1c;
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
-        }
-        .markdown-body pre {
-            background: #000;
-            border: 1px solid #222;
-            padding: 1.5rem;
-            border-radius: 12px;
-            margin: 1.2rem 0;
-            overflow-x: auto;
-        }
-        .streaming::after {
-            content: '▋';
-            animation: blink 1s infinite;
-            color: #059669;
-        }
-        @keyframes blink {
-            0%,100%{opacity:1;}
-            50%{opacity:0;}
-        }
-        select option {
-            background: #111;
-            color: #d1d5db;
-        }
-        ::-webkit-scrollbar {
-            width: 4px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #333;
-            border-radius: 10px;
-        }
-        .message-toolbar {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-            font-size: 0.75rem;
-            color: #9ca3af;
-        }
-        .message-toolbar button {
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
-            transition: background-color 0.2s;
-        }
-        .message-toolbar button:hover {
-            background: #111;
-        }
-        /* модальное окно */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.8);
-            z-index: 50;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-content {
-            background: #111;
-            border: 1px solid #222;
-            border-radius: 12px;
-            width: 80%;
-            max-width: 800px;
-            max-height: 80%;
-            overflow-y: auto;
-            padding: 1.5rem;
-            position: relative;
-        }
-        .requirement-card {
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            background: #1a1a1c;
-        }
-        .requirement-card input, .requirement-card textarea {
-            background: #222;
-            border: 1px solid #444;
-            color: #fff;
-            width: 100%;
-            padding: 0.5rem;
-            border-radius: 4px;
-            margin-bottom: 0.5rem;
-        }
+        body { font-family: 'JetBrains Mono', monospace; background-color: #0a0a0b; color: #d1d5db; }
+        .markdown-body { font-size: 1.2rem; line-height: 1.7; }
+        .markdown-body code { color: #6ee7b7; background: #1a1a1c; padding: 0.2rem 0.4rem; border-radius: 4px; }
+        .markdown-body pre { background: #000; border: 1px solid #222; padding: 1.5rem; border-radius: 12px; margin: 1.2rem 0; overflow-x: auto; }
+        .streaming::after { content: '▋'; animation: blink 1s infinite; color: #059669; }
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+        select option { background: #111; color: #d1d5db; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        .message-toolbar { display: flex; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: #9ca3af; }
+        .message-toolbar button { background: transparent; border: none; cursor: pointer; padding: 0.2rem 0.4rem; border-radius: 4px; transition: background-color 0.2s; }
+        .message-toolbar button:hover { background: #111; }
+        /* spinner */
+        .spinner { border: 2px solid rgba(255,255,255,0.1); border-top-color: #10b981; border-radius: 50%; width: 1rem; height: 1rem; animation: spin 0.6s linear infinite; display: inline-block; margin-right: 0.25rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
 </head>
 <body class="h-screen flex flex-col antialiased overflow-hidden">
@@ -194,19 +104,6 @@
         <button id="save-artifact-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30">Сохранить артефакт</button>
     </div>
 
-    <!-- Модальное окно для просмотра/редактирования требований -->
-    <div id="req-modal" class="modal">
-        <div class="modal-content">
-            <h2 class="text-lg font-bold mb-4">Сгенерированные бизнес-требования</h2>
-            <div id="requirements-container"></div>
-            <div class="flex justify-end gap-3 mt-4">
-                <button id="cancel-req-btn" class="px-3 py-1 bg-zinc-700 rounded">Отмена</button>
-                <button id="regenerate-req-btn" class="px-3 py-1 bg-blue-600/20 text-blue-500 rounded">Перегенерировать</button>
-                <button id="save-req-btn" class="px-3 py-1 bg-emerald-600/20 text-emerald-500 rounded">Сохранить все</button>
-            </div>
-        </div>
-    </div>
-
     <main id="terminal" class="flex-1 overflow-y-auto px-6 scroll-smooth">
         <div id="messages" class="max-w-3xl mx-auto py-12 space-y-12"></div>
         <div id="scroll-anchor" class="h-32"></div>
@@ -215,488 +112,370 @@
     <footer class="p-6 bg-gradient-to-t from-black to-transparent shrink-0">
         <div class="max-w-3xl mx-auto">
             <div class="flex items-end gap-3 bg-[#111113] border border-white/5 rounded-2xl p-3 transition-all duration-300 focus-within:border-emerald-500">
-                <textarea 
-                    id="input"
-                    class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-[300px] text-sm"
-                    placeholder="Введите запрос..."></textarea>
+                <textarea id="input" class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-[300px] text-sm" placeholder="Введите запрос..."></textarea>
                 <button id="send-btn" class="p-2 bg-emerald-600/10 text-emerald-500 rounded-xl hover:bg-emerald-600/20 transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/>
-                    </svg>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/></svg>
                 </button>
             </div>
         </div>
     </footer>
 
+    <!-- Подключаем модули -->
+    <script src="api.js"></script>
+    <script src="state.js"></script>
+    <script src="ui.js"></script>
     <script>
-        const input = document.getElementById("input");
-        const sendBtn = document.getElementById("send-btn");
-        const messagesDiv = document.getElementById("messages");
-        const scrollAnchor = document.getElementById("scroll-anchor");
-        const modelSelect = document.getElementById("model-select");
-        const statusText = document.getElementById("status-text");
-        const projectSelect = document.getElementById("project-select");
-        const newProjectBtn = document.getElementById("new-project-btn");
-        const artifactTypeSelect = document.getElementById("artifact-type-select");
-        const parentSelect = document.getElementById("parent-select");
-        const refreshParentsBtn = document.getElementById("refresh-parents");
-        const generateCheckbox = document.getElementById("generate-checkbox");
-        const saveArtifactBtn = document.getElementById("save-artifact-btn");
-        const generateBrBtn = document.getElementById("generate-br-btn");
-        const reqModal = document.getElementById("req-modal");
-        const requirementsContainer = document.getElementById("requirements-container");
-        const cancelReqBtn = document.getElementById("cancel-req-btn");
-        const regenerateReqBtn = document.getElementById("regenerate-req-btn");
-        const saveReqBtn = document.getElementById("save-req-btn");
+        (function() {
+            const input = document.getElementById("input");
+            const sendBtn = document.getElementById("send-btn");
+            const messagesDiv = document.getElementById("messages");
+            const scrollAnchor = document.getElementById("scroll-anchor");
+            const modelSelect = document.getElementById("model-select");
+            const statusText = document.getElementById("status-text");
+            const projectSelect = document.getElementById("project-select");
+            const newProjectBtn = document.getElementById("new-project-btn");
+            const artifactTypeSelect = document.getElementById("artifact-type-select");
+            const parentSelect = document.getElementById("parent-select");
+            const refreshParentsBtn = document.getElementById("refresh-parents");
+            const generateCheckbox = document.getElementById("generate-checkbox");
+            const saveArtifactBtn = document.getElementById("save-artifact-btn");
+            const generateBrBtn = document.getElementById("generate-br-btn");
 
-        let currentProjectId = localStorage.getItem("selectedProjectId") || "";
-        const parentData = {};
-        let currentRequirements = [];
-        let currentAnalysisId = null;
-        let currentFeedback = "";
+            marked.setOptions({ gfm: true, breaks: true });
 
-        marked.setOptions({ gfm: true, breaks: true });
+            input.oninput = function () {
+                this.style.height = "auto";
+                this.style.height = this.scrollHeight + "px";
+                document.getElementById("token-count").innerText = `EST_COST: ~${Math.ceil(this.value.length / 4)} TOKENS`;
+            };
 
-        input.oninput = function () {
-            this.style.height = "auto";
-            this.style.height = this.scrollHeight + "px";
-            document.getElementById("token-count").innerText = `EST_COST: ~${Math.ceil(this.value.length / 4)} TOKENS`;
-        };
-
-        async function loadProjects() {
-            try {
-                const res = await fetch("/api/projects");
-                const projects = await res.json();
-                projectSelect.innerHTML = '<option value="">-- Выберите проект --</option>';
-                projects.forEach(p => {
-                    const opt = document.createElement("option");
-                    opt.value = p.id;
-                    opt.innerText = p.name;
-                    if (p.id === currentProjectId) opt.selected = true;
-                    projectSelect.appendChild(opt);
-                });
-                if (currentProjectId && !projects.some(p => p.id === currentProjectId)) {
-                    currentProjectId = "";
-                    localStorage.removeItem("selectedProjectId");
+            // Утилита для управления состоянием загрузки кнопки
+            function setLoading(button, isLoading) {
+                if (!button) return;
+                if (isLoading) {
+                    button.disabled = true;
+                    button.dataset.originalText = button.innerText;
+                    button.innerHTML = '<span class="spinner"></span> Загрузка...';
+                } else {
+                    button.disabled = false;
+                    button.innerText = button.dataset.originalText || button.innerText;
                 }
-            } catch (e) {
-                console.error("Failed to load projects", e);
             }
-        }
 
-        newProjectBtn.onclick = async () => {
-            const name = prompt("Введите название проекта:");
-            if (!name) return;
-            try {
-                const res = await fetch("/api/projects", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name, description: "" })
-                });
-                const data = await res.json();
-                await loadProjects();
-                projectSelect.value = data.id;
-                currentProjectId = data.id;
-                localStorage.setItem("selectedProjectId", currentProjectId);
-                await loadParents();
-            } catch (e) {
-                alert("Ошибка создания проекта");
+            // Загрузка проектов
+            async function loadProjects() {
+                try {
+                    const projects = await api.fetchProjects();
+                    state.setProjects(projects);
+                    ui.renderProjectSelect(projects, state.getCurrentProjectId());
+                } catch (e) {
+                    ui.showNotification('Ошибка загрузки проектов: ' + e.message, 'error');
+                }
             }
-        };
 
-        async function loadParents() {
-            if (!currentProjectId) return;
-            try {
-                const res = await fetch(`/api/projects/${currentProjectId}/artifacts`);
-                const artifacts = await res.json();
-                parentSelect.innerHTML = '<option value="">-- нет --</option>';
-                for (let key in parentData) delete parentData[key];
-                artifacts.forEach(a => {
-                    parentData[a.id] = a.type;
-                    const opt = document.createElement("option");
-                    opt.value = a.id;
-                    opt.innerText = `${a.type} (${a.created_at}) : ${a.summary}`;
-                    parentSelect.appendChild(opt);
-                });
-                updateGenerateBrButton();
-            } catch (e) {
-                console.error("Failed to load parents", e);
+            // Создание проекта
+            newProjectBtn.onclick = async () => {
+                const name = prompt("Введите название проекта:");
+                if (!name) return;
+                setLoading(newProjectBtn, true);
+                try {
+                    const data = await api.createProject(name, "");
+                    await loadProjects();
+                    projectSelect.value = data.id;
+                    state.setCurrentProjectId(data.id);
+                    await loadParents();
+                    ui.showNotification('Проект создан', 'success');
+                } catch (e) {
+                    ui.showNotification('Ошибка создания проекта: ' + e.message, 'error');
+                } finally {
+                    setLoading(newProjectBtn, false);
+                }
+            };
+
+            // Загрузка артефактов
+            async function loadParents() {
+                const pid = state.getCurrentProjectId();
+                if (!pid) return;
+                setLoading(refreshParentsBtn, true);
+                try {
+                    const artifacts = await api.fetchArtifacts(pid);
+                    state.setArtifacts(artifacts);
+                    ui.renderParentSelect(artifacts, state.getParentData());
+                } catch (e) {
+                    ui.showNotification('Ошибка загрузки артефактов: ' + e.message, 'error');
+                } finally {
+                    setLoading(refreshParentsBtn, false);
+                }
             }
-        }
 
-        refreshParentsBtn.onclick = loadParents;
+            refreshParentsBtn.onclick = loadParents;
 
-        projectSelect.addEventListener("change", function() {
-            currentProjectId = this.value;
-            if (currentProjectId) {
-                localStorage.setItem("selectedProjectId", currentProjectId);
-                loadParents();
-            } else {
-                localStorage.removeItem("selectedProjectId");
-                parentSelect.innerHTML = '<option value="">-- нет --</option>';
-                generateBrBtn.style.display = 'none';
-            }
-        });
+            // Смена проекта
+            projectSelect.addEventListener("change", function() {
+                state.setCurrentProjectId(this.value);
+                if (this.value) {
+                    loadParents();
+                } else {
+                    parentSelect.innerHTML = '<option value="">-- нет --</option>';
+                    generateBrBtn.style.display = 'none';
+                }
+            });
 
-        parentSelect.addEventListener('change', updateGenerateBrButton);
+            // Обновление кнопки генерации при выборе родителя
+            parentSelect.addEventListener('change', function() {
+                const selectedId = this.value;
+                ui.updateGenerateBrButton(state.getParentData(), selectedId);
+            });
 
-        function updateGenerateBrButton() {
-            const selectedId = parentSelect.value;
-            const selectedType = parentData[selectedId];
-            if (selectedType === 'ProductCouncilAnalysis') {
-                generateBrBtn.style.display = 'inline-block';
-            } else {
-                generateBrBtn.style.display = 'none';
-            }
-        }
+            // Сохранение артефакта
+            saveArtifactBtn.onclick = async () => {
+                const content = input.value.trim();
+                if (!content) {
+                    ui.showNotification("Введите содержимое артефакта", 'error');
+                    return;
+                }
+                const pid = state.getCurrentProjectId();
+                if (!pid) {
+                    ui.showNotification("Сначала выберите проект", 'error');
+                    return;
+                }
+                const artifactType = artifactTypeSelect.value;
+                const parentId = parentSelect.value || null;
+                const generate = generateCheckbox.checked;
+                const model = modelSelect.value;
 
-        saveArtifactBtn.onclick = async () => {
-            const content = input.value.trim();
-            if (!content) {
-                alert("Введите содержимое артефакта");
-                return;
-            }
-            if (!currentProjectId) {
-                alert("Сначала выберите проект");
-                return;
-            }
-            const artifactType = artifactTypeSelect.value;
-            const parentId = parentSelect.value || null;
-            const generate = generateCheckbox.checked;
-            const model = modelSelect.value;
-
-            try {
-                const res = await fetch("/api/artifact", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        project_id: currentProjectId,
-                        artifact_type: artifactType,
-                        content: content,
-                        parent_id: parentId,
-                        generate: generate,
-                        model: model
-                    })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    alert(`Артефакт сохранён, ID: ${data.id}`);
+                setLoading(saveArtifactBtn, true);
+                try {
+                    const data = await api.saveArtifact(pid, artifactType, content, parentId, generate, model);
+                    ui.showNotification(`Артефакт сохранён, ID: ${data.id}`, 'success');
                     input.value = "";
                     input.style.height = "44px";
                     await loadParents();
-                } else {
-                    alert(`Ошибка: ${data.error}`);
-                }
-            } catch (e) {
-                alert(`Ошибка сети: ${e}`);
-            }
-        };
-
-        // Генерация бизнес-требований с показом модального окна
-        generateBrBtn.onclick = async () => {
-            const analysisId = parentSelect.value;
-            if (!analysisId) return;
-            const feedback = input.value.trim();
-            const model = modelSelect.value;
-            currentAnalysisId = analysisId;
-            currentFeedback = feedback;
-
-            try {
-                const res = await fetch("/api/generate_business_requirements", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        analysis_id: analysisId,
-                        feedback: feedback,
-                        model: model,
-                        project_id: currentProjectId
-                    })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    currentRequirements = data.requirements;
-                    renderRequirements();
-                    reqModal.style.display = 'flex';
-                } else {
-                    alert(`Ошибка: ${data.error}`);
-                }
-            } catch (e) {
-                alert(`Ошибка сети: ${e}`);
-            }
-        };
-
-        function renderRequirements() {
-            requirementsContainer.innerHTML = '';
-            currentRequirements.forEach((req, index) => {
-                const card = document.createElement('div');
-                card.className = 'requirement-card';
-                card.innerHTML = `
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="text-sm font-bold">Требование #${index+1}</span>
-                        <button class="text-red-500 text-xs" onclick="removeRequirement(${index})">Удалить</button>
-                    </div>
-                    <input type="text" class="w-full" placeholder="Описание" value="${escapeHtml(req.description || '')}" data-index="${index}" data-field="description">
-                    <input type="text" class="w-full" placeholder="Приоритет (HIGH/MEDIUM/LOW)" value="${escapeHtml(req.priority || '')}" data-index="${index}" data-field="priority">
-                    <input type="text" class="w-full" placeholder="Заинтересованная сторона" value="${escapeHtml(req.stakeholder || '')}" data-index="${index}" data-field="stakeholder">
-                    <textarea class="w-full" placeholder="Критерии приемки (каждый с новой строки)" rows="3" data-index="${index}" data-field="acceptance_criteria">${escapeHtml(Array.isArray(req.acceptance_criteria) ? req.acceptance_criteria.join('\n') : req.acceptance_criteria || '')}</textarea>
-                    <textarea class="w-full" placeholder="Бизнес-ценность" rows="2" data-index="${index}" data-field="business_value">${escapeHtml(req.business_value || '')}</textarea>
-                `;
-                requirementsContainer.appendChild(card);
-            });
-
-            // добавляем обработчики для автосохранения изменений в currentRequirements
-            document.querySelectorAll('.requirement-card input, .requirement-card textarea').forEach(el => {
-                el.addEventListener('input', (e) => {
-                    const index = e.target.dataset.index;
-                    const field = e.target.dataset.field;
-                    let value = e.target.value;
-                    if (field === 'acceptance_criteria') {
-                        value = value.split('\n').filter(line => line.trim() !== '');
-                    }
-                    if (!currentRequirements[index]) return;
-                    currentRequirements[index][field] = value;
-                });
-            });
-        }
-
-        // вспомогательная функция для экранирования HTML
-        function escapeHtml(unsafe) {
-            if (!unsafe) return '';
-            return unsafe
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
-
-        // удаление требования
-        window.removeRequirement = function(index) {
-            currentRequirements.splice(index, 1);
-            renderRequirements();
-        };
-
-        cancelReqBtn.onclick = () => {
-            reqModal.style.display = 'none';
-            currentRequirements = [];
-        };
-
-        // повторная генерация с текущими правками (или исходным фидбеком)
-        regenerateReqBtn.onclick = async () => {
-            // можно использовать отредактированный фидбек из input
-            const feedback = input.value.trim();
-            const model = modelSelect.value;
-            try {
-                const res = await fetch("/api/generate_business_requirements", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        analysis_id: currentAnalysisId,
-                        feedback: feedback,
-                        model: model,
-                        project_id: currentProjectId
-                    })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    currentRequirements = data.requirements;
-                    renderRequirements();
-                } else {
-                    alert(`Ошибка: ${data.error}`);
-                }
-            } catch (e) {
-                alert(`Ошибка сети: ${e}`);
-            }
-        };
-
-        saveReqBtn.onclick = async () => {
-            if (!currentAnalysisId || !currentProjectId) return;
-            try {
-                const res = await fetch("/api/save_business_requirements", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        project_id: currentProjectId,
-                        parent_id: currentAnalysisId,
-                        requirements: currentRequirements
-                    })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    alert(`Сохранено требований: ${data.ids.length}`);
-                    reqModal.style.display = 'none';
-                    currentRequirements = [];
-                    await loadParents(); // обновляем список артефактов
-                } else {
-                    alert(`Ошибка: ${data.error}`);
-                }
-            } catch (e) {
-                alert(`Ошибка сети: ${e}`);
-            }
-        };
-
-        async function fetchModels() {
-            try {
-                const res = await fetch("/api/models");
-                const models = await res.json();
-                modelSelect.innerHTML = "";
-                models.forEach(m => {
-                    const opt = document.createElement("option");
-                    opt.value = m.id;
-                    opt.innerText = m.id.toUpperCase();
-                    if (m.id === "openai/gpt-oss-120b" || m.id === "llama-3.3-70b-versatile") {
-                        opt.selected = true;
-                    }
-                    modelSelect.appendChild(opt);
-                });
-            } catch (e) {
-                modelSelect.innerHTML = '<option value="llama-3.3-70b-versatile">LLAMA-3.3-70B (FALLBACK)</option>';
-            }
-        }
-
-        async function start() {
-            const prompt = input.value.trim();
-            if (!prompt) return;
-            if (!currentProjectId) {
-                alert("Сначала выберите проект");
-                return;
-            }
-            const mode = document.getElementById("mode-select").value;
-            const model = modelSelect.value;
-
-            input.value = ""; input.style.height = "44px";
-            input.disabled = true; sendBtn.disabled = true;
-            statusText.innerText = "NEURAL_LINK_ESTABLISHED...";
-
-            const u = document.createElement("div");
-            u.className = "border-l-2 border-zinc-800 pl-6 text-sm text-zinc-400";
-            u.innerText = prompt;
-            messagesDiv.appendChild(u);
-
-            const a = document.createElement("div");
-            a.className = "markdown-body streaming";
-            messagesDiv.appendChild(a);
-            a.dataset.originalPrompt = prompt;
-            const toolbar = createMessageToolbar(a);
-            messagesDiv.appendChild(toolbar);
-
-            try {
-                const res = await fetch("/api/analyze", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt, mode, model, project_id: currentProjectId })
-                });
-
-                const reader = res.body.getReader();
-                const decoder = new TextDecoder();
-                let raw = "";
-                let metaDone = false;
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    let chunk = decoder.decode(value);
-
-                    if (!metaDone && chunk.includes("__METADATA__")) {
-                        const parts = chunk.split("__");
-                        const meta = parts[2].split("|");
-                        document.getElementById("q-tokens").innerText = meta[0];
-                        document.getElementById("q-req").innerText = meta[1];
-                        chunk = parts.slice(3).join("__");
-                        metaDone = true;
-                    }
-
-                    raw += chunk;
-                    a.innerHTML = marked.parse(raw);
-                    a.dataset.rawMarkdown = raw;
-                    scrollAnchor.scrollIntoView({ behavior: "smooth" });
-                }
-            } catch (e) {
-                a.innerHTML = `<span class="text-red-500">SYSTEM_ERROR: ${e.message}</span>`;
-            } finally {
-                a.classList.remove("streaming");
-                input.disabled = false; sendBtn.disabled = false;
-                statusText.innerText = "SYSTEM_READY";
-                input.focus();
-            }
-        }
-
-        function createMessageToolbar(messageElement) {
-            const toolbar = document.createElement("div");
-            toolbar.className = "message-toolbar";
-
-            const copyBtn = document.createElement("button");
-            copyBtn.innerText = "Copy";
-            copyBtn.onclick = async () => {
-                try { await navigator.clipboard.writeText(messageElement.innerText); } catch (_) {
-                    const textarea = document.createElement("textarea");
-                    textarea.value = messageElement.innerText;
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(textarea);
+                } catch (e) {
+                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                } finally {
+                    setLoading(saveArtifactBtn, false);
                 }
             };
 
-            const editBtn = document.createElement("button");
-            editBtn.innerText = "Edit";
-            editBtn.onclick = () => {
-                const raw = messageElement.dataset.rawMarkdown || messageElement.innerText;
-                const editArea = document.createElement("textarea");
-                editArea.value = raw;
-                editArea.className = "w-full bg-transparent text-gray-200 p-2 border border-zinc-700 rounded";
-                const saveBtn = document.createElement("button");
-                saveBtn.innerText = "Save";
-                saveBtn.className = "ml-2 p-1 bg-emerald-600/20 rounded";
-                saveBtn.onclick = () => {
-                    const newRaw = editArea.value;
-                    messageElement.innerHTML = marked.parse(newRaw);
-                    messageElement.dataset.rawMarkdown = newRaw;
-                    editArea.remove();
-                    saveBtn.remove();
+            // Генерация бизнес-требований
+            generateBrBtn.onclick = async () => {
+                const analysisId = parentSelect.value;
+                if (!analysisId) return;
+                const feedback = input.value.trim();
+                const model = modelSelect.value;
+                const pid = state.getCurrentProjectId();
+                if (!pid) return;
+
+                state.setCurrentAnalysisId(analysisId);
+                state.setCurrentFeedback(feedback);
+
+                setLoading(generateBrBtn, true);
+                try {
+                    const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid);
+                    const requirements = data.requirements;
+                    state.setCurrentRequirements(requirements);
+
+                    ui.openRequirementsModal(
+                        requirements,
+                        async () => { // onSave
+                            const reqs = state.getCurrentRequirements();
+                            if (!reqs.length) return;
+                            try {
+                                const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
+                                ui.showNotification(`Сохранено требований: ${saved.ids.length}`, 'success');
+                                ui.closeModal();
+                                await loadParents();
+                            } catch (e) {
+                                ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                            }
+                        },
+                        async () => { // onRegenerate
+                            const newFeedback = input.value.trim();
+                            try {
+                                const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid);
+                                state.setCurrentRequirements(newData.requirements);
+                                ui.openRequirementsModal(
+                                    newData.requirements,
+                                    arguments.callee,
+                                    arguments.callee,
+                                    ui.closeModal
+                                );
+                            } catch (e) {
+                                ui.showNotification('Ошибка перегенерации: ' + e.message, 'error');
+                            }
+                        },
+                        () => { // onCancel
+                            ui.closeModal();
+                        }
+                    );
+                } catch (e) {
+                    ui.showNotification('Ошибка генерации: ' + e.message, 'error');
+                } finally {
+                    setLoading(generateBrBtn, false);
+                }
+            };
+
+            // Загрузка моделей
+            async function loadModels() {
+                try {
+                    const models = await api.fetchModels();
+                    state.setModels(models);
+                    modelSelect.innerHTML = '';
+                    models.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.id;
+                        opt.innerText = m.id.toUpperCase();
+                        if (m.id === "openai/gpt-oss-120b" || m.id === "llama-3.3-70b-versatile") {
+                            opt.selected = true;
+                        }
+                        modelSelect.appendChild(opt);
+                    });
+                } catch (e) {
+                    ui.showNotification('Ошибка загрузки моделей: ' + e.message, 'error');
+                }
+            }
+
+            // Инициализация
+            window.onload = async function() {
+                await loadModels();
+                await loadProjects();
+                if (state.getCurrentProjectId()) await loadParents();
+            };
+
+            // Отправка сообщения (чат)
+            async function start() {
+                const prompt = input.value.trim();
+                if (!prompt) return;
+                const pid = state.getCurrentProjectId();
+                if (!pid) {
+                    ui.showNotification("Сначала выберите проект", 'error');
+                    return;
+                }
+                const mode = document.getElementById("mode-select").value;
+                const model = modelSelect.value;
+
+                input.value = ""; input.style.height = "44px";
+                input.disabled = true; sendBtn.disabled = true;
+                statusText.innerText = "NEURAL_LINK_ESTABLISHED...";
+
+                const userDiv = document.createElement("div");
+                userDiv.className = "border-l-2 border-zinc-800 pl-6 text-sm text-zinc-400";
+                userDiv.innerText = prompt;
+                messagesDiv.appendChild(userDiv);
+
+                const assistantDiv = document.createElement("div");
+                assistantDiv.className = "markdown-body streaming";
+                messagesDiv.appendChild(assistantDiv);
+                assistantDiv.dataset.originalPrompt = prompt;
+                const toolbar = createMessageToolbar(assistantDiv);
+                messagesDiv.appendChild(toolbar);
+
+                try {
+                    const res = await fetch("/api/analyze", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ prompt, mode, model, project_id: pid })
+                    });
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let raw = "";
+                    let metaDone = false;
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        let chunk = decoder.decode(value);
+                        if (!metaDone && chunk.includes("__METADATA__")) {
+                            const parts = chunk.split("__");
+                            const meta = parts[2].split("|");
+                            document.getElementById("q-tokens").innerText = meta[0];
+                            document.getElementById("q-req").innerText = meta[1];
+                            chunk = parts.slice(3).join("__");
+                            metaDone = true;
+                        }
+                        raw += chunk;
+                        assistantDiv.innerHTML = marked.parse(raw);
+                        assistantDiv.dataset.rawMarkdown = raw;
+                        scrollAnchor.scrollIntoView({ behavior: "smooth" });
+                    }
+                } catch (e) {
+                    assistantDiv.innerHTML = `<span class="text-red-500">SYSTEM_ERROR: ${e.message}</span>`;
+                } finally {
+                    assistantDiv.classList.remove("streaming");
+                    input.disabled = false; sendBtn.disabled = false;
+                    statusText.innerText = "SYSTEM_READY";
+                    input.focus();
+                }
+            }
+
+            sendBtn.onclick = start;
+            input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); start(); } };
+
+            function createMessageToolbar(messageElement) {
+                const toolbar = document.createElement("div");
+                toolbar.className = "message-toolbar";
+                const copyBtn = document.createElement("button");
+                copyBtn.innerText = "Copy";
+                copyBtn.onclick = async () => {
+                    try { await navigator.clipboard.writeText(messageElement.innerText); } catch (_) {
+                        const textarea = document.createElement("textarea");
+                        textarea.value = messageElement.innerText;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(textarea);
+                    }
                 };
-                messageElement.appendChild(editArea);
-                messageElement.appendChild(saveBtn);
-            };
-
-            const regenerateBtn = document.createElement("button");
-            regenerateBtn.innerText = "Regenerate";
-            regenerateBtn.onclick = async () => {
-                const original = messageElement.dataset.originalPrompt;
-                if (!original) return;
-                input.value = original;
-                input.style.height = "auto";
-                await start();
-            };
-
-            const shareBtn = document.createElement("button");
-            shareBtn.innerText = "Share";
-            shareBtn.onclick = async () => {
-                const shareText = `Shared Message:\n${messageElement.innerText}`;
-                try { await navigator.clipboard.writeText(shareText); } catch (_) {
-                    const textarea = document.createElement("textarea");
-                    textarea.value = shareText;
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(textarea);
-                }
-            };
-
-            toolbar.appendChild(copyBtn);
-            toolbar.appendChild(editBtn);
-            toolbar.appendChild(regenerateBtn);
-            toolbar.appendChild(shareBtn);
-            return toolbar;
-        }
-
-        window.onload = async function() {
-            await fetchModels();
-            await loadProjects();
-            if (currentProjectId) await loadParents();
-        };
-        sendBtn.onclick = start;
-        input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); start(); } };
+                const editBtn = document.createElement("button");
+                editBtn.innerText = "Edit";
+                editBtn.onclick = () => {
+                    const raw = messageElement.dataset.rawMarkdown || messageElement.innerText;
+                    const editArea = document.createElement("textarea");
+                    editArea.value = raw;
+                    editArea.className = "w-full bg-transparent text-gray-200 p-2 border border-zinc-700 rounded";
+                    const saveBtn = document.createElement("button");
+                    saveBtn.innerText = "Save";
+                    saveBtn.className = "ml-2 p-1 bg-emerald-600/20 rounded";
+                    saveBtn.onclick = () => {
+                        const newRaw = editArea.value;
+                        messageElement.innerHTML = marked.parse(newRaw);
+                        messageElement.dataset.rawMarkdown = newRaw;
+                        editArea.remove();
+                        saveBtn.remove();
+                    };
+                    messageElement.appendChild(editArea);
+                    messageElement.appendChild(saveBtn);
+                };
+                const regenerateBtn = document.createElement("button");
+                regenerateBtn.innerText = "Regenerate";
+                regenerateBtn.onclick = async () => {
+                    const original = messageElement.dataset.originalPrompt;
+                    if (!original) return;
+                    input.value = original;
+                    input.style.height = "auto";
+                    await start();
+                };
+                const shareBtn = document.createElement("button");
+                shareBtn.innerText = "Share";
+                shareBtn.onclick = async () => {
+                    const shareText = `Shared Message:\n${messageElement.innerText}`;
+                    try { await navigator.clipboard.writeText(shareText); } catch (_) {
+                        const textarea = document.createElement("textarea");
+                        textarea.value = shareText;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(textarea);
+                    }
+                };
+                toolbar.appendChild(copyBtn);
+                toolbar.appendChild(editBtn);
+                toolbar.appendChild(regenerateBtn);
+                toolbar.appendChild(shareBtn);
+                return toolbar;
+            }
+        })();
     </script>
 </body>
 </html>

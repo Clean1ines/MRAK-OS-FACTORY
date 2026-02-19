@@ -1,4 +1,3 @@
-// js/artifactHandlers.js - логика кнопок и выбора
 (function() {
     const input = document.getElementById("input");
     const parentSelect = document.getElementById("parent-select");
@@ -8,13 +7,12 @@
     const generateArtifactBtn = document.getElementById("generate-artifact-btn");
     const pid = () => state.getCurrentProjectId();
 
-    // СОБЫТИЯ: Обновление при смене выбора
     artifactTypeSelect.onchange = async () => {
         if (window.loadParents) await window.loadParents();
     };
 
     parentSelect.onchange = () => {
-        renderers.updateGenerateButton(state.getParentData(), parentSelect.value, artifactTypeSelect.value);
+        if (window.renderers) renderers.updateGenerateButton(state.getParentData(), parentSelect.value, artifactTypeSelect.value);
     };
 
     async function handleSave(childType, parentId) {
@@ -55,7 +53,7 @@
         const cType = artifactTypeSelect.value;
         if (!pId || !cType) return;
         
-        utils.setLoading(generateArtifactBtn, true);
+        if (window.utils) window.utils.setLoading(generateArtifactBtn, true);
         try {
             let content;
             const cached = state.getArtifactCache(pId, cType);
@@ -82,14 +80,14 @@
         } catch (e) {
             ui.showNotification('Ошибка: ' + e.message, 'error');
         } finally {
-            utils.setLoading(generateArtifactBtn, false);
+            if (window.utils) window.utils.setLoading(generateArtifactBtn, false);
         }
     };
 
     saveArtifactBtn.onclick = async () => {
         const content = input.value.trim();
         if (!content || !pid()) return;
-        utils.setLoading(saveArtifactBtn, true);
+        if (window.utils) window.utils.setLoading(saveArtifactBtn, true);
         try {
             await api.saveArtifact(pid(), artifactTypeSelect.value, content, parentSelect.value);
             ui.showNotification("Сохранено", 'success');
@@ -98,7 +96,7 @@
         } catch (e) {
             ui.showNotification(e.message, 'error');
         } finally {
-            utils.setLoading(saveArtifactBtn, false);
+            if (window.utils) window.utils.setLoading(saveArtifactBtn, false);
         }
     };
 })();

@@ -76,14 +76,18 @@ function closeModal() {
     }
 }
 
+// Утилита для авто-расширения textarea
+function autoResize(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = (textarea.scrollHeight) + 'px';
+}
+
 // Функция для рендеринга требований (для BusinessRequirementPackage, FunctionalRequirementPackage)
 function renderRequirementsInContainer(container, requirements) {
     console.log('renderRequirementsInContainer called with:', requirements);
-    // Если пришёл объект с полем requirements, берём его
     if (requirements && requirements.requirements && Array.isArray(requirements.requirements)) {
         requirements = requirements.requirements;
     }
-    // Если пришёл массив – ок, иначе пытаемся привести к массиву
     if (!Array.isArray(requirements)) {
         console.error('requirements is not an array:', requirements);
         container.innerHTML = '<div class="text-red-500">Ошибка: данные не являются массивом требований</div>';
@@ -116,7 +120,7 @@ function renderRequirementsInContainer(container, requirements) {
         card.appendChild(header);
 
         const fields = [
-            { label: 'Описание', field: 'description', type: 'input' },
+            { label: 'Описание', field: 'description', type: 'textarea' },
             { label: 'Приоритет', field: 'priority', type: 'input' },
             { label: 'Заинтересованная сторона', field: 'stakeholder', type: 'input' },
             { label: 'Критерии приемки (каждый с новой строки)', field: 'acceptance_criteria', type: 'textarea' },
@@ -132,24 +136,29 @@ function renderRequirementsInContainer(container, requirements) {
             if (f.type === 'input') {
                 const input = document.createElement('input');
                 input.type = 'text';
-                input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1';
+                input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1 text-base';
                 input.value = req[f.field] || '';
                 input.oninput = (e) => { req[f.field] = e.target.value; };
                 card.appendChild(input);
             } else {
                 const textarea = document.createElement('textarea');
-                textarea.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1';
-                textarea.rows = 3;
+                textarea.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1 text-base';
+                textarea.rows = 2;
+                textarea.style.resize = 'none';
                 let value = req[f.field];
                 if (Array.isArray(value)) value = value.join('\n');
                 textarea.value = value || '';
                 textarea.oninput = (e) => {
+                    autoResize(textarea);
                     if (f.field === 'acceptance_criteria') {
                         req[f.field] = e.target.value.split('\n').filter(line => line.trim() !== '');
                     } else {
                         req[f.field] = e.target.value;
                     }
                 };
+                textarea.addEventListener('input', () => autoResize(textarea));
+                // начальный авторасайз
+                setTimeout(() => autoResize(textarea), 0);
                 card.appendChild(textarea);
             }
         });
@@ -163,23 +172,18 @@ function renderReqEngineeringAnalysis(container, analysis) {
     console.log('renderReqEngineeringAnalysis called with:', analysis);
     container.innerHTML = '';
     
-    // Если пришёл объект с полем content (из кеша или бд), извлекаем
     if (analysis && analysis.content && typeof analysis.content === 'object') {
         analysis = analysis.content;
     }
-    // Если analysis не объект или null, покажем ошибку
     if (!analysis || typeof analysis !== 'object') {
         container.innerHTML = '<div class="text-red-500">Ошибка: анализ не является объектом</div>';
         return;
     }
-
-    // Если анализ пустой, покажем сообщение
     if (Object.keys(analysis).length === 0) {
         container.innerText = 'Анализ пуст';
         return;
     }
 
-    // Рекурсивный рендеринг объекта
     const renderObject = (obj, containerEl) => {
         for (const [key, value] of Object.entries(obj)) {
             const div = document.createElement('div');
@@ -191,19 +195,17 @@ function renderReqEngineeringAnalysis(container, analysis) {
             div.appendChild(label);
             
             if (value && typeof value === 'object' && !Array.isArray(value)) {
-                // Вложенный объект
                 const nestedDiv = document.createElement('div');
                 nestedDiv.className = 'ml-4 border-l border-zinc-700 pl-2';
                 renderObject(value, nestedDiv);
                 div.appendChild(nestedDiv);
             } else if (Array.isArray(value)) {
-                // Массив
                 value.forEach((item, idx) => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'flex items-center gap-2 mb-1';
                     const input = document.createElement('input');
                     input.type = 'text';
-                    input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1';
+                    input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1 text-base';
                     input.value = item || '';
                     input.oninput = (e) => { value[idx] = e.target.value; };
                     itemDiv.appendChild(input);
@@ -226,13 +228,18 @@ function renderReqEngineeringAnalysis(container, analysis) {
                 };
                 div.appendChild(addBtn);
             } else {
-                // Простое значение
-                const input = document.createElement('textarea');
-                input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1';
-                input.rows = 2;
-                input.value = value || '';
-                input.oninput = (e) => { obj[key] = e.target.value; };
-                div.appendChild(input);
+                const textarea = document.createElement('textarea');
+                textarea.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1 text-base';
+                textarea.rows = 2;
+                textarea.style.resize = 'none';
+                textarea.value = value || '';
+                textarea.oninput = (e) => { 
+                    obj[key] = e.target.value;
+                    autoResize(textarea);
+                };
+                textarea.addEventListener('input', () => autoResize(textarea));
+                setTimeout(() => autoResize(textarea), 0);
+                div.appendChild(textarea);
             }
             containerEl.appendChild(div);
         }
@@ -241,7 +248,6 @@ function renderReqEngineeringAnalysis(container, analysis) {
     renderObject(analysis, container);
 }
 
-// Универсальная функция открытия модального окна
 function openRequirementsModal(artifactType, content, onSave, onAddMore, onCancel) {
     if (currentModal) closeModal();
 
@@ -257,15 +263,16 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     modal.style.zIndex = '1000';
     modal.style.alignItems = 'center';
     modal.style.justifyContent = 'center';
+    modal.style.padding = '1rem'; // отступы от краёв
 
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';
     modalContent.style.background = '#111';
     modalContent.style.border = '1px solid #222';
     modalContent.style.borderRadius = '12px';
-    modalContent.style.width = '80%';
-    modalContent.style.maxWidth = '800px';
-    modalContent.style.maxHeight = '80%';
+    modalContent.style.width = '95%';
+    modalContent.style.maxWidth = '900px';
+    modalContent.style.maxHeight = '90%';
     modalContent.style.overflowY = 'auto';
     modalContent.style.padding = '1.5rem';
 
@@ -279,7 +286,7 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     modalContent.appendChild(container);
 
     const btnDiv = document.createElement('div');
-    btnDiv.className = 'flex justify-end gap-3 mt-4';
+    btnDiv.className = 'flex justify-end gap-3 mt-4 flex-wrap';
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'px-3 py-1 bg-zinc-700 rounded';
@@ -311,11 +318,9 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     document.body.appendChild(modal);
     currentModal = modal;
 
-    // Выбираем рендерер в зависимости от типа артефакта
     if (artifactType === 'ReqEngineeringAnalysis') {
         renderReqEngineeringAnalysis(container, content);
     } else {
-        // Для BusinessRequirementPackage, FunctionalRequirementPackage и других пакетов
         renderRequirementsInContainer(container, content);
     }
 }

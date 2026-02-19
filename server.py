@@ -34,13 +34,13 @@ class GenerateArtifactRequest(BaseModel):
     feedback: str = ""
     model: Optional[str] = None
     project_id: str
-    existing_content: Optional[Any] = None  # может быть списком или словарём
+    existing_content: Optional[Any] = None
 
 class SavePackageRequest(BaseModel):
     project_id: str
     parent_id: str
     artifact_type: str
-    content: Any  # для пакетов
+    content: Any
 
 @app.on_event("startup")
 async def startup_event():
@@ -130,6 +130,14 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 project_id=req.project_id,
                 existing_analysis=req.existing_content
             )
+        elif req.artifact_type == "FunctionalRequirementPackage":
+            result = await orch.generate_functional_requirements(
+                parent_id=req.parent_id,
+                user_feedback=req.feedback,
+                model_id=req.model,
+                project_id=req.project_id,
+                existing_requirements=req.existing_content
+            )
         else:
             return JSONResponse(content={"error": "Unsupported artifact type"}, status_code=400)
 
@@ -154,8 +162,8 @@ async def save_artifact_package(req: SavePackageRequest):
             version = "1"
             previous_versions = []
 
-        # Для пакетов требований добавляем локальные ID, если нужно
         if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"]:
+            # Для пакетов требований
             if isinstance(req.content, list):
                 for i, r in enumerate(req.content):
                     if 'id' not in r:
@@ -168,9 +176,9 @@ async def save_artifact_package(req: SavePackageRequest):
                 "previous_versions": previous_versions
             }
         else:
-            # Для анализа и других типов просто сохраняем как есть
+            # Для анализа
             package_content = {
-                "content": req.content,
+                "analysis": req.content,
                 "generated_from": req.parent_id,
                 "model": None,
                 "version": version,

@@ -125,3 +125,6 @@ generationRules["ReqEngineeringAnalysis"] = ["BusinessRequirementPackage"];
 
 // Убедимся, что правило для ReqEngineeringAnalysis есть
 generationRules["ReqEngineeringAnalysis"] = ["BusinessRequirementPackage"];
+
+// Правила для функциональных требований (родитель может быть ReqEngineeringAnalysis или BusinessRequirementPackage)
+generationRules["FunctionalRequirementPackage"] = ["ReqEngineeringAnalysis", "BusinessRequirementPackage"];

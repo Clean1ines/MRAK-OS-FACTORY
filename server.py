@@ -123,8 +123,16 @@ async def generate_business_requirements(req: BusinessReqGenRequest):
 async def save_business_requirements(req: SaveRequirementsRequest):
     try:
         last_pkg = await get_last_package(req.parent_id, "BusinessRequirementPackage")
-        version = (last_pkg['version'] + 1) if last_pkg else 1
-        previous_versions = [last_pkg['id']] if last_pkg else []
+        if last_pkg:
+            try:
+                last_version = int(last_pkg['version'])
+            except (ValueError, TypeError):
+                last_version = 0
+            version = str(last_version + 1)
+            previous_versions = [last_pkg['id']]
+        else:
+            version = "1"
+            previous_versions = []
 
         for i, r in enumerate(req.requirements):
             if 'id' not in r:

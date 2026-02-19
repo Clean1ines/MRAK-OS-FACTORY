@@ -251,7 +251,7 @@
                 }
             };
 
-            // Исправленный обработчик
+            // Обработчик с клиентским кешем
             generateBrBtn.onclick = async () => {
                 const analysisId = parentSelect.value;
                 if (!analysisId) return;
@@ -262,14 +262,51 @@
 
                 setLoading(generateBrBtn, true);
                 try {
-                    const pkgData = await api.fetchLatestRequirementPackage(analysisId);
-                    
-                    // Определяем функции-обработчики, чтобы использовать замыкания
+                    // 1. Проверяем кеш
+                    let cached = state.getPackageCache(analysisId);
+                    let requirementsToShow;
+
+                    if (cached && cached.requirements && cached.requirements.length > 0) {
+                        // Используем кешированные требования
+                        requirementsToShow = cached.requirements;
+                        state.setCurrentRequirements(requirementsToShow);
+                        state.setCurrentAnalysisId(analysisId);
+                        state.setCurrentFeedback(feedback);
+                    } else {
+                        // Кеша нет, идём на сервер
+                        const pkgData = await api.fetchLatestRequirementPackage(analysisId);
+                        if (pkgData.exists) {
+                            // Сохраняем в кеш
+                            state.setPackageCache(analysisId, {
+                                package_id: pkgData.package_id,
+                                requirements: pkgData.requirements
+                            });
+                            requirementsToShow = pkgData.requirements;
+                            state.setCurrentRequirements(requirementsToShow);
+                            state.setCurrentAnalysisId(analysisId);
+                            state.setCurrentFeedback(feedback);
+                        } else {
+                            // Пакета нет, генерируем с нуля
+                            state.setCurrentAnalysisId(analysisId);
+                            state.setCurrentFeedback(feedback);
+                            const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid, null);
+                            requirementsToShow = data.requirements;
+                            state.setCurrentRequirements(requirementsToShow);
+                            // Кеш пока не сохраняем – сохранится после успешного сохранения
+                        }
+                    }
+
+                    // Определяем функции-обработчики для модального окна
                     const handleSave = async () => {
                         const reqs = state.getCurrentRequirements();
                         if (!reqs.length) return;
                         try {
                             const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
+                            // Обновляем кеш после сохранения
+                            state.setPackageCache(analysisId, {
+                                package_id: saved.id,
+                                requirements: reqs
+                            });
                             ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
                             ui.closeModal();
                             await loadParents(); // обновляем список артефактов
@@ -285,7 +322,7 @@
                             const newReqs = newData.requirements;
                             const combined = state.getCurrentRequirements().concat(newReqs);
                             state.setCurrentRequirements(combined);
-                            // Переоткрываем модалку с обновлёнными требованиями
+                            // Переоткрываем модалку с обновлёнными требованиями (кеш не обновляем до сохранения)
                             ui.openRequirementsModal(
                                 combined,
                                 handleSave,
@@ -297,31 +334,13 @@
                         }
                     };
 
-                    if (pkgData.exists) {
-                        // Если пакет уже есть, загружаем его требования
-                        state.setCurrentRequirements(pkgData.requirements);
-                        state.setCurrentAnalysisId(analysisId);
-                        state.setCurrentFeedback(feedback);
-                        ui.openRequirementsModal(
-                            pkgData.requirements,
-                            handleSave,
-                            handleAddMore,
-                            () => { ui.closeModal(); }
-                        );
-                    } else {
-                        // Генерация с нуля
-                        state.setCurrentAnalysisId(analysisId);
-                        state.setCurrentFeedback(feedback);
-                        const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid, null);
-                        const requirements = data.requirements;
-                        state.setCurrentRequirements(requirements);
-                        ui.openRequirementsModal(
-                            requirements,
-                            handleSave,
-                            handleAddMore,
-                            () => { ui.closeModal(); }
-                        );
-                    }
+                    // Открываем модальное окно с текущими требованиями
+                    ui.openRequirementsModal(
+                        state.getCurrentRequirements(),
+                        handleSave,
+                        handleAddMore,
+                        () => { ui.closeModal(); }
+                    );
                 } catch (e) {
                     ui.showNotification('Ошибка: ' + e.message, 'error');
                 } finally {

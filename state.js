@@ -97,3 +97,23 @@ window.state = {
     setCurrentParentId,
     subscribe,
 };
+
+// Пакетный кеш (parentId -> { package_id, requirements })
+let packageCache = {};
+
+function setPackageCache(parentId, data) {
+    packageCache[parentId] = data;
+}
+
+function getPackageCache(parentId) {
+    return packageCache[parentId];
+}
+
+function clearPackageCache(parentId) {
+    if (parentId) delete packageCache[parentId];
+    else packageCache = {};
+}
+
+window.state.setPackageCache = setPackageCache;
+window.state.getPackageCache = getPackageCache;
+window.state.clearPackageCache = clearPackageCache;

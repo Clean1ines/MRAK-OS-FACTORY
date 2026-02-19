@@ -9,6 +9,7 @@ from db import init_db, get_projects, create_project, get_artifacts, save_artifa
 import json
 import asyncpg
 import os
+import hashlib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
@@ -41,6 +42,10 @@ class SavePackageRequest(BaseModel):
     parent_id: str
     artifact_type: str
     content: Any
+
+def compute_content_hash(content):
+    """Вычисляет SHA256 от канонического JSON представления."""
+    return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 @app.on_event("startup")
 async def startup_event():
@@ -147,6 +152,18 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
 @app.post("/api/save_artifact_package")
 async def save_artifact_package(req: SavePackageRequest):
     try:
+        # Вычисляем хеш содержимого
+        new_hash = compute_content_hash(req.content)
+
+        # Проверяем, есть ли уже пакет с таким же хешем для этого родителя и типа
+        last_pkg = await get_last_package(req.parent_id, req.artifact_type)
+        if last_pkg:
+            # Сравниваем хеши (нужно хранить content_hash в БД)
+            if last_pkg.get('content_hash') == new_hash:
+                # Контент идентичен – возвращаем существующий ID
+                return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
+
+        # Получаем последний пакет для версионирования
         last_pkg = await get_last_package(req.parent_id, req.artifact_type)
         if last_pkg:
             try:
@@ -159,12 +176,13 @@ async def save_artifact_package(req: SavePackageRequest):
             version = "1"
             previous_versions = []
 
-        # Для пакетов требований добавляем локальные ID, если нужно
+        # Для пакетов требований: присваиваем постоянные ID (UUID), если их нет
         content_to_save = req.content
         if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"] and isinstance(content_to_save, list):
-            for i, r in enumerate(content_to_save):
+            import uuid
+            for r in content_to_save:
                 if 'id' not in r:
-                    r['id'] = f"req-{i+1:03d}"
+                    r['id'] = str(uuid.uuid4())
 
         artifact_id = await save_artifact(
             artifact_type=req.artifact_type,
@@ -172,7 +190,8 @@ async def save_artifact_package(req: SavePackageRequest):
             owner="user",
             status="DRAFT",
             project_id=req.project_id,
-            parent_id=req.parent_id
+            parent_id=req.parent_id,
+            content_hash=new_hash  # передаём хеш для сохранения
         )
         return JSONResponse(content={"id": artifact_id})
     except Exception as e:

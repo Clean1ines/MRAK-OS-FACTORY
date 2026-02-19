@@ -89,8 +89,8 @@ class ArtifactGenerator:
             prompt_parts.append(f"USER_FEEDBACK:\n{user_feedback}")
 
         if existing_requirements:
-            existing_descriptions = [req.get('description', '') for req in existing_requirements]
-            prompt_parts.append(f"EXISTING_REQUIREMENTS:\n{json.dumps(existing_descriptions)}")
+            existing_descs = [req.get('description', '') for req in existing_requirements]
+            prompt_parts.append(f"EXISTING_REQUIREMENTS:\n{json.dumps(existing_descs)}")
 
         full_input = "\n\n".join(prompt_parts)
 
@@ -145,7 +145,7 @@ class ArtifactGenerator:
         if isinstance(parent_content, dict) and 'requirements' in parent_content:
             reqs = parent_content['requirements']
         else:
-            reqs = parent_content  # предположительно массив
+            reqs = parent_content
         descriptions = [r.get('description', '') for r in reqs if isinstance(r, dict)]
 
         prompt_parts = []
@@ -153,8 +153,6 @@ class ArtifactGenerator:
         if user_feedback:
             prompt_parts.append(f"USER_FEEDBACK:\n{user_feedback}")
         if existing_analysis:
-            # При догенерации анализа можно передавать краткую сводку или ключевые выводы
-            # Пока передаём всё, но можно оптимизировать
             prompt_parts.append(f"EXISTING_ANALYSIS:\n{json.dumps(existing_analysis)}")
 
         full_input = "\n\n".join(prompt_parts)

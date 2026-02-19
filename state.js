@@ -68,13 +68,17 @@ function setModels(models) {
 const generationRules = {
     "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
     "ReqEngineeringAnalysis": ["BusinessRequirementPackage"],
-    "FunctionalRequirementPackage": ["BusinessRequirementPackage", "ReqEngineeringAnalysis"],
+    "FunctionalRequirementPackage": ["ReqEngineeringAnalysis"],
     // Добавляйте другие типы по мере необходимости
 };
 
 function canGenerate(childType, parentType) {
     const allowedParents = generationRules[childType];
     return allowedParents ? allowedParents.includes(parentType) : false;
+}
+
+function getAllowedParentTypes(childType) {
+    return generationRules[childType] || [];
 }
 
 // Кеш для артефактов (parentId -> { childType: { id, content } })
@@ -115,6 +119,7 @@ window.state = {
     getModels,
     setModels,
     canGenerate,
+    getAllowedParentTypes,
     setArtifactCache,
     getArtifactCache,
     clearArtifactCache,

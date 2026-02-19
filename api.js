@@ -84,3 +84,9 @@ window.api = {
     saveBusinessRequirements,
     fetchModels
 };
+
+async function fetchLatestRequirementPackage(parentId) {
+    return apiFetch(`/api/latest_requirement_package?parent_id=${encodeURIComponent(parentId)}`);
+}
+
+window.api.fetchLatestRequirementPackage = fetchLatestRequirementPackage;

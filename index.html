@@ -250,6 +250,7 @@
                 }
             };
 
+            // Новая логика для кнопки генерации требований
             generateBrBtn.onclick = async () => {
                 const analysisId = parentSelect.value;
                 if (!analysisId) return;
@@ -258,48 +259,96 @@
                 const pid = state.getCurrentProjectId();
                 if (!pid) return;
 
-                state.setCurrentAnalysisId(analysisId);
-                state.setCurrentFeedback(feedback);
-
                 setLoading(generateBrBtn, true);
                 try {
-                    // Передаём текущие требования (state.currentRequirements) как existing_requirements
-                    const existing = state.getCurrentRequirements();
-                    const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid, existing);
-                    const newRequirements = data.requirements;
-                    // Объединяем старые и новые (избегаем дублирования по описанию? Пока просто добавляем)
-                    // Для простоты заменим весь список на новые? Но лучше добавить.
-                    // Поскольку бэкенд генерирует только новые, просто добавляем их к существующим.
-                    const combined = existing.concat(newRequirements);
-                    state.setCurrentRequirements(combined);
-
-                    ui.openRequirementsModal(
-                        combined,
-                        async () => { // onSave
-                            const reqs = state.getCurrentRequirements();
-                            if (!reqs.length) return;
-                            try {
-                                const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
-                                ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
+                    // Проверяем, есть ли уже сохранённый пакет для этого родителя
+                    const pkgData = await api.fetchLatestRequirementPackage(analysisId);
+                    if (pkgData.exists) {
+                        // Если пакет есть, загружаем его требования и открываем модалку для редактирования/догенерации
+                        const existingReqs = pkgData.requirements;
+                        state.setCurrentRequirements(existingReqs);
+                        state.setCurrentAnalysisId(analysisId);
+                        state.setCurrentFeedback(feedback);
+                        ui.openRequirementsModal(
+                            existingReqs,
+                            async () => { // onSave
+                                const reqs = state.getCurrentRequirements();
+                                if (!reqs.length) return;
+                                try {
+                                    const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
+                                    ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
+                                    ui.closeModal();
+                                    await loadParents();
+                                } catch (e) {
+                                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                                }
+                            },
+                            async () => { // onRegenerate
+                                const newFeedback = input.value.trim();
+                                try {
+                                    const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid, state.getCurrentRequirements());
+                                    const newReqs = newData.requirements;
+                                    const combined = state.getCurrentRequirements().concat(newReqs);
+                                    state.setCurrentRequirements(combined);
+                                    ui.openRequirementsModal(
+                                        combined,
+                                        arguments.callee,
+                                        arguments.callee,
+                                        ui.closeModal
+                                    );
+                                } catch (e) {
+                                    ui.showNotification('Ошибка перегенерации: ' + e.message, 'error');
+                                }
+                            },
+                            () => { // onCancel
                                 ui.closeModal();
-                                await loadParents();
-                            } catch (e) {
-                                ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                             }
-                        },
-                        async () => { // onRegenerate (будет использовать уже обновлённый список)
-                            // При повторной генерации вызываем эту же функцию, но existing уже обновлён
-                            await generateBrBtn.onclick(); // рекурсивно? Не лучший вариант.
-                            // Лучше просто перезапустить логику, но учтём, что state.currentRequirements уже содержит старые+новые.
-                            // Можно просто вызвать заново, но чтобы не дублировать код, вынесем в отдельную функцию.
-                            // Пока оставим так – кнопка regenerate вызывает тот же обработчик.
-                        },
-                        () => { // onCancel
-                            ui.closeModal();
-                        }
-                    );
+                        );
+                    } else {
+                        // Пакета нет – обычная генерация с нуля
+                        state.setCurrentAnalysisId(analysisId);
+                        state.setCurrentFeedback(feedback);
+                        const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid, null);
+                        const requirements = data.requirements;
+                        state.setCurrentRequirements(requirements);
+                        ui.openRequirementsModal(
+                            requirements,
+                            async () => { // onSave
+                                const reqs = state.getCurrentRequirements();
+                                if (!reqs.length) return;
+                                try {
+                                    const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
+                                    ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
+                                    ui.closeModal();
+                                    await loadParents();
+                                } catch (e) {
+                                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                                }
+                            },
+                            async () => { // onRegenerate
+                                const newFeedback = input.value.trim();
+                                try {
+                                    const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid, state.getCurrentRequirements());
+                                    const newReqs = newData.requirements;
+                                    const combined = state.getCurrentRequirements().concat(newReqs);
+                                    state.setCurrentRequirements(combined);
+                                    ui.openRequirementsModal(
+                                        combined,
+                                        arguments.callee,
+                                        arguments.callee,
+                                        ui.closeModal
+                                    );
+                                } catch (e) {
+                                    ui.showNotification('Ошибка перегенерации: ' + e.message, 'error');
+                                }
+                            },
+                            () => { // onCancel
+                                ui.closeModal();
+                            }
+                        );
+                    }
                 } catch (e) {
-                    ui.showNotification('Ошибка генерации: ' + e.message, 'error');
+                    ui.showNotification('Ошибка: ' + e.message, 'error');
                 } finally {
                     setLoading(generateBrBtn, false);
                 }

@@ -7,12 +7,9 @@ import uuid
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mrak_user:mrak_pass@localhost:5432/mrak_db")
 
 async def init_db():
-    """Создаёт таблицы, если их нет, без удаления старых данных."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         await conn.execute('CREATE EXTENSION IF NOT EXISTS vector;')
-        
-        # Таблица проектов
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS projects (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -22,8 +19,6 @@ async def init_db():
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
         ''')
-        
-        # Таблица артефактов с parent_id
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS artifacts (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -40,8 +35,6 @@ async def init_db():
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
         ''')
-        
-        # Таблица связей (можно оставить, но parent_id покрывает простые иерархии)
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS links (
                 from_id UUID REFERENCES artifacts(id) ON DELETE CASCADE,
@@ -52,18 +45,14 @@ async def init_db():
                 PRIMARY KEY (from_id, to_id, link_type)
             );
         ''')
-        
-        # Индекс для поиска по пути
         await conn.execute('''
             CREATE INDEX IF NOT EXISTS idx_artifacts_file_path ON artifacts ((content->>'file_path')) WHERE type = 'CodeFile';
         ''')
-        
         print("DEBUG: Tables initialized (projects, artifacts with parent_id)")
     finally:
         await conn.close()
 
 async def get_projects() -> List[Dict[str, Any]]:
-    """Возвращает список всех проектов с преобразованием UUID и datetime в строки."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         rows = await conn.fetch('''
@@ -109,7 +98,6 @@ async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
         await conn.close()
 
 async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Возвращает список артефактов проекта с преобразованием дат."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         query = 'SELECT id, type, parent_id, content, created_at, updated_at FROM artifacts WHERE project_id = $1'
@@ -126,14 +114,39 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) ->
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
-            # Для отображения в списке можно добавить краткое содержание
+            # content уже должен быть десериализован, но убедимся
+            if isinstance(art['content'], str):
+                art['content'] = json.loads(art['content'])
+            # Для отображения в списке добавим краткое содержание
             content = art['content']
             if isinstance(content, dict):
-                art['summary'] = content.get('text', '')[:100] if 'text' in content else str(content)[:100]
+                art['summary'] = content.get('text', '')[:100] if 'text' in content else json.dumps(content)[:100]
             else:
                 art['summary'] = str(content)[:100]
             artifacts.append(art)
         return artifacts
+    finally:
+        await conn.close()
+
+async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict[str, Any]]:
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        row = await conn.fetchrow('''
+            SELECT * FROM artifacts 
+            WHERE parent_id = $1 AND type = $2
+            ORDER BY version DESC
+            LIMIT 1
+        ''', parent_id, artifact_type)
+        if row:
+            art = dict(row)
+            art['id'] = str(art['id'])
+            art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
+            art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
+            art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
+            if isinstance(art['content'], str):
+                art['content'] = json.loads(art['content'])
+            return art
+        return None
     finally:
         await conn.close()
 
@@ -147,11 +160,9 @@ async def save_artifact(
     project_id: Optional[str] = None,
     parent_id: Optional[str] = None
 ) -> str:
-    """Сохраняет артефакт в БД и возвращает его ID."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         artifact_id = str(uuid.uuid4())
-        # Базовые поля
         insert_fields = ['id', 'type', 'version', 'status', 'owner', 'content']
         insert_values = [artifact_id, artifact_type, version, status, owner, json.dumps(content)]
         placeholders = ['$1', '$2', '$3', '$4', '$5', '$6']
@@ -183,7 +194,6 @@ async def save_artifact(
         await conn.close()
 
 async def find_artifact_by_path(file_path: str, artifact_type: str = "CodeFile", project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Ищет артефакт по типу и пути (хранится в content->>'file_path'). Если указан project_id, учитывает его."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         query = '''
@@ -197,7 +207,14 @@ async def find_artifact_by_path(file_path: str, artifact_type: str = "CodeFile",
         query += ' ORDER BY version DESC LIMIT 1'
         row = await conn.fetchrow(query, *params)
         if row:
-            return dict(row)
+            art = dict(row)
+            art['id'] = str(art['id'])
+            art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
+            art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
+            art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
+            if isinstance(art['content'], str):
+                art['content'] = json.loads(art['content'])
+            return art
         return None
     finally:
         await conn.close()
@@ -218,23 +235,14 @@ async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
     try:
         row = await conn.fetchrow('SELECT * FROM artifacts WHERE id = $1', artifact_id)
         if row:
-            return dict(row)
-        return None
-    finally:
-        await conn.close()
-
-async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict[str, Any]]:
-    """Возвращает последний артефакт указанного типа с заданным parent_id (по убыванию version)."""
-    conn = await asyncpg.connect(DATABASE_URL)
-    try:
-        row = await conn.fetchrow('''
-            SELECT * FROM artifacts 
-            WHERE parent_id = $1 AND type = $2
-            ORDER BY version DESC
-            LIMIT 1
-        ''', parent_id, artifact_type)
-        if row:
-            return dict(row)
+            art = dict(row)
+            art['id'] = str(art['id'])
+            art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
+            art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
+            art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
+            if isinstance(art['content'], str):
+                art['content'] = json.loads(art['content'])
+            return art
         return None
     finally:
         await conn.close()

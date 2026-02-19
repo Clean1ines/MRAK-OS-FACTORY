@@ -217,9 +217,9 @@
 
             parentSelect.addEventListener('change', function() {
                 const selectedId = this.value;
+                state.setCurrentParentId(selectedId);
                 ui.updateGenerateBrButton(state.getParentData(), selectedId);
-                state.setCurrentParentId(this.value);
-    });
+            });
 
             saveArtifactBtn.onclick = async () => {
                 const content = input.value.trim();
@@ -251,7 +251,7 @@
                 }
             };
 
-            // Новая логика для кнопки генерации требований
+            // Упрощённый обработчик без кеша
             generateBrBtn.onclick = async () => {
                 const analysisId = parentSelect.value;
                 if (!analysisId) return;
@@ -262,16 +262,15 @@
 
                 setLoading(generateBrBtn, true);
                 try {
-                    // Проверяем, есть ли уже сохранённый пакет для этого родителя
+                    // Всегда запрашиваем сервер
                     const pkgData = await api.fetchLatestRequirementPackage(analysisId);
                     if (pkgData.exists) {
-                        // Если пакет есть, загружаем его требования и открываем модалку для редактирования/догенерации
-                        const existingReqs = pkgData.requirements;
-                        state.setCurrentRequirements(existingReqs);
+                        // Пакет уже есть – открываем модалку с существующими требованиями
+                        state.setCurrentRequirements(pkgData.requirements);
                         state.setCurrentAnalysisId(analysisId);
                         state.setCurrentFeedback(feedback);
                         ui.openRequirementsModal(
-                            existingReqs,
+                            pkgData.requirements,
                             async () => { // onSave
                                 const reqs = state.getCurrentRequirements();
                                 if (!reqs.length) return;
@@ -279,7 +278,7 @@
                                     const saved = await api.saveBusinessRequirements(pid, analysisId, reqs);
                                     ui.showNotification(`Сохранён пакет требований, ID: ${saved.id}`, 'success');
                                     ui.closeModal();
-                                    await loadParents();
+                                    await loadParents(); // обновляем список артефактов
                                 } catch (e) {
                                     ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                                 }
@@ -306,7 +305,7 @@
                             }
                         );
                     } else {
-                        // Пакета нет – обычная генерация с нуля
+                        // Пакета нет – генерация с нуля
                         state.setCurrentAnalysisId(analysisId);
                         state.setCurrentFeedback(feedback);
                         const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid, null);

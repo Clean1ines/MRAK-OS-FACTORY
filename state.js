@@ -9,6 +9,7 @@ const AppState = {
     currentAnalysisId: null,
     currentFeedback: '',
     models: [],
+    currentParentId: null,
 };
 
 const listeners = [];
@@ -30,6 +31,7 @@ function getCurrentRequirements() { return AppState.currentRequirements; }
 function getCurrentAnalysisId() { return AppState.currentAnalysisId; }
 function getCurrentFeedback() { return AppState.currentFeedback; }
 function getModels() { return AppState.models; }
+function getCurrentParentId() { return AppState.currentParentId; }
 
 // Сеттеры
 function setProjects(projects) {
@@ -46,7 +48,6 @@ function setCurrentProjectId(id) {
 
 function setArtifacts(artifacts) {
     AppState.artifacts = artifacts;
-    // обновляем parentData
     const newParentData = {};
     artifacts.forEach(a => { newParentData[a.id] = a.type; });
     AppState.parentData = newParentData;
@@ -71,6 +72,10 @@ function setModels(models) {
     notify();
 }
 
+function setCurrentParentId(id) {
+    AppState.currentParentId = id;
+}
+
 // Экспортируем в глобальную область
 window.state = {
     getProjects,
@@ -88,40 +93,7 @@ window.state = {
     setCurrentFeedback,
     getModels,
     setModels,
+    getCurrentParentId,
+    setCurrentParentId,
     subscribe,
 };
-
-let currentParentId = null;
-
-function setCurrentParentId(id) {
-    currentParentId = id;
-}
-
-function getCurrentParentId() {
-    return currentParentId;
-}
-
-window.state.setCurrentParentId = setCurrentParentId;
-window.state.getCurrentParentId = getCurrentParentId;
-
-let packageCache = {};
-
-function setPackageCache(parentId, data) {
-    packageCache[parentId] = data;
-}
-
-function getPackageCache(parentId) {
-    return packageCache[parentId];
-}
-
-function clearPackageCache(parentId) {
-    if (parentId) {
-        delete packageCache[parentId];
-    } else {
-        packageCache = {};
-    }
-}
-
-window.state.setPackageCache = setPackageCache;
-window.state.getPackageCache = getPackageCache;
-window.state.clearPackageCache = clearPackageCache;

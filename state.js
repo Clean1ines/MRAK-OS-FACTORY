@@ -119,3 +119,9 @@ window.state = {
     clearArtifactCache,
     subscribe,
 };
+
+// Добавляем правило для анализа инженерии требований
+generationRules["ReqEngineeringAnalysis"] = ["BusinessRequirementPackage"];
+
+// Убедимся, что правило для ReqEngineeringAnalysis есть
+generationRules["ReqEngineeringAnalysis"] = ["BusinessRequirementPackage"];

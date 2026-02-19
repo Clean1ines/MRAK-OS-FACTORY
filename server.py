@@ -34,13 +34,13 @@ class GenerateArtifactRequest(BaseModel):
     feedback: str = ""
     model: Optional[str] = None
     project_id: str
-    existing_content: Optional[List[Dict]] = None  # для пакетов
+    existing_content: Optional[Any] = None  # может быть списком или словарём
 
 class SavePackageRequest(BaseModel):
     project_id: str
     parent_id: str
     artifact_type: str
-    content: List[Dict[str, Any]]  # для пакетов
+    content: Any  # для пакетов
 
 @app.on_event("startup")
 async def startup_event():
@@ -112,9 +112,8 @@ async def latest_artifact(parent_id: str, type: str):
 
 @app.post("/api/generate_artifact")
 async def generate_artifact_endpoint(req: GenerateArtifactRequest):
-    """Универсальный эндпоинт для генерации артефактов (например, пакетов требований)."""
+    """Универсальный эндпоинт для генерации артефактов."""
     try:
-        # Определяем, какой метод генерации использовать на основе artifact_type
         if req.artifact_type == "BusinessRequirementPackage":
             result = await orch.generate_business_requirements(
                 analysis_id=req.parent_id,
@@ -123,26 +122,25 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 project_id=req.project_id,
                 existing_requirements=req.existing_content
             )
-        elif req.artifact_type == "FunctionalRequirementPackage":
-            # Здесь нужно будет добавить аналогичный метод
-            result = await orch.generate_functional_requirements(
+        elif req.artifact_type == "ReqEngineeringAnalysis":
+            result = await orch.generate_req_engineering_analysis(
                 parent_id=req.parent_id,
                 user_feedback=req.feedback,
                 model_id=req.model,
                 project_id=req.project_id,
-                existing_requirements=req.existing_content
+                existing_analysis=req.existing_content
             )
         else:
             return JSONResponse(content={"error": "Unsupported artifact type"}, status_code=400)
 
-        return JSONResponse(content={"requirements": result})
+        return JSONResponse(content={"result": result})
     except Exception as e:
         logger.error(f"Error generating artifact: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.post("/api/save_artifact_package")
 async def save_artifact_package(req: SavePackageRequest):
-    """Сохраняет пакет требований (список) как артефакт указанного типа."""
+    """Сохраняет пакет (список или словарь) как артефакт указанного типа."""
     try:
         last_pkg = await get_last_package(req.parent_id, req.artifact_type)
         if last_pkg:
@@ -156,18 +154,29 @@ async def save_artifact_package(req: SavePackageRequest):
             version = "1"
             previous_versions = []
 
-        # Добавляем локальные ID каждому требованию, если нужно
-        for i, r in enumerate(req.content):
-            if 'id' not in r:
-                r['id'] = f"req-{i+1:03d}"
+        # Для пакетов требований добавляем локальные ID, если нужно
+        if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"]:
+            if isinstance(req.content, list):
+                for i, r in enumerate(req.content):
+                    if 'id' not in r:
+                        r['id'] = f"req-{i+1:03d}"
+            package_content = {
+                "requirements": req.content,
+                "generated_from": req.parent_id,
+                "model": None,
+                "version": version,
+                "previous_versions": previous_versions
+            }
+        else:
+            # Для анализа и других типов просто сохраняем как есть
+            package_content = {
+                "content": req.content,
+                "generated_from": req.parent_id,
+                "model": None,
+                "version": version,
+                "previous_versions": previous_versions
+            }
 
-        package_content = {
-            "requirements": req.content,
-            "generated_from": req.parent_id,
-            "model": None,
-            "version": version,
-            "previous_versions": previous_versions
-        }
         artifact_id = await save_artifact(
             artifact_type=req.artifact_type,
             content=package_content,

@@ -226,3 +226,159 @@ window.ui = {
     openRequirementsModal,
     closeModal,
 };
+
+function renderReqEngineeringAnalysis(container, analysis) {
+    container.innerHTML = '';
+    // Предполагаем, что анализ имеет структуру, похожую на исходный промпт
+    const sections = [
+        { label: 'Communication analysis', field: 'Communication analysis' },
+        { label: 'Recommendations (Communication)', field: 'Recommendations' },
+        { label: 'Warnings (Communication)', field: 'Warnings' },
+        { label: 'Completeness analysis', field: 'Completeness analysis' },
+        { label: 'Recommendations (Completeness)', field: 'Recommendations' },
+        { label: 'Warnings (Completeness)', field: 'Warnings' },
+        { label: 'Needs analysis', field: 'Needs analysis' },
+        { label: 'Recommendations (Needs)', field: 'Recommendations' },
+        { label: 'Warnings (Needs)', field: 'Warnings' },
+        { label: 'Risk analysis', field: 'Risk analysis' },
+        { label: 'Recommendations (Risk)', field: 'Recommendations' },
+        { label: 'Warnings (Risk)', field: 'Warnings' },
+        { label: 'Systemic analysis', field: 'Systemic analysis' },
+        { label: 'Recommendations (Systemic)', field: 'Recommendations' },
+        { label: 'Warnings (Systemic)', field: 'Warnings' },
+        { label: 'Joint Verdict', field: 'Joint Verdict' },
+        { label: 'Immediate actions', field: 'Immediate actions' },
+        { label: 'Strategic directions', field: 'Strategic directions' }
+    ];
+
+    sections.forEach(s => {
+        const value = analysis[s.field];
+        if (value === undefined) return;
+
+        const label = document.createElement('div');
+        label.className = 'text-xs text-zinc-400 mt-2';
+        label.innerText = s.label;
+        container.appendChild(label);
+
+        if (Array.isArray(value)) {
+            value.forEach((item, idx) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'flex items-center gap-2 mb-1';
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1';
+                input.value = item;
+                input.oninput = (e) => { analysis[s.field][idx] = e.target.value; };
+                itemDiv.appendChild(input);
+                const delBtn = document.createElement('button');
+                delBtn.className = 'text-red-500 text-xs';
+                delBtn.innerText = '✕';
+                delBtn.onclick = () => {
+                    analysis[s.field].splice(idx, 1);
+                    renderReqEngineeringAnalysis(container, analysis);
+                };
+                itemDiv.appendChild(delBtn);
+                container.appendChild(itemDiv);
+            });
+            const addBtn = document.createElement('button');
+            addBtn.className = 'text-xs bg-emerald-600/20 text-emerald-500 px-2 py-1 rounded mt-1';
+            addBtn.innerText = '+ Добавить элемент';
+            addBtn.onclick = () => {
+                analysis[s.field].push('');
+                renderReqEngineeringAnalysis(container, analysis);
+            };
+            container.appendChild(addBtn);
+        } else if (typeof value === 'object' && value !== null) {
+            // Рекурсивно для вложенных объектов
+            const nestedContainer = document.createElement('div');
+            nestedContainer.className = 'ml-4 border-l border-zinc-700 pl-2';
+            renderReqEngineeringAnalysis(nestedContainer, value);
+            container.appendChild(nestedContainer);
+        } else {
+            const input = document.createElement('textarea');
+            input.className = 'w-full bg-zinc-800 text-white border border-zinc-700 rounded px-2 py-1';
+            input.rows = 3;
+            input.value = value || '';
+            input.oninput = (e) => { analysis[s.field] = e.target.value; };
+            container.appendChild(input);
+        }
+    });
+}
+
+// Переопределяем openRequirementsModal для поддержки разных типов
+const originalOpenModal = window.ui.openRequirementsModal;
+window.ui.openRequirementsModal = function(artifactType, content, onSave, onAddMore, onCancel) {
+    if (artifactType === 'ReqEngineeringAnalysis') {
+        if (currentModal) closeModal();
+
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'flex';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0,0,0,0.8)';
+        modal.style.zIndex = '1000';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+
+        const modalContent = document.createElement('div');
+        modalContent.className = 'modal-content';
+        modalContent.style.background = '#111';
+        modalContent.style.border = '1px solid #222';
+        modalContent.style.borderRadius = '12px';
+        modalContent.style.width = '80%';
+        modalContent.style.maxWidth = '800px';
+        modalContent.style.maxHeight = '80%';
+        modalContent.style.overflowY = 'auto';
+        modalContent.style.padding = '1.5rem';
+
+        const title = document.createElement('h2');
+        title.className = 'text-lg font-bold mb-4';
+        title.innerText = artifactType;
+        modalContent.appendChild(title);
+
+        const container = document.createElement('div');
+        container.id = 'analysis-container';
+        modalContent.appendChild(container);
+
+        const btnDiv = document.createElement('div');
+        btnDiv.className = 'flex justify-end gap-3 mt-4';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'px-3 py-1 bg-zinc-700 rounded';
+        cancelBtn.innerText = 'Отмена';
+        cancelBtn.onclick = () => {
+            if (onCancel) onCancel();
+            closeModal();
+        };
+        btnDiv.appendChild(cancelBtn);
+
+        const addMoreBtn = document.createElement('button');
+        addMoreBtn.className = 'px-3 py-1 bg-blue-600/20 text-blue-500 rounded';
+        addMoreBtn.innerText = 'Добавить ещё';
+        addMoreBtn.onclick = () => {
+            if (onAddMore) onAddMore();
+        };
+        btnDiv.appendChild(addMoreBtn);
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'px-3 py-1 bg-emerald-600/20 text-emerald-500 rounded';
+        saveBtn.innerText = 'Сохранить';
+        saveBtn.onclick = () => {
+            if (onSave) onSave();
+        };
+        btnDiv.appendChild(saveBtn);
+
+        modalContent.appendChild(btnDiv);
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        currentModal = modal;
+
+        renderReqEngineeringAnalysis(container, content);
+    } else {
+        originalOpenModal(artifactType, content, onSave, onAddMore, onCancel);
+    }
+};

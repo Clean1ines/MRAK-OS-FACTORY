@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 import re
 import asyncio
+import json
 from typing import Optional, Dict, Any, List
 
 import db
@@ -77,7 +78,7 @@ class MrakOrchestrator:
         user_feedback: str = "",
         model_id: Optional[str] = None,
         project_id: Optional[str] = None,
-        existing_requirements: Optional[List[Dict]] = None   # добавлен параметр
+        existing_requirements: Optional[List[Dict]] = None
     ) -> List[Dict[str, Any]]:
         return await self.artifact_generator.generate_business_requirements(
             analysis_id=analysis_id,
@@ -86,6 +87,60 @@ class MrakOrchestrator:
             project_id=project_id,
             existing_requirements=existing_requirements
         )
+
+    async def generate_req_engineering_analysis(
+        self,
+        parent_id: str,
+        user_feedback: str = "",
+        model_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        existing_analysis: Optional[Dict] = None
+    ) -> Dict[str, Any]:
+        """
+        Генерирует анализ инженерии требований на основе бизнес-требований (пакета).
+        """
+        parent = await db.get_artifact(parent_id)
+        if not parent:
+            raise ValueError("Parent artifact not found")
+        if parent['type'] != 'BusinessRequirementPackage':
+            raise ValueError("Parent is not a BusinessRequirementPackage")
+
+        # Формируем входные данные для промпта
+        prompt_parts = []
+        prompt_parts.append(f"BUSINESS_REQUIREMENTS_PACKAGE:\n{json.dumps(parent['content'])}")
+        if user_feedback:
+            prompt_parts.append(f"USER_FEEDBACK:\n{user_feedback}")
+        if existing_analysis:
+            prompt_parts.append(f"EXISTING_ANALYSIS:\n{json.dumps(existing_analysis)}")
+
+        full_input = "\n\n".join(prompt_parts)
+
+        mode = "16_REQ_ENG_COUNCIL"
+        sys_prompt = await self.prompt_loader.get_system_prompt(mode, self.mode_map)
+        if sys_prompt.startswith("Error") or sys_prompt.startswith("System Error"):
+            raise Exception(f"Failed to get system prompt: {sys_prompt}")
+
+        try:
+            response = self.groq_client.create_completion(
+                model=model_id or "llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": full_input},
+                ],
+                temperature=0.6,
+            )
+            result_text = response.choices[0].message.content
+        except Exception as e:
+            raise Exception(f"LLM call failed: {e}")
+
+        # Пытаемся распарсить JSON
+        try:
+            analysis_result = json.loads(result_text)
+        except json.JSONDecodeError:
+            # Если не JSON, сохраняем как текст (но ожидаем JSON)
+            analysis_result = {"text": result_text}
+
+        return analysis_result
 
     async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str, project_id: Optional[str] = None):
         clean_input = self._pii_filter(user_input)

@@ -1,0 +1,16 @@
+        body { font-family: 'JetBrains Mono', monospace; background-color: #0a0a0b; color: #d1d5db; }
+        .markdown-body { font-size: 1.2rem; line-height: 1.7; }
+        .markdown-body code { color: #6ee7b7; background: #1a1a1c; padding: 0.2rem 0.4rem; border-radius: 4px; }
+        .markdown-body pre { background: #000; border: 1px solid #222; padding: 1.5rem; border-radius: 12px; margin: 1.2rem 0; overflow-x: auto; }
+        .streaming::after { content: '▋'; animation: blink 1s infinite; color: #059669; }
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+        select option { background: #111; color: #d1d5db; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        .message-toolbar { display: flex; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: #9ca3af; }
+        .message-toolbar button { background: transparent; border: none; cursor: pointer; padding: 0.2rem 0.4rem; border-radius: 4px; transition: background-color 0.2s; }
+        .message-toolbar button:hover { background: #111; }
+        .spinner { border: 2px solid rgba(255,255,255,0.1); border-top-color: #10b981; border-radius: 50%; width: 1rem; height: 1rem; animation: spin 0.6s linear infinite; display: inline-block; margin-right: 0.25rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }

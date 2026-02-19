@@ -1,7 +1,10 @@
-// main.js - точка входа, инициализация
-
 window.onload = async function() {
-    await window.loadModels();   // из projectHandlers
-    await window.loadProjects(); // из projectHandlers
-    if (state.getCurrentProjectId()) await window.loadParents(); // из projectHandlers
+    console.log("Init sequence started");
+    if (window.loadModels) await window.loadModels();
+    if (window.loadProjects) await window.loadProjects();
+    
+    // Если проект уже выбран, грузим родителей
+    if (state.getCurrentProjectId() && window.loadParents) {
+        await window.loadParents();
+    }
 };

@@ -1,42 +1,48 @@
 (function() {
-    const projectSelect = document.getElementById("project-select");
     const modelSelect = document.getElementById("model-select");
+    const projectSelect = document.getElementById("project-select");
 
     window.loadModels = async function() {
         if (!modelSelect) return;
         const models = await api.fetchModels();
-        state.setModels(models);
-        modelSelect.innerHTML = models.map(m => {
-            const id = typeof m === 'string' ? m : m.id;
-            return `<option value="${id}" ${id.includes('3.3-70b') ? 'selected' : ''}>${id}</option>`;
-        }).join('');
+        
+        modelSelect.innerHTML = "";
+        
+        if (models.length === 0) {
+            modelSelect.innerHTML = '<option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (API EMPTY)</option>';
+            return;
+        }
+
+        models.forEach(m => {
+            const opt = document.createElement("option");
+            // Пробуем все варианты ключей из доки: id, model, или просто строка
+            const val = m.id || m.model || (typeof m === 'string' ? m : null);
+            if (val) {
+                opt.value = val;
+                opt.innerText = val;
+                // Автовыбор мощной модели из твоей доки
+                if (val === "openai/gpt-oss-120b" || val === "llama-3.3-70b-versatile") {
+                    opt.selected = true;
+                }
+                modelSelect.appendChild(opt);
+            }
+        });
     };
 
-    window.loadParents = async function() {
-        const pid = state.getCurrentProjectId();
-        if (!pid) return;
-        const artifacts = await api.fetchArtifacts(pid);
-        state.setArtifacts(artifacts);
-        const type = document.getElementById("artifact-type-select").value;
-        if (window.renderers) renderers.renderParentSelect(artifacts, state.getParentData(), null, type);
+    window.loadProjects = async function() {
+        try {
+            const projects = await api.fetchProjects();
+            state.setProjects(projects);
+            if (window.renderers) renderers.renderProjectSelect(projects, state.getCurrentProjectId());
+        } catch (e) { console.error(e); }
     };
 
     if (projectSelect) {
-        // Убираем старые слушатели и вешаем один рабочий
-        projectSelect.onchange = async function() {
+        projectSelect.onchange = function() {
             const pid = this.value;
-            console.log("Switching to project:", pid);
             state.setCurrentProjectId(pid);
-            if (pid) {
-                await window.loadParents();
-            }
+            console.log("Project selected:", pid);
+            if (window.loadParents) window.loadParents();
         };
     }
-    
-    // Инициализация загрузки проектов
-    window.loadProjects = async function() {
-        const projects = await api.fetchProjects();
-        state.setProjects(projects);
-        if (window.renderers) renderers.renderProjectSelect(projects, state.getCurrentProjectId());
-    };
 })();

@@ -3,11 +3,13 @@ window.api = {
         try {
             const r = await fetch('/api/models');
             const data = await r.json();
-            // Groq возвращает { data: [{id: "..."}] } или просто массив
-            return Array.isArray(data) ? data : (data.data || []);
+            console.log("DEBUG: Raw models from server:", data);
+            // Если Groq возвращает структуру {data: [...]}, берем data. Если просто массив - его.
+            const models = data.data || data;
+            return Array.isArray(models) ? models : [];
         } catch (e) {
-            console.error("Model fetch failed", e);
-            return [{id: "llama-3.3-70b-versatile"}, {id: "llama-3.1-8b-instant"}];
+            console.error("DEBUG: Fetch models failed:", e);
+            return [];
         }
     },
     async fetchProjects() {
@@ -15,7 +17,6 @@ window.api = {
         return await r.json();
     },
     async fetchArtifacts(pid) {
-        if (!pid) return [];
         const r = await fetch(`/api/projects/${pid}/artifacts`);
         return await r.json();
     },
@@ -31,7 +32,6 @@ window.api = {
                 project_id: projectId
             })
         });
-        if (!r.ok) throw new Error("API Error");
         return await r.json();
     }
 };

@@ -274,8 +274,8 @@
                     let cached = state.getArtifactCache(parentId, childType);
                     let contentToShow;
 
-                    if (cached && cached.content && cached.content.requirements) {
-                        contentToShow = cached.content.requirements;
+                    if (cached && cached.content) {
+                        contentToShow = cached.content;
                         state.setCurrentArtifact(cached);
                     } else {
                         // Кеша нет, запрос к серверу
@@ -285,7 +285,7 @@
                                 id: data.artifact_id,
                                 content: data.content
                             });
-                            contentToShow = data.content.requirements || data.content; // предполагаем, что у пакетов есть поле requirements
+                            contentToShow = data.content;
                             state.setCurrentArtifact({
                                 id: data.artifact_id,
                                 content: data.content
@@ -293,23 +293,24 @@
                         } else {
                             // Нет существующего артефакта, генерируем
                             const genData = await api.generateArtifact(childType, parentId, feedback, model, pid, null);
-                            contentToShow = genData.requirements;
-                            state.setCurrentArtifact(null); // пока не сохранено
+                            // Сервер возвращает поле result (массив или объект)
+                            contentToShow = genData.result;
+                            // Важно! Устанавливаем currentArtifact для последующего сохранения
+                            state.setCurrentArtifact({ content: contentToShow });
                         }
                     }
 
-                    // Если contentToShow не массив, пытаемся извлечь
-                    let requirementsArray = Array.isArray(contentToShow) ? contentToShow : (contentToShow?.requirements || []);
-
                     const handleSave = async () => {
-                        const currentReqs = state.getCurrentArtifact()?.content?.requirements || [];
-                        if (currentReqs.length === 0) return;
+                        let currentContent = state.getCurrentArtifact()?.content;
+                        if (currentContent === undefined) {
+                            currentContent = (childType === 'BusinessRequirementPackage' || childType === 'FunctionalRequirementPackage') ? [] : {};
+                        }
                         try {
-                            const saved = await api.saveArtifactPackage(pid, parentId, childType, currentReqs);
+                            const saved = await api.saveArtifactPackage(pid, parentId, childType, currentContent);
                             // Обновляем кеш
                             state.setArtifactCache(parentId, childType, {
                                 id: saved.id,
-                                content: { requirements: currentReqs }
+                                content: currentContent
                             });
                             ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
                             ui.closeModal();
@@ -321,12 +322,21 @@
 
                     const handleAddMore = async () => {
                         const newFeedback = input.value.trim();
-                        const currentReqs = state.getCurrentArtifact()?.content?.requirements || [];
+                        const existingContent = state.getCurrentArtifact()?.content;
                         try {
-                            const newData = await api.generateArtifact(childType, parentId, newFeedback, model, pid, currentReqs);
-                            const newReqs = newData.requirements;
-                            const combined = currentReqs.concat(newReqs);
-                            state.setCurrentArtifact({ content: { requirements: combined } });
+                            const newData = await api.generateArtifact(childType, parentId, newFeedback, model, pid, existingContent);
+                            const newContent = newData.result;
+                            let combined;
+                            if (childType === 'BusinessRequirementPackage' || childType === 'FunctionalRequirementPackage') {
+                                // Для требований объединяем массивы
+                                const currentArray = Array.isArray(existingContent) ? existingContent : [];
+                                const newArray = Array.isArray(newContent) ? newContent : [];
+                                combined = currentArray.concat(newArray);
+                            } else {
+                                // Для анализа объединяем объекты (глубокое слияние) – пока просто заменяем
+                                combined = newContent;
+                            }
+                            state.setCurrentArtifact({ content: combined });
                             ui.openRequirementsModal(
                                 childType,
                                 combined,
@@ -341,7 +351,7 @@
 
                     ui.openRequirementsModal(
                         childType,
-                        requirementsArray,
+                        contentToShow,
                         handleSave,
                         handleAddMore,
                         () => { ui.closeModal(); }

@@ -67,6 +67,7 @@ function setModels(models) {
 // Конфигурация генерации: для каждого типа дочернего артефакта список допустимых родительских типов
 const generationRules = {
     "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
+    "ReqEngineeringAnalysis": ["BusinessRequirementPackage"],
     "FunctionalRequirementPackage": ["BusinessRequirementPackage", "ReqEngineeringAnalysis"],
     // Добавляйте другие типы по мере необходимости
 };
@@ -119,12 +120,3 @@ window.state = {
     clearArtifactCache,
     subscribe,
 };
-
-// Добавляем правило для анализа инженерии требований
-generationRules["ReqEngineeringAnalysis"] = ["BusinessRequirementPackage"];
-
-// Убедимся, что правило для ReqEngineeringAnalysis есть
-generationRules["ReqEngineeringAnalysis"] = ["BusinessRequirementPackage"];
-
-// Правила для функциональных требований (родитель может быть ReqEngineeringAnalysis или BusinessRequirementPackage)
-generationRules["FunctionalRequirementPackage"] = ["ReqEngineeringAnalysis", "BusinessRequirementPackage"];

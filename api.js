@@ -43,12 +43,11 @@ async function saveArtifact(projectId, artifactType, content, parentId = null, g
     });
 }
 
-// Универсальный эндпоинт для получения последнего артефакта по типу и родителю
+// Универсальные эндпоинты
 async function fetchLatestArtifact(parentId, artifactType) {
     return apiFetch(`/api/latest_artifact?parent_id=${encodeURIComponent(parentId)}&type=${encodeURIComponent(artifactType)}`);
 }
 
-// Универсальный эндпоинт для генерации артефакта (замена generate_business_requirements)
 async function generateArtifact(artifactType, parentId, feedback = '', model = null, projectId, existingContent = null) {
     return apiFetch('/api/generate_artifact', {
         method: 'POST',
@@ -64,7 +63,6 @@ async function generateArtifact(artifactType, parentId, feedback = '', model = n
     });
 }
 
-// Сохранение пакета (общий для всех типов)
 async function saveArtifactPackage(projectId, parentId, artifactType, content) {
     return apiFetch('/api/save_artifact_package', {
         method: 'POST',

@@ -128,6 +128,14 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 project_id=req.project_id,
                 existing_analysis=req.existing_content
             )
+        elif req.artifact_type == "FunctionalRequirementPackage":
+            result = await orch.generate_functional_requirements(
+                analysis_id=req.parent_id,
+                user_feedback=req.feedback,
+                model_id=req.model,
+                project_id=req.project_id,
+                existing_requirements=req.existing_content
+            )
         else:
             return JSONResponse(content={"error": "Unsupported artifact type"}, status_code=400)
 

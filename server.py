@@ -99,7 +99,6 @@ async def create_artifact(artifact: ArtifactCreate):
 
 @app.get("/api/latest_artifact")
 async def latest_artifact(parent_id: str, type: str):
-    """Возвращает последний артефакт указанного типа с заданным parent_id."""
     pkg = await get_last_package(parent_id, type)
     if pkg:
         return JSONResponse(content={
@@ -112,7 +111,6 @@ async def latest_artifact(parent_id: str, type: str):
 
 @app.post("/api/generate_artifact")
 async def generate_artifact_endpoint(req: GenerateArtifactRequest):
-    """Универсальный эндпоинт для генерации артефактов."""
     try:
         if req.artifact_type == "BusinessRequirementPackage":
             result = await orch.generate_business_requirements(
@@ -130,14 +128,6 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 project_id=req.project_id,
                 existing_analysis=req.existing_content
             )
-        elif req.artifact_type == "FunctionalRequirementPackage":
-            result = await orch.generate_functional_requirements(
-                parent_id=req.parent_id,
-                user_feedback=req.feedback,
-                model_id=req.model,
-                project_id=req.project_id,
-                existing_requirements=req.existing_content
-            )
         else:
             return JSONResponse(content={"error": "Unsupported artifact type"}, status_code=400)
 
@@ -148,7 +138,6 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
 
 @app.post("/api/save_artifact_package")
 async def save_artifact_package(req: SavePackageRequest):
-    """Сохраняет пакет (список или словарь) как артефакт указанного типа."""
     try:
         last_pkg = await get_last_package(req.parent_id, req.artifact_type)
         if last_pkg:
@@ -162,32 +151,16 @@ async def save_artifact_package(req: SavePackageRequest):
             version = "1"
             previous_versions = []
 
-        if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"]:
-            # Для пакетов требований
-            if isinstance(req.content, list):
-                for i, r in enumerate(req.content):
-                    if 'id' not in r:
-                        r['id'] = f"req-{i+1:03d}"
-            package_content = {
-                "requirements": req.content,
-                "generated_from": req.parent_id,
-                "model": None,
-                "version": version,
-                "previous_versions": previous_versions
-            }
-        else:
-            # Для анализа
-            package_content = {
-                "analysis": req.content,
-                "generated_from": req.parent_id,
-                "model": None,
-                "version": version,
-                "previous_versions": previous_versions
-            }
+        # Для пакетов требований добавляем локальные ID, если нужно
+        content_to_save = req.content
+        if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"] and isinstance(content_to_save, list):
+            for i, r in enumerate(content_to_save):
+                if 'id' not in r:
+                    r['id'] = f"req-{i+1:03d}"
 
         artifact_id = await save_artifact(
             artifact_type=req.artifact_type,
-            content=package_content,
+            content=content_to_save,
             owner="user",
             status="DRAFT",
             project_id=req.project_id,

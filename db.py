@@ -114,10 +114,8 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) ->
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
-            # content уже должен быть десериализован, но убедимся
             if isinstance(art['content'], str):
                 art['content'] = json.loads(art['content'])
-            # Для отображения в списке добавим краткое содержание
             content = art['content']
             if isinstance(content, dict):
                 art['summary'] = content.get('text', '')[:100] if 'text' in content else json.dumps(content)[:100]

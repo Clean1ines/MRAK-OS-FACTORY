@@ -92,3 +92,22 @@ window.modals = {
     closeModal,
     openRequirementsModal,
 };
+
+// ===== ДИАГНОСТИКА MODALS =====
+console.log('[MODALS] файл загружен, currentModal =', typeof currentModal !== 'undefined' ? currentModal : 'undefined');
+
+const originalCloseModal = window.modals?.closeModal;
+if (originalCloseModal) {
+    window.modals.closeModal = function() {
+        console.log('[MODALS] closeModal called');
+        originalCloseModal();
+    };
+}
+
+const originalOpenRequirementsModal = window.modals?.openRequirementsModal;
+if (originalOpenRequirementsModal) {
+    window.modals.openRequirementsModal = function(artifactType, content, onSave, onAddMore, onCancel) {
+        console.log('[MODALS] openRequirementsModal', { artifactType, contentSummary: typeof content });
+        originalOpenRequirementsModal(artifactType, content, onSave, onAddMore, onCancel);
+    };
+}

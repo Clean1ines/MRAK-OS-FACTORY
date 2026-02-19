@@ -39,9 +39,9 @@ class MrakOrchestrator:
         self.type_to_mode = {
             "BusinessIdea": "14_PRODUCT_COUNCIL",
             "ProductCouncilAnalysis": None,
-            "BusinessRequirement": "15_BUSINESS_REQ_GEN",
+            "BusinessRequirementPackage": "15_BUSINESS_REQ_GEN",
             "ReqEngineeringAnalysis": "16_REQ_ENG_COUNCIL",
-            "FunctionalRequirement": None,
+            "FunctionalRequirementPackage": None,
             "CodeArtifact": "10_FULL_CODE_GEN",
         }
 
@@ -71,12 +71,20 @@ class MrakOrchestrator:
             artifact_type, user_input, parent_artifact, model_id, project_id
         )
 
-    async def generate_business_requirements(self, analysis_id: str,
-                                              user_feedback: str = "",
-                                              model_id: Optional[str] = None,
-                                              project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def generate_business_requirements(
+        self,
+        analysis_id: str,
+        user_feedback: str = "",
+        model_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        existing_requirements: Optional[List[Dict]] = None   # добавлен параметр
+    ) -> List[Dict[str, Any]]:
         return await self.artifact_generator.generate_business_requirements(
-            analysis_id, user_feedback, model_id, project_id
+            analysis_id=analysis_id,
+            user_feedback=user_feedback,
+            model_id=model_id,
+            project_id=project_id,
+            existing_requirements=existing_requirements
         )
 
     async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str, project_id: Optional[str] = None):

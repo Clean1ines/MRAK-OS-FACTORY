@@ -222,3 +222,19 @@ async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
         return None
     finally:
         await conn.close()
+
+async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict[str, Any]]:
+    """Возвращает последний артефакт указанного типа с заданным parent_id (по убыванию version)."""
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        row = await conn.fetchrow('''
+            SELECT * FROM artifacts 
+            WHERE parent_id = $1 AND type = $2
+            ORDER BY version DESC
+            LIMIT 1
+        ''', parent_id, artifact_type)
+        if row:
+            return dict(row)
+        return None
+    finally:
+        await conn.close()

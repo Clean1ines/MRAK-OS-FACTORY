@@ -5,8 +5,10 @@ from orchestrator import MrakOrchestrator
 import logging
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from db import init_db, get_projects, create_project, get_artifacts, save_artifact, get_artifact
+from db import init_db, get_projects, create_project, get_artifacts, save_artifact, get_artifact, get_last_package
 import json
+import asyncpg
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
@@ -31,27 +33,13 @@ class BusinessReqGenRequest(BaseModel):
     feedback: str = ""
     model: Optional[str] = None
     project_id: str
-    existing_requirements: Optional[List[Dict]] = None  # для догенерации без сохранения пакета
-    existing_package_id: Optional[str] = None           # альтернативно, если пакет уже сохранён
+    existing_requirements: Optional[List[Dict]] = None
+    existing_package_id: Optional[str] = None
 
 class SaveRequirementsRequest(BaseModel):
     project_id: str
     parent_id: str
     requirements: List[Dict[str, Any]]
-
-async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict]:
-    """Возвращает последний пакет требований по родителю."""
-    conn = await asyncpg.connect(os.getenv("DATABASE_URL"))
-    try:
-        row = await conn.fetchrow('''
-            SELECT * FROM artifacts 
-            WHERE parent_id = $1 AND type = $2
-            ORDER BY version DESC
-            LIMIT 1
-        ''', parent_id, artifact_type)
-        return dict(row) if row else None
-    finally:
-        await conn.close()
 
 @app.on_event("startup")
 async def startup_event():
@@ -110,10 +98,6 @@ async def create_artifact(artifact: ArtifactCreate):
 
 @app.post("/api/generate_business_requirements")
 async def generate_business_requirements(req: BusinessReqGenRequest):
-    """
-    Генерирует бизнес-требования. Если передан existing_package_id, загружает требования оттуда.
-    Если передан existing_requirements, использует их.
-    """
     try:
         existing = None
         if req.existing_package_id:
@@ -137,20 +121,14 @@ async def generate_business_requirements(req: BusinessReqGenRequest):
 
 @app.post("/api/save_business_requirements")
 async def save_business_requirements(req: SaveRequirementsRequest):
-    """
-    Сохраняет список требований как один артефакт-пакет BusinessRequirementPackage.
-    Добавляет локальные ID, версионирование и ссылки на предыдущие версии.
-    """
     try:
-        # Находим последний пакет с таким родителем
         last_pkg = await get_last_package(req.parent_id, "BusinessRequirementPackage")
         version = (last_pkg['version'] + 1) if last_pkg else 1
         previous_versions = [last_pkg['id']] if last_pkg else []
 
-        # Добавляем локальные ID каждому требованию (если ещё нет)
         for i, r in enumerate(req.requirements):
             if 'id' not in r:
-                r['id'] = f"req-{i+1:03d}"  # или можно использовать uuid
+                r['id'] = f"req-{i+1:03d}"
 
         package_content = {
             "requirements": req.requirements,
@@ -171,6 +149,18 @@ async def save_business_requirements(req: SaveRequirementsRequest):
     except Exception as e:
         logger.error(f"Error saving requirements: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.get("/api/latest_requirement_package")
+async def latest_requirement_package(parent_id: str):
+    pkg = await get_last_package(parent_id, "BusinessRequirementPackage")
+    if pkg:
+        return JSONResponse(content={
+            "exists": True,
+            "package_id": pkg['id'],
+            "requirements": pkg['content'].get('requirements', [])
+        })
+    else:
+        return JSONResponse(content={"exists": False})
 
 @app.get("/api/models")
 async def get_models():

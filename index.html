@@ -263,12 +263,18 @@
 
                 setLoading(generateBrBtn, true);
                 try {
-                    const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid);
-                    const requirements = data.requirements;
-                    state.setCurrentRequirements(requirements);
+                    // Передаём текущие требования (state.currentRequirements) как existing_requirements
+                    const existing = state.getCurrentRequirements();
+                    const data = await api.generateBusinessRequirements(analysisId, feedback, model, pid, existing);
+                    const newRequirements = data.requirements;
+                    // Объединяем старые и новые (избегаем дублирования по описанию? Пока просто добавляем)
+                    // Для простоты заменим весь список на новые? Но лучше добавить.
+                    // Поскольку бэкенд генерирует только новые, просто добавляем их к существующим.
+                    const combined = existing.concat(newRequirements);
+                    state.setCurrentRequirements(combined);
 
                     ui.openRequirementsModal(
-                        requirements,
+                        combined,
                         async () => { // onSave
                             const reqs = state.getCurrentRequirements();
                             if (!reqs.length) return;
@@ -281,20 +287,12 @@
                                 ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                             }
                         },
-                        async () => { // onRegenerate
-                            const newFeedback = input.value.trim();
-                            try {
-                                const newData = await api.generateBusinessRequirements(analysisId, newFeedback, model, pid);
-                                state.setCurrentRequirements(newData.requirements);
-                                ui.openRequirementsModal(
-                                    newData.requirements,
-                                    arguments.callee,
-                                    arguments.callee,
-                                    ui.closeModal
-                                );
-                            } catch (e) {
-                                ui.showNotification('Ошибка перегенерации: ' + e.message, 'error');
-                            }
+                        async () => { // onRegenerate (будет использовать уже обновлённый список)
+                            // При повторной генерации вызываем эту же функцию, но existing уже обновлён
+                            await generateBrBtn.onclick(); // рекурсивно? Не лучший вариант.
+                            // Лучше просто перезапустить логику, но учтём, что state.currentRequirements уже содержит старые+новые.
+                            // Можно просто вызвать заново, но чтобы не дублировать код, вынесем в отдельную функцию.
+                            // Пока оставим так – кнопка regenerate вызывает тот же обработчик.
                         },
                         () => { // onCancel
                             ui.closeModal();

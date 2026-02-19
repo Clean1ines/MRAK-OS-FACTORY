@@ -31,11 +31,27 @@ class BusinessReqGenRequest(BaseModel):
     feedback: str = ""
     model: Optional[str] = None
     project_id: str
+    existing_requirements: Optional[List[Dict]] = None  # для догенерации без сохранения пакета
+    existing_package_id: Optional[str] = None           # альтернативно, если пакет уже сохранён
 
 class SaveRequirementsRequest(BaseModel):
     project_id: str
     parent_id: str
     requirements: List[Dict[str, Any]]
+
+async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict]:
+    """Возвращает последний пакет требований по родителю."""
+    conn = await asyncpg.connect(os.getenv("DATABASE_URL"))
+    try:
+        row = await conn.fetchrow('''
+            SELECT * FROM artifacts 
+            WHERE parent_id = $1 AND type = $2
+            ORDER BY version DESC
+            LIMIT 1
+        ''', parent_id, artifact_type)
+        return dict(row) if row else None
+    finally:
+        await conn.close()
 
 @app.on_event("startup")
 async def startup_event():
@@ -95,14 +111,24 @@ async def create_artifact(artifact: ArtifactCreate):
 @app.post("/api/generate_business_requirements")
 async def generate_business_requirements(req: BusinessReqGenRequest):
     """
-    Генерирует бизнес-требования и возвращает их (без сохранения).
+    Генерирует бизнес-требования. Если передан existing_package_id, загружает требования оттуда.
+    Если передан existing_requirements, использует их.
     """
     try:
+        existing = None
+        if req.existing_package_id:
+            pkg = await get_artifact(req.existing_package_id)
+            if pkg and 'requirements' in pkg['content']:
+                existing = pkg['content']['requirements']
+        elif req.existing_requirements:
+            existing = req.existing_requirements
+
         requirements = await orch.generate_business_requirements(
             analysis_id=req.analysis_id,
             user_feedback=req.feedback,
             model_id=req.model,
-            project_id=req.project_id
+            project_id=req.project_id,
+            existing_requirements=existing
         )
         return JSONResponse(content={"requirements": requirements})
     except Exception as e:
@@ -113,13 +139,25 @@ async def generate_business_requirements(req: BusinessReqGenRequest):
 async def save_business_requirements(req: SaveRequirementsRequest):
     """
     Сохраняет список требований как один артефакт-пакет BusinessRequirementPackage.
+    Добавляет локальные ID, версионирование и ссылки на предыдущие версии.
     """
     try:
-        # Формируем содержимое пакета
+        # Находим последний пакет с таким родителем
+        last_pkg = await get_last_package(req.parent_id, "BusinessRequirementPackage")
+        version = (last_pkg['version'] + 1) if last_pkg else 1
+        previous_versions = [last_pkg['id']] if last_pkg else []
+
+        # Добавляем локальные ID каждому требованию (если ещё нет)
+        for i, r in enumerate(req.requirements):
+            if 'id' not in r:
+                r['id'] = f"req-{i+1:03d}"  # или можно использовать uuid
+
         package_content = {
             "requirements": req.requirements,
             "generated_from": req.parent_id,
-            "model": None  # можно сохранять модель, если нужно
+            "model": None,
+            "version": version,
+            "previous_versions": previous_versions
         }
         artifact_id = await save_artifact(
             artifact_type="BusinessRequirementPackage",

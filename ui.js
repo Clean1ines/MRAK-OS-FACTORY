@@ -23,7 +23,6 @@ function renderParentSelect(artifacts, parentData, currentParentId) {
         opt.innerText = `${a.type} (${a.created_at}) : ${a.summary || ''}`;
         select.appendChild(opt);
     });
-    // восстанавливаем выбранное значение
     if (currentParentId && parentData[currentParentId]) {
         select.value = currentParentId;
     }
@@ -42,7 +41,6 @@ function updateGenerateBrButton(parentData, selectedId) {
     }
 }
 
-// Уведомления
 function showNotification(message, type = 'info') {
     let container = document.getElementById('notification-container');
     if (!container) {
@@ -66,7 +64,6 @@ function showNotification(message, type = 'info') {
     setTimeout(() => notification.remove(), 3000);
 }
 
-// Модальное окно требований
 let currentModal = null;
 
 function closeModal() {

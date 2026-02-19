@@ -195,7 +195,7 @@
                 try {
                     const artifacts = await api.fetchArtifacts(pid);
                     state.setArtifacts(artifacts);
-                    ui.renderParentSelect(artifacts, state.getParentData(), state.getCurrentParentId());
+                    ui.renderParentSelect(artifacts, state.getParentData(), state.getCurrentParentId(), artifactTypeSelect.value);
                 } catch (e) {
                     ui.showNotification('Ошибка загрузки артефактов: ' + e.message, 'error');
                 } finally {
@@ -218,14 +218,16 @@
             parentSelect.addEventListener('change', function() {
                 const selectedId = this.value;
                 state.setCurrentParentId(selectedId);
-                ui.updateGenerateButton(state.getParentData(), selectedId);
+                ui.updateGenerateButton(state.getParentData(), selectedId, artifactTypeSelect.value);
             });
 
             artifactTypeSelect.addEventListener('change', function() {
                 const selectedParentId = parentSelect.value;
                 if (selectedParentId) {
-                    ui.updateGenerateButton(state.getParentData(), selectedParentId);
+                    ui.updateGenerateButton(state.getParentData(), selectedParentId, artifactTypeSelect.value);
                 }
+                // При смене типа нужно перерисовать список родителей с учётом нового типа
+                loadParents();
             });
 
             saveArtifactBtn.onclick = async () => {
@@ -295,7 +297,6 @@
                             const genData = await api.generateArtifact(childType, parentId, feedback, model, pid, null);
                             // Сервер возвращает поле result (массив или объект)
                             contentToShow = genData.result;
-                            // Важно! Устанавливаем currentArtifact для последующего сохранения
                             state.setCurrentArtifact({ content: contentToShow });
                         }
                     }
@@ -307,12 +308,16 @@
                         }
                         try {
                             const saved = await api.saveArtifactPackage(pid, parentId, childType, currentContent);
+                            if (saved.duplicate) {
+                                ui.showNotification(`Пакет не изменился, ID: ${saved.id}`, 'info');
+                            } else {
+                                ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
+                            }
                             // Обновляем кеш
                             state.setArtifactCache(parentId, childType, {
                                 id: saved.id,
                                 content: currentContent
                             });
-                            ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
                             ui.closeModal();
                             await loadParents();
                         } catch (e) {
@@ -328,12 +333,10 @@
                             const newContent = newData.result;
                             let combined;
                             if (childType === 'BusinessRequirementPackage' || childType === 'FunctionalRequirementPackage') {
-                                // Для требований объединяем массивы
                                 const currentArray = Array.isArray(existingContent) ? existingContent : [];
                                 const newArray = Array.isArray(newContent) ? newContent : [];
                                 combined = currentArray.concat(newArray);
                             } else {
-                                // Для анализа объединяем объекты (глубокое слияние) – пока просто заменяем
                                 combined = newContent;
                             }
                             state.setCurrentArtifact({ content: combined });

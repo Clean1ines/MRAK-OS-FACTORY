@@ -13,27 +13,42 @@ function renderProjectSelect(projects, currentId) {
     });
 }
 
-function renderParentSelect(artifacts, parentData, currentParentId) {
+function renderParentSelect(artifacts, parentData, currentParentId, childType) {
     const select = document.getElementById('parent-select');
     if (!select) return;
+    // Получаем разрешённые родительские типы для данного дочернего типа
+    const allowedTypes = state.getAllowedParentTypes(childType);
+    // Фильтруем артефакты по разрешённым типам
+    let filtered = artifacts.filter(a => allowedTypes.includes(a.type));
+    // Группируем по типу и оставляем только последнюю версию (по version или created_at)
+    const latestByType = {};
+    filtered.forEach(a => {
+        const type = a.type;
+        // Версию нужно сравнивать как числа (если возможно)
+        const verNum = parseInt(a.version) || 0;
+        if (!latestByType[type] || verNum > (parseInt(latestByType[type].version) || 0)) {
+            latestByType[type] = a;
+        }
+    });
+    const latestArtifacts = Object.values(latestByType);
+
     select.innerHTML = '<option value="">-- нет --</option>';
-    artifacts.forEach(a => {
+    latestArtifacts.forEach(a => {
         const opt = document.createElement('option');
         opt.value = a.id;
-        opt.innerText = `${a.type} (${a.created_at}) : ${a.summary || ''}`;
+        opt.innerText = `${a.type} (v${a.version}) : ${a.summary || ''}`;
         select.appendChild(opt);
     });
-    if (currentParentId && parentData[currentParentId]) {
-        select.value = currentParentId;
+    if (currentParentId && parentData[currentParentId] && allowedTypes.includes(parentData[currentParentId])) {
+        const exists = latestArtifacts.some(a => a.id === currentParentId);
+        if (exists) select.value = currentParentId;
     }
-    updateGenerateButton(parentData, select.value);
+    updateGenerateButton(parentData, select.value, childType);
 }
 
-function updateGenerateButton(parentData, selectedId) {
+function updateGenerateButton(parentData, selectedId, childType) {
     const btn = document.getElementById('generate-artifact-btn');
-    const artifactTypeSelect = document.getElementById('artifact-type-select');
-    if (!btn || !artifactTypeSelect) return;
-    const childType = artifactTypeSelect.value;
+    if (!btn) return;
     const parentType = parentData[selectedId];
     if (parentType && state.canGenerate(childType, parentType)) {
         btn.style.display = 'inline-block';
@@ -76,13 +91,11 @@ function closeModal() {
     }
 }
 
-// Утилита для авто-расширения textarea
 function autoResize(textarea) {
     textarea.style.height = 'auto';
     textarea.style.height = (textarea.scrollHeight) + 'px';
 }
 
-// Функция для рендеринга требований (для BusinessRequirementPackage, FunctionalRequirementPackage)
 function renderRequirementsInContainer(container, requirements) {
     console.log('renderRequirementsInContainer called with:', requirements);
     if (requirements && requirements.requirements && Array.isArray(requirements.requirements)) {
@@ -157,7 +170,6 @@ function renderRequirementsInContainer(container, requirements) {
                     }
                 };
                 textarea.addEventListener('input', () => autoResize(textarea));
-                // начальный авторасайз
                 setTimeout(() => autoResize(textarea), 0);
                 card.appendChild(textarea);
             }
@@ -167,7 +179,6 @@ function renderRequirementsInContainer(container, requirements) {
     });
 }
 
-// Функция для рендеринга анализа инженерии требований
 function renderReqEngineeringAnalysis(container, analysis) {
     console.log('renderReqEngineeringAnalysis called with:', analysis);
     container.innerHTML = '';
@@ -263,7 +274,7 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     modal.style.zIndex = '1000';
     modal.style.alignItems = 'center';
     modal.style.justifyContent = 'center';
-    modal.style.padding = '1rem'; // отступы от краёв
+    modal.style.padding = '1rem';
 
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';

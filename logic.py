@@ -3,6 +3,7 @@ import os
 import re
 import httpx
 import asyncio
+import json
 from groq import Groq
 from typing import Optional, Dict, Any, List
 
@@ -35,18 +36,18 @@ class MrakOrchestrator:
             "12_SELF_ANALYSIS_FACTORY": "GH_URL_SELF_ANALYSIS_FACTORY",
             "13_ARTIFACT_OUTPUT": "GH_URL_MPROMPT",
             "14_PRODUCT_COUNCIL": "GH_URL_PRODUCT_COUNCIL",
-            "15_BUSINESS_REQ_GEN": "GH_URL_BUSINESS_REQ_GEN",   # Новый режим
-            "16_REQ_ENG_COUNCIL": "GH_URL_REQ_ENG_COUNCIL",     # Новый режим
+            "15_BUSINESS_REQ_GEN": "GH_URL_BUSINESS_REQ_GEN",
+            "16_REQ_ENG_COUNCIL": "GH_URL_REQ_ENG_COUNCIL",
         }
 
         # Маппинг типа артефакта на режим промпта для генерации
         self.type_to_mode = {
-            "BusinessIdea": "14_PRODUCT_COUNCIL",          # идея -> совет титанов
-            "ProductCouncilAnalysis": None,                 # анализ не генерируется (это результат)
-            "BusinessRequirement": "15_BUSINESS_REQ_GEN",   # анализ -> бизнес-требования
-            "ReqEngineeringAnalysis": "16_REQ_ENG_COUNCIL", # бизнес-требования -> анализ инженерии
-            "FunctionalRequirement": None,                  # может генерироваться отдельно
-            "CodeArtifact": "10_FULL_CODE_GEN",             # требования -> код
+            "BusinessIdea": "14_PRODUCT_COUNCIL",
+            "ProductCouncilAnalysis": None,
+            "BusinessRequirement": "15_BUSINESS_REQ_GEN",
+            "ReqEngineeringAnalysis": "16_REQ_ENG_COUNCIL",
+            "FunctionalRequirement": None,
+            "CodeArtifact": "10_FULL_CODE_GEN",
         }
 
     def get_active_models(self):
@@ -116,27 +117,19 @@ class MrakOrchestrator:
         model_id: Optional[str] = None,
         project_id: Optional[str] = None
     ) -> Optional[str]:
-        """
-        Генерирует артефакт указанного типа на основе входных данных и родительского артефакта.
-        Возвращает ID созданного артефакта или None.
-        """
         mode = self.type_to_mode.get(artifact_type)
         if not mode:
             raise ValueError(f"No generation mode defined for artifact type {artifact_type}")
 
-        # Получаем системный промпт
         sys_prompt = await self.get_system_prompt(mode)
         if sys_prompt.startswith("Error") or sys_prompt.startswith("System Error"):
             raise Exception(f"Failed to get system prompt: {sys_prompt}")
 
-        # Формируем входной текст для LLM
         if parent_artifact:
-            # Если есть родитель, передаём его содержимое как контекст
             prompt = f"Parent artifact ({parent_artifact['type']}):\n{json.dumps(parent_artifact['content'])}\n\nUser input:\n{user_input}"
         else:
             prompt = user_input
 
-        # Вызываем LLM и получаем полный ответ (не потоковый)
         try:
             response = self.client.chat.completions.create(
                 model=model_id or "llama-3.3-70b-versatile",
@@ -150,16 +143,11 @@ class MrakOrchestrator:
         except Exception as e:
             raise Exception(f"LLM call failed: {e}")
 
-        # Пытаемся распарсить JSON, если ожидается структурированный ответ
         try:
-            # Пробуем найти JSON в ответе (если промпт возвращает JSON)
-            # В простом случае считаем, что результат — это и есть JSON
             result_data = json.loads(result_text)
         except json.JSONDecodeError:
-            # Если не JSON, сохраняем как текст
             result_data = {"text": result_text}
 
-        # Сохраняем результат как новый артефакт
         artifact_id = await db.save_artifact(
             artifact_type=artifact_type,
             content=result_data,
@@ -170,8 +158,85 @@ class MrakOrchestrator:
         )
         return artifact_id
 
+    async def generate_business_requirements(
+        self,
+        analysis_id: str,
+        user_feedback: str = "",
+        model_id: Optional[str] = None,
+        project_id: Optional[str] = None
+    ) -> List[str]:
+        """
+        Генерирует бизнес-требования на основе анализа продуктового совета.
+        Возвращает список ID созданных артефактов.
+        """
+        analysis = await db.get_artifact(analysis_id)
+        if not analysis:
+            raise ValueError("Analysis not found")
+        if analysis['type'] != 'ProductCouncilAnalysis':
+            raise ValueError("Artifact is not a ProductCouncilAnalysis")
+
+        idea = None
+        if analysis.get('parent_id'):
+            idea = await db.get_artifact(analysis['parent_id'])
+
+        prompt_parts = []
+        if idea:
+            prompt_parts.append(f"RAW_IDEA:\n{json.dumps(idea['content'])}")
+        else:
+            prompt_parts.append("RAW_IDEA:\n(not provided)")
+
+        prompt_parts.append(f"PRODUCT_COUNCIL_ANALYSIS:\n{json.dumps(analysis['content'])}")
+
+        if user_feedback:
+            prompt_parts.append(f"USER_FEEDBACK:\n{user_feedback}")
+
+        full_input = "\n\n".join(prompt_parts)
+
+        mode = "15_BUSINESS_REQ_GEN"
+        sys_prompt = await self.get_system_prompt(mode)
+        if sys_prompt.startswith("Error") or sys_prompt.startswith("System Error"):
+            raise Exception(f"Failed to get system prompt: {sys_prompt}")
+
+        try:
+            response = self.client.chat.completions.create(
+                model=model_id or "llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": self._pii_filter(full_input)},
+                ],
+                temperature=0.6,
+            )
+            result_text = response.choices[0].message.content
+        except Exception as e:
+            raise Exception(f"LLM call failed: {e}")
+
+        requirements = []
+        try:
+            requirements = json.loads(result_text)
+            if not isinstance(requirements, list):
+                requirements = [requirements]
+        except json.JSONDecodeError:
+            json_match = re.search(r'\[\s*\{.*\}\s*\]', result_text, re.DOTALL)
+            if json_match:
+                requirements = json.loads(json_match.group())
+            else:
+                raise ValueError(f"Failed to parse JSON from response: {result_text[:200]}")
+
+        ids = []
+        for req in requirements:
+            artifact_id = await db.save_artifact(
+                artifact_type="BusinessRequirement",
+                content=req,
+                owner="system",
+                status="GENERATED",
+                project_id=project_id,
+                parent_id=analysis_id
+            )
+            ids.append(artifact_id)
+
+        return ids
+
     async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str, project_id: Optional[str] = None):
-        """(без изменений)"""
         clean_input = self._pii_filter(user_input)
         full_response = ""
         try:
@@ -224,90 +289,3 @@ class MrakOrchestrator:
                 yield "🔴 **RATE_LIMIT**: Подождите, лимиты исчерпаны."
             else:
                 yield f"🔴 **GROQ_API_ERROR**: {str(e)}"
-
-    async def generate_business_requirements(
-        self,
-        analysis_id: str,
-        user_feedback: str = "",
-        model_id: Optional[str] = None,
-        project_id: Optional[str] = None
-    ) -> List[str]:
-        """
-        Генерирует бизнес-требования на основе анализа продуктового совета.
-        Возвращает список ID созданных артефактов.
-        """
-        # Получаем анализ
-        analysis = await db.get_artifact(analysis_id)
-        if not analysis:
-            raise ValueError("Analysis not found")
-        if analysis['type'] != 'ProductCouncilAnalysis':
-            raise ValueError("Artifact is not a ProductCouncilAnalysis")
-
-        # Получаем исходную идею (родитель анализа)
-        idea = None
-        if analysis.get('parent_id'):
-            idea = await db.get_artifact(analysis['parent_id'])
-
-        # Формируем входной текст для промпта
-        prompt_parts = []
-        if idea:
-            prompt_parts.append(f"RAW_IDEA:\n{json.dumps(idea['content'])}")
-        else:
-            prompt_parts.append("RAW_IDEA:\n(not provided)")
-
-        prompt_parts.append(f"PRODUCT_COUNCIL_ANALYSIS:\n{json.dumps(analysis['content'])}")
-
-        if user_feedback:
-            prompt_parts.append(f"USER_FEEDBACK:\n{user_feedback}")
-
-        full_input = "\n\n".join(prompt_parts)
-
-        # Получаем системный промпт для генерации бизнес-требований
-        mode = "15_BUSINESS_REQ_GEN"
-        sys_prompt = await self.get_system_prompt(mode)
-        if sys_prompt.startswith("Error") or sys_prompt.startswith("System Error"):
-            raise Exception(f"Failed to get system prompt: {sys_prompt}")
-
-        # Вызываем LLM
-        try:
-            response = self.client.chat.completions.create(
-                model=model_id or "llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": self._pii_filter(full_input)},
-                ],
-                temperature=0.6,
-            )
-            result_text = response.choices[0].message.content
-        except Exception as e:
-            raise Exception(f"LLM call failed: {e}")
-
-        # Парсим JSON (ожидаем массив объектов)
-        import re
-        requirements = []
-        try:
-            requirements = json.loads(result_text)
-            if not isinstance(requirements, list):
-                requirements = [requirements]  # если один объект
-        except json.JSONDecodeError:
-            # Пытаемся извлечь JSON из текста
-            json_match = re.search(r'\[\s*\{.*\}\s*\]', result_text, re.DOTALL)
-            if json_match:
-                requirements = json.loads(json_match.group())
-            else:
-                raise ValueError(f"Failed to parse JSON from response: {result_text[:200]}")
-
-        # Сохраняем каждое требование как отдельный артефакт
-        ids = []
-        for req in requirements:
-            artifact_id = await db.save_artifact(
-                artifact_type="BusinessRequirement",
-                content=req,
-                owner="system",
-                status="GENERATED",
-                project_id=project_id,
-                parent_id=analysis_id
-            )
-            ids.append(artifact_id)
-
-        return ids

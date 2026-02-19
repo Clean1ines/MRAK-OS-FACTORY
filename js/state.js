@@ -2,34 +2,30 @@
 window.mrakState = {
     currentProjectId: null,
     projects: [],
-    models: [],
+    models: ["llama3-70b-8192"], // Дефолтная модель, чтобы не было 'loading...'
     artifacts: [],
-    parentData: {}, // Мапа ID -> Type
+    parentData: {},
     currentArtifact: null,
     artifactCache: {},
 
-    // Проекты
     setProjects(list) { this.projects = list; },
     getProjects() { return this.projects; },
     
-    // Модели
-    setModels(list) { this.models = list; },
+    setModels(list) { 
+        if (list && list.length > 0) this.models = list; 
+    },
     getModels() { return this.models; },
 
-    // Текущий проект
     getCurrentProjectId() { return this.currentProjectId; },
     setCurrentProjectId(id) { this.currentProjectId = id; },
     
-    // Артефакты и родители
     setArtifacts(list) { 
         this.artifacts = list; 
         this.parentData = {};
         list.forEach(a => { this.parentData[a.id] = a.type; });
     },
-    getArtifacts() { return this.artifacts; },
     getParentData() { return this.parentData; },
     
-    // Метод, который просил projectHandlers.js
     getCurrentParentId() {
         const select = document.getElementById('parent-select');
         return select ? select.value : null;
@@ -46,7 +42,6 @@ window.mrakState = {
         return this.artifactCache[`${parentId}_${type}`];
     },
 
-    // ПРАВИЛА: Что можно генерировать
     canGenerate(childType, parentType) {
         const rules = {
             'BusinessRequirementPackage': ['ProductCouncilAnalysis'],
@@ -65,6 +60,4 @@ window.mrakState = {
         return rules[childType] || [];
     }
 };
-
-// Экспортируем для глобального доступа
 window.state = window.mrakState;

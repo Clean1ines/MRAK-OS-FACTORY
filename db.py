@@ -62,7 +62,7 @@ async def init_db():
         await conn.close()
 
 async def get_projects() -> List[Dict[str, Any]]:
-    """Возвращает список всех проектов, отсортированных по дате создания (новые сверху)."""
+    """Возвращает список всех проектов, преобразуя UUID в строки."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         rows = await conn.fetch('''
@@ -70,12 +70,19 @@ async def get_projects() -> List[Dict[str, Any]]:
             FROM projects
             ORDER BY created_at DESC
         ''')
-        return [dict(r) for r in rows]
+        # Преобразуем UUID в строку для JSON-сериализации
+        projects = []
+        for row in rows:
+            proj = dict(row)
+            proj['id'] = str(proj['id'])
+            # created_at и updated_at уже являются datetime, они сериализуются нормально
+            projects.append(proj)
+        return projects
     finally:
         await conn.close()
 
 async def create_project(name: str, description: str = "") -> str:
-    """Создаёт новый проект и возвращает его ID."""
+    """Создаёт новый проект и возвращает его ID (строку)."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         project_id = str(uuid.uuid4())
@@ -88,11 +95,15 @@ async def create_project(name: str, description: str = "") -> str:
         await conn.close()
 
 async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
-    """Получает проект по ID."""
+    """Получает проект по ID. Возвращает словарь со строковым id."""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
         row = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
-        return dict(row) if row else None
+        if row:
+            proj = dict(row)
+            proj['id'] = str(proj['id'])
+            return proj
+        return None
     finally:
         await conn.close()
 

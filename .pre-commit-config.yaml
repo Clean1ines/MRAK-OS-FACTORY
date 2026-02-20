@@ -13,3 +13,10 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
+    -   id: backup-db
+        name: Backup database
+        entry: scripts/backup_precommit.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]

@@ -36,3 +36,29 @@ __pycache__/
 .git
 .gitignore
 README.md
+
+# Сгенерированные артефакты
+MRAK_*.json
+epic_details/
+docs/
+
+# Скрипты и файлы, не нужные в рантайме
+epic_detailer.py
+check_db.py
+generate_tree.py
+index_project.py
+init_db.sql
+keep_alive.py
+
+# Тесты и конфиги тестов
+tests/
+pytest.ini
+
+# Документация и прочее
+*.md
+LICENSE
+
+# Логи и установочные файлы
+*.log
+*.deb
+tree_output.txt

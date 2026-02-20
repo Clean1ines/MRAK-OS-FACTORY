@@ -27,3 +27,28 @@ generate_tree.py
 index_project.py
 init_db.sql
 backups/
+
+# Сгенерированные артефакты требований
+MRAK_*.json
+epic_details/
+docs/
+
+# Локальные конфиги и базы данных (уже есть backups/)
+*.db
+*.sqlite3
+
+# IDE (если используешь)
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+tree_output.txt
+smee.log
+epic_detailer.py
+# Логи и бинарные файлы установки
+*.log
+*.deb
+
+# Временные выводы
+tree_output.txt

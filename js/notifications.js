@@ -1,6 +1,8 @@
 // notifications.js - уведомления
+console.log('[NOTIFICATIONS] загрузка начата');
 
 function showNotification(message, type = 'info') {
+    console.log('[NOTIFICATIONS] showNotification', { message, type });
     let container = document.getElementById('notification-container');
     if (!container) {
         container = document.createElement('div');
@@ -24,24 +26,4 @@ function showNotification(message, type = 'info') {
 }
 
 window.notifications = { showNotification };
-
-// ===== ДИАГНОСТИКА NOTIFICATIONS =====
-console.log('[NOTIFICATIONS] файл загружен');
-
-const originalShowNotification = window.notifications?.showNotification;
-if (originalShowNotification) {
-    window.notifications.showNotification = function(message, type) {
-        console.log('[NOTIFICATIONS] showNotification', { message, type });
-        originalShowNotification(message, type);
-    };
-} else {
-    console.warn('[NOTIFICATIONS] original showNotification not found');
-}
-console.log('[NOTIFICATIONS] файл загружен');
-const originalShowNotification = window.notifications?.showNotification;
-if (originalShowNotification) {
-    window.notifications.showNotification = function(message, type) {
-        console.log('[NOTIFICATIONS] showNotification', { message, type });
-        originalShowNotification(message, type);
-    };
-}
+console.log('[NOTIFICATIONS] загрузка завершена');

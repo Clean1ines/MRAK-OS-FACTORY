@@ -1,6 +1,8 @@
-// toolbar.js - функции для создания тулбара сообщений
+// toolbar.js - тулбар сообщений
+console.log('[TOOLBAR] загрузка начата');
 
 window.createMessageToolbar = function(messageElement) {
+    console.log('[TOOLBAR] createMessageToolbar', { messageId: messageElement?.id });
     const toolbar = document.createElement("div");
     toolbar.className = "message-toolbar";
 
@@ -43,8 +45,8 @@ window.createMessageToolbar = function(messageElement) {
     regenerateBtn.onclick = async () => {
         const original = messageElement.dataset.originalPrompt;
         if (!original) return;
-        input.value = original;
-        input.style.height = "auto";
+        document.getElementById('input').value = original;
+        document.getElementById('input').style.height = "auto";
         await window.start();
     };
 
@@ -69,21 +71,4 @@ window.createMessageToolbar = function(messageElement) {
     return toolbar;
 };
 
-// ===== ДИАГНОСТИКА TOOLBAR =====
-console.log('[TOOLBAR] файл загружен');
-
-const originalCreateMessageToolbar = window.createMessageToolbar;
-if (originalCreateMessageToolbar) {
-    window.createMessageToolbar = function(messageElement) {
-        console.log('[TOOLBAR] createMessageToolbar', { messageId: messageElement?.id });
-        return originalCreateMessageToolbar(messageElement);
-    };
-}
-console.log('[TOOLBAR] файл загружен');
-const originalCreateMessageToolbar = window.createMessageToolbar;
-if (originalCreateMessageToolbar) {
-    window.createMessageToolbar = function(messageElement) {
-        console.log('[TOOLBAR] createMessageToolbar', { messageId: messageElement?.id });
-        return originalCreateMessageToolbar(messageElement);
-    };
-}
+console.log('[TOOLBAR] загрузка завершена');

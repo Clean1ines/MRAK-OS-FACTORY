@@ -1,150 +1,94 @@
-window.api = {
-    async fetchModels() {
-        try {
-            const r = await fetch('/api/models');
-            const data = await r.json();
-            console.log("DEBUG: Raw models from server:", data);
-            // Если Groq возвращает структуру {data: [...]}, берем data. Если просто массив - его.
-            const models = data.data || data;
-            return Array.isArray(models) ? models : [];
-        } catch (e) {
-            console.error("DEBUG: Fetch models failed:", e);
-            return [];
-        }
-    },
-    async fetchProjects() {
-        const r = await fetch('/api/projects');
-        return await r.json();
-    },
-    async fetchArtifacts(pid) {
-        const r = await fetch(`/api/projects/${pid}/artifacts`);
-        return await r.json();
-    },
-    async generateArtifact(type, parentId, feedback, model, projectId) {
-        const r = await fetch('/api/generate_artifact', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                artifact_type: type,
-                parent_id: parentId,
-                user_feedback: feedback,
-                model_name: model,
-                project_id: projectId
-            })
-        });
-        return await r.json();
+// api.js - слой работы с сервером
+console.log('[API] загрузка начата');
+
+async function apiFetch(url, options = {}) {
+    console.log('[API] apiFetch', url);
+    const res = await fetch(url, options);
+    if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.error || `HTTP error ${res.status}`);
     }
-};
+    return res.json();
+}
 
-// ===== ДИАГНОСТИКА =====
-const originalFetchArtifacts = fetchArtifacts;
-fetchArtifacts = async function(projectId, type) {
-    console.log('[API] fetchArtifacts called', { projectId, type });
-    try {
-        const result = await originalFetchArtifacts(projectId, type);
-        console.log('[API] fetchArtifacts response:', result);
-        return result;
-    } catch (e) {
-        console.error('[API] fetchArtifacts error:', e);
-        throw e;
-    }
-};
+// Проекты
+async function fetchProjects() {
+    console.log('[API] fetchProjects');
+    return apiFetch('/api/projects');
+}
 
-window.api.fetchArtifacts = fetchArtifacts;
+async function createProject(name, description = '') {
+    console.log('[API] createProject', { name, description });
+    return apiFetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description })
+    });
+}
 
-// ===== ДИАГНОСТИКА: ВСЕ ФУНКЦИИ =====
-const originalFetchProjects = fetchProjects;
-fetchProjects = async function() {
-    console.log('[API] fetchProjects START');
-    try {
-        const res = await originalFetchProjects();
-        console.log('[API] fetchProjects SUCCESS, count:', res.length);
-        return res;
-    } catch (e) {
-        console.error('[API] fetchProjects ERROR:', e);
-        throw e;
-    }
-};
+// Артефакты
+async function fetchArtifacts(projectId, type = null) {
+    console.log('[API] fetchArtifacts', { projectId, type });
+    const url = type ? `/api/projects/${projectId}/artifacts?type=${type}` : `/api/projects/${projectId}/artifacts`;
+    return apiFetch(url);
+}
 
-const originalCreateProject = createProject;
-createProject = async function(name, description) {
-    console.log('[API] createProject START', { name, description });
-    try {
-        const res = await originalCreateProject(name, description);
-        console.log('[API] createProject SUCCESS, id:', res.id);
-        return res;
-    } catch (e) {
-        console.error('[API] createProject ERROR:', e);
-        throw e;
-    }
-};
+async function saveArtifact(projectId, artifactType, content, parentId = null, generate = false, model = null) {
+    console.log('[API] saveArtifact', { projectId, artifactType, parentId, generate, model });
+    return apiFetch('/api/artifact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            project_id: projectId,
+            artifact_type: artifactType,
+            content: content,
+            parent_id: parentId,
+            generate: generate,
+            model: model
+        })
+    });
+}
 
-const originalSaveArtifact = saveArtifact;
-saveArtifact = async function(projectId, artifactType, content, parentId, generate, model) {
-    console.log('[API] saveArtifact START', { projectId, artifactType, parentId, generate, model });
-    try {
-        const res = await originalSaveArtifact(projectId, artifactType, content, parentId, generate, model);
-        console.log('[API] saveArtifact SUCCESS, id:', res.id);
-        return res;
-    } catch (e) {
-        console.error('[API] saveArtifact ERROR:', e);
-        throw e;
-    }
-};
+async function fetchLatestArtifact(parentId, artifactType) {
+    console.log('[API] fetchLatestArtifact', { parentId, artifactType });
+    return apiFetch(`/api/latest_artifact?parent_id=${encodeURIComponent(parentId)}&type=${encodeURIComponent(artifactType)}`);
+}
 
-const originalFetchLatestArtifact = fetchLatestArtifact;
-fetchLatestArtifact = async function(parentId, artifactType) {
-    console.log('[API] fetchLatestArtifact START', { parentId, artifactType });
-    try {
-        const res = await originalFetchLatestArtifact(parentId, artifactType);
-        console.log('[API] fetchLatestArtifact SUCCESS, exists:', res.exists);
-        return res;
-    } catch (e) {
-        console.error('[API] fetchLatestArtifact ERROR:', e);
-        throw e;
-    }
-};
+async function generateArtifact(artifactType, parentId, feedback = '', model = null, projectId, existingContent = null) {
+    console.log('[API] generateArtifact', { artifactType, parentId, feedback, model, projectId });
+    return apiFetch('/api/generate_artifact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            artifact_type: artifactType,
+            parent_id: parentId,
+            feedback: feedback,
+            model: model,
+            project_id: projectId,
+            existing_content: existingContent
+        })
+    });
+}
 
-const originalGenerateArtifact = generateArtifact;
-generateArtifact = async function(artifactType, parentId, feedback, model, projectId, existingContent) {
-    console.log('[API] generateArtifact START', { artifactType, parentId, feedback, model, projectId });
-    try {
-        const res = await originalGenerateArtifact(artifactType, parentId, feedback, model, projectId, existingContent);
-        console.log('[API] generateArtifact SUCCESS, result keys:', Object.keys(res));
-        return res;
-    } catch (e) {
-        console.error('[API] generateArtifact ERROR:', e);
-        throw e;
-    }
-};
+async function saveArtifactPackage(projectId, parentId, artifactType, content) {
+    console.log('[API] saveArtifactPackage', { projectId, parentId, artifactType, contentLength: Array.isArray(content) ? content.length : 'not array' });
+    return apiFetch('/api/save_artifact_package', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            project_id: projectId,
+            parent_id: parentId,
+            artifact_type: artifactType,
+            content: content
+        })
+    });
+}
 
-const originalSaveArtifactPackage = saveArtifactPackage;
-saveArtifactPackage = async function(projectId, parentId, artifactType, content) {
-    console.log('[API] saveArtifactPackage START', { projectId, parentId, artifactType, contentLength: Array.isArray(content) ? content.length : 'not array' });
-    try {
-        const res = await originalSaveArtifactPackage(projectId, parentId, artifactType, content);
-        console.log('[API] saveArtifactPackage SUCCESS, id:', res.id);
-        return res;
-    } catch (e) {
-        console.error('[API] saveArtifactPackage ERROR:', e);
-        throw e;
-    }
-};
+async function fetchModels() {
+    console.log('[API] fetchModels');
+    return apiFetch('/api/models');
+}
 
-const originalFetchModels = fetchModels;
-fetchModels = async function() {
-    console.log('[API] fetchModels START');
-    try {
-        const res = await originalFetchModels();
-        console.log('[API] fetchModels SUCCESS, count:', res.length);
-        return res;
-    } catch (e) {
-        console.error('[API] fetchModels ERROR:', e);
-        throw e;
-    }
-};
-
-// Переопределяем глобальный api
 window.api = {
     fetchProjects,
     createProject,
@@ -155,4 +99,5 @@ window.api = {
     saveArtifactPackage,
     fetchModels
 };
-console.log('[API] файл загружен');
+
+console.log('[API] загрузка завершена, window.api определён:', !!window.api);

@@ -1,8 +1,7 @@
-// projectHandlers.js - работа с проектами и загрузка моделей
+// projectHandlers.js - работа с проектами
+console.log('[HANDLERS] загрузка начата');
 
 (function() {
-    console.log('[HANDLERS] module start');
-
     const projectSelect = document.getElementById("project-select");
     const newProjectBtn = document.getElementById("new-project-btn");
     const refreshParentsBtn = document.getElementById("refresh-parents");
@@ -10,20 +9,15 @@
     const generateArtifactBtn = document.getElementById("generate-artifact-btn");
     const parentSelect = document.getElementById("parent-select");
 
-    console.log('[HANDLERS] elements found:', { 
-        projectSelect: !!projectSelect, 
-        newProjectBtn: !!newProjectBtn,
-        refreshParentsBtn: !!refreshParentsBtn,
-        artifactTypeSelect: !!artifactTypeSelect,
-        generateArtifactBtn: !!generateArtifactBtn,
-        parentSelect: !!parentSelect 
+    console.log('[HANDLERS] элементы найдены:', { 
+        projectSelect: !!projectSelect, newProjectBtn: !!newProjectBtn, refreshParentsBtn: !!refreshParentsBtn,
+        artifactTypeSelect: !!artifactTypeSelect, generateArtifactBtn: !!generateArtifactBtn, parentSelect: !!parentSelect 
     });
 
     window.loadProjects = async function() {
-        console.log('[HANDLERS] loadProjects called');
+        console.log('[HANDLERS] loadProjects');
         try {
             const projects = await api.fetchProjects();
-            console.log('[HANDLERS] projects fetched:', projects.length);
             state.setProjects(projects);
             ui.renderProjectSelect(projects, state.getCurrentProjectId());
         } catch (e) {
@@ -32,30 +26,22 @@
     };
 
     window.loadParents = async function() {
-        console.log('[HANDLERS] loadParents called');
+        console.log('[HANDLERS] loadParents');
         const pid = state.getCurrentProjectId();
-        console.log('[HANDLERS] currentProjectId from state:', pid);
-        if (!pid) {
-            console.log('[HANDLERS] no pid, exiting');
-            return;
-        }
+        if (!pid) return;
         try {
             const artifacts = await api.fetchArtifacts(pid);
-            console.log('[HANDLERS] artifacts fetched:', artifacts.length);
             state.setArtifacts(artifacts);
-            console.log('[HANDLERS] about to call ui.renderParentSelect');
             ui.renderParentSelect(artifacts, state.getParentData(), state.getCurrentParentId(), artifactTypeSelect.value);
-            console.log('[HANDLERS] renderParentSelect called');
         } catch (e) {
             console.error('[HANDLERS] loadParents error:', e);
         }
     };
 
     window.loadModels = async function() {
-        console.log('[HANDLERS] loadModels called');
+        console.log('[HANDLERS] loadModels');
         try {
             const models = await api.fetchModels();
-            console.log('[HANDLERS] models fetched:', models.length);
             state.setModels(models);
             const modelSelect = document.getElementById("model-select");
             if (modelSelect) {
@@ -69,7 +55,6 @@
                     }
                     modelSelect.appendChild(opt);
                 });
-                console.log('[HANDLERS] modelSelect populated');
             }
         } catch (e) {
             console.error('[HANDLERS] loadModels error:', e);
@@ -77,12 +62,11 @@
     };
 
     newProjectBtn.onclick = async () => {
-        console.log('[HANDLERS] newProjectBtn clicked');
+        console.log('[HANDLERS] newProjectBtn click');
         const name = prompt("Введите название проекта:");
         if (!name) return;
         try {
             const data = await api.createProject(name, "");
-            console.log('[HANDLERS] project created:', data);
             await window.loadProjects();
             projectSelect.value = data.id;
             state.setCurrentProjectId(data.id);
@@ -93,7 +77,7 @@
     };
 
     projectSelect.addEventListener("change", function(e) {
-        console.log('[HANDLERS] projectSelect change to', e.target.value);
+        console.log('[HANDLERS] projectSelect change', e.target.value);
         state.setCurrentProjectId(e.target.value);
         if (e.target.value) {
             window.loadParents();
@@ -105,5 +89,5 @@
 
     refreshParentsBtn.onclick = window.loadParents;
 
-    console.log('[HANDLERS] module loaded');
+    console.log('[HANDLERS] загрузка завершена');
 })();

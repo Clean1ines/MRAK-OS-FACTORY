@@ -94,7 +94,7 @@ class ArtifactGenerator:
 
         full_input = "\n\n".join(prompt_parts)
 
-        mode = "15_BUSINESS_REQ_GEN"
+        mode = "04_BUSINESS_REQ_GEN"
         sys_prompt = await self.prompt_loader.get_system_prompt(mode, self.mode_map)
         if sys_prompt.startswith("Error") or sys_prompt.startswith("System Error"):
             raise Exception(f"Failed to get system prompt: {sys_prompt}")
@@ -158,7 +158,7 @@ class ArtifactGenerator:
 
         full_input = "\n\n".join(prompt_parts)
 
-        mode = "16_REQ_ENG_COUNCIL"
+        mode = "05_REQ_ENG_COUNCIL"
         sys_prompt = await self.prompt_loader.get_system_prompt(mode, self.mode_map)
         if sys_prompt.startswith("Error") or sys_prompt.startswith("System Error"):
             raise Exception(f"Failed to get system prompt: {sys_prompt}")

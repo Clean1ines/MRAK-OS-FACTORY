@@ -92,7 +92,7 @@ window.state = {
     getProjects,
     setProjects,
     getCurrentProjectId,
-    setCurrentProjectId,    // обязательно экспортируем
+    setCurrentProjectId,
     getArtifacts,
     setArtifacts,
     getParentData,

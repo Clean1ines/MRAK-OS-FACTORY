@@ -101,3 +101,21 @@ if (input) {
         if (originalKeydown) originalKeydown(e);
     };
 }
+console.log('[CHATHANDLERS] файл загружен');
+const sendBtn = document.getElementById('send-btn');
+if (sendBtn) {
+    const originalClick = sendBtn.onclick;
+    sendBtn.onclick = async function(e) {
+        console.log('[CHATHANDLERS] sendBtn onclick START');
+        if (originalClick) await originalClick(e);
+        console.log('[CHATHANDLERS] sendBtn onclick END');
+    };
+}
+const input = document.getElementById('input');
+if (input) {
+    const originalKeydown = input.onkeydown;
+    input.onkeydown = function(e) {
+        console.log('[CHATHANDLERS] input keydown', { key: e.key, shiftKey: e.shiftKey });
+        if (originalKeydown) originalKeydown(e);
+    };
+}

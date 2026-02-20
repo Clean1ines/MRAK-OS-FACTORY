@@ -20,3 +20,17 @@ window.onload = async function() {
         console.error("Startup error:", e);
     }
 };
+// ===== ДИАГНОСТИКА =====
+console.log('[MAIN] страница загружена, запуск onload');
+console.log('[MAIN] window.state:', !!window.state);
+console.log('[MAIN] window.renderers:', !!window.renderers);
+console.log('[MAIN] window.ui:', !!window.ui);
+console.log('[MAIN] window.api:', !!window.api);
+console.log('[MAIN] onload будет вызван');
+window.onload = async function() {
+    console.log('[MAIN] onload start');
+    await window.loadModels();
+    await window.loadProjects();
+    if (state.getCurrentProjectId()) await window.loadParents();
+    console.log('[MAIN] onload end');
+};

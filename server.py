@@ -5,9 +5,8 @@ from orchestrator import MrakOrchestrator
 import logging
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from db import init_db, get_projects, create_project, get_artifacts, save_artifact, get_artifact, get_last_package
+import db  # для проверки подключения
 import json
-import asyncpg
 import os
 import hashlib
 
@@ -44,30 +43,34 @@ class SavePackageRequest(BaseModel):
     content: Any
 
 def compute_content_hash(content):
-    """Вычисляет SHA256 от канонического JSON представления."""
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 @app.on_event("startup")
 async def startup_event():
+    """Проверяем подключение к базе, но ничего не создаём."""
+    logger.info("Starting up... Testing database connection.")
     try:
-        await init_db()
-        logger.info("Database initialized successfully.")
+        conn = await db.get_connection()
+        await conn.execute('SELECT 1')
+        await conn.close()
+        logger.info("Database connection OK.")
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
+        logger.error(f"Database connection failed: {e}")
+        # Приложение может продолжать работу, но без базы функциональность ограничена
 
 @app.get("/api/projects")
 async def list_projects():
-    projects = await get_projects()
+    projects = await db.get_projects()
     return JSONResponse(content=projects)
 
 @app.post("/api/projects")
 async def create_project_endpoint(project: ProjectCreate):
-    project_id = await create_project(project.name, project.description)
+    project_id = await db.create_project(project.name, project.description)
     return JSONResponse(content={"id": project_id, "name": project.name})
 
 @app.get("/api/projects/{project_id}/artifacts")
 async def list_artifacts(project_id: str, type: Optional[str] = None):
-    artifacts = await get_artifacts(project_id, type)
+    artifacts = await db.get_artifacts(project_id, type)
     return JSONResponse(content=artifacts)
 
 @app.post("/api/artifact")
@@ -76,7 +79,7 @@ async def create_artifact(artifact: ArtifactCreate):
         if artifact.generate:
             parent = None
             if artifact.parent_id:
-                parent = await get_artifact(artifact.parent_id)
+                parent = await db.get_artifact(artifact.parent_id)
                 if not parent:
                     return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
             new_id = await orch.generate_artifact(
@@ -89,7 +92,7 @@ async def create_artifact(artifact: ArtifactCreate):
             return JSONResponse(content={"id": new_id, "generated": True})
         else:
             content_data = {"text": artifact.content}
-            new_id = await save_artifact(
+            new_id = await db.save_artifact(
                 artifact_type=artifact.artifact_type,
                 content=content_data,
                 owner="user",
@@ -104,7 +107,7 @@ async def create_artifact(artifact: ArtifactCreate):
 
 @app.get("/api/latest_artifact")
 async def latest_artifact(parent_id: str, type: str):
-    pkg = await get_last_package(parent_id, type)
+    pkg = await db.get_last_version_by_parent_and_type(parent_id, type)
     if pkg:
         return JSONResponse(content={
             "exists": True,
@@ -152,19 +155,12 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
 @app.post("/api/save_artifact_package")
 async def save_artifact_package(req: SavePackageRequest):
     try:
-        # Вычисляем хеш содержимого
         new_hash = compute_content_hash(req.content)
+        last_pkg = await db.get_last_version_by_parent_and_type(req.parent_id, req.artifact_type)
+        if last_pkg and last_pkg.get('content_hash') == new_hash:
+            return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
 
-        # Проверяем, есть ли уже пакет с таким же хешем для этого родителя и типа
-        last_pkg = await get_last_package(req.parent_id, req.artifact_type)
-        if last_pkg:
-            # Сравниваем хеши (нужно хранить content_hash в БД)
-            if last_pkg.get('content_hash') == new_hash:
-                # Контент идентичен – возвращаем существующий ID
-                return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
-
-        # Получаем последний пакет для версионирования
-        last_pkg = await get_last_package(req.parent_id, req.artifact_type)
+        last_pkg = await db.get_last_version_by_parent_and_type(req.parent_id, req.artifact_type)
         if last_pkg:
             try:
                 last_version = int(last_pkg['version'])
@@ -176,7 +172,6 @@ async def save_artifact_package(req: SavePackageRequest):
             version = "1"
             previous_versions = []
 
-        # Для пакетов требований: присваиваем постоянные ID (UUID), если их нет
         content_to_save = req.content
         if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"] and isinstance(content_to_save, list):
             import uuid
@@ -184,14 +179,14 @@ async def save_artifact_package(req: SavePackageRequest):
                 if 'id' not in r:
                     r['id'] = str(uuid.uuid4())
 
-        artifact_id = await save_artifact(
+        artifact_id = await db.save_artifact(
             artifact_type=req.artifact_type,
             content=content_to_save,
             owner="user",
             status="DRAFT",
             project_id=req.project_id,
             parent_id=req.parent_id,
-            content_hash=new_hash  # передаём хеш для сохранения
+            content_hash=new_hash
         )
         return JSONResponse(content={"id": artifact_id})
     except Exception as e:

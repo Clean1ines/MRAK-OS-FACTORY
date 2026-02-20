@@ -8,3 +8,8 @@ window.ui = {
     openRequirementsModal: window.modals ? window.modals.openRequirementsModal : function(){},
     closeModal: window.modals ? window.modals.closeModal : function(){}
 };
+
+// ===== ДИАГНОСТИКА =====
+console.log('[UI] window.ui перед инициализацией:', window.ui);
+console.log('[UI] window.renderers наличие:', !!window.renderers);
+console.log('[UI] window.renderers.renderParentSelect наличие:', typeof window.renderers?.renderParentSelect);

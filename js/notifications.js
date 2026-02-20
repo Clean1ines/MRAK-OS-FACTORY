@@ -37,3 +37,11 @@ if (originalShowNotification) {
 } else {
     console.warn('[NOTIFICATIONS] original showNotification not found');
 }
+console.log('[NOTIFICATIONS] файл загружен');
+const originalShowNotification = window.notifications?.showNotification;
+if (originalShowNotification) {
+    window.notifications.showNotification = function(message, type) {
+        console.log('[NOTIFICATIONS] showNotification', { message, type });
+        originalShowNotification(message, type);
+    };
+}

@@ -92,3 +92,22 @@ console.log('[ARTIFACTHANDLERS] файл загружен');
         };
     }
 })();
+console.log('[ARTIFACTHANDLERS] файл загружен');
+const saveBtn = document.getElementById('save-artifact-btn');
+if (saveBtn) {
+    const originalClick = saveBtn.onclick;
+    saveBtn.onclick = async function(e) {
+        console.log('[ARTIFACTHANDLERS] saveArtifactBtn onclick START');
+        if (originalClick) await originalClick(e);
+        console.log('[ARTIFACTHANDLERS] saveArtifactBtn onclick END');
+    };
+}
+const generateBtn = document.getElementById('generate-artifact-btn');
+if (generateBtn) {
+    const originalClick = generateBtn.onclick;
+    generateBtn.onclick = async function(e) {
+        console.log('[ARTIFACTHANDLERS] generateArtifactBtn onclick START');
+        if (originalClick) await originalClick(e);
+        console.log('[ARTIFACTHANDLERS] generateArtifactBtn onclick END');
+    };
+}

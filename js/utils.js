@@ -34,3 +34,18 @@ window.autoResize = function(textarea) {
     console.log('[UTILS] autoResize', { textareaId: textarea?.id, scrollHeight: textarea?.scrollHeight });
     originalAutoResize(textarea);
 };
+console.log('[UTILS] файл загружен, window.isSaving =', window.isSaving);
+const originalSetLoading = window.setLoading;
+if (originalSetLoading) {
+    window.setLoading = function(button, isLoading) {
+        console.log('[UTILS] setLoading', { buttonId: button?.id, isLoading });
+        originalSetLoading(button, isLoading);
+    };
+}
+const originalAutoResize = window.autoResize;
+if (originalAutoResize) {
+    window.autoResize = function(textarea) {
+        console.log('[UTILS] autoResize', { textareaId: textarea?.id, scrollHeight: textarea?.scrollHeight });
+        originalAutoResize(textarea);
+    };
+}

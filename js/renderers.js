@@ -76,3 +76,78 @@ window.renderers = {
     updateGenerateButton,
     renderRequirementsInContainer,
 };
+
+// ===== ДИАГНОСТИКА =====
+const originalRenderParentSelect = renderParentSelect;
+renderParentSelect = function(artifacts, parentData, currentParentId, childType) {
+    console.log('[RENDER] renderParentSelect START', { artifactsCount: artifacts.length, childType });
+    const allowedTypes = state.getAllowedParentTypes(childType);
+    console.log('[RENDER] allowedTypes:', allowedTypes);
+    originalRenderParentSelect(artifacts, parentData, currentParentId, childType);
+    console.log('[RENDER] renderParentSelect END');
+};
+
+const originalUpdateGenerateButton = updateGenerateButton;
+updateGenerateButton = function(parentData, selectedId, childType) {
+    console.log('[RENDER] updateGenerateButton called', { selectedId, childType });
+    console.log('[RENDER] parentType:', parentData[selectedId], 'canGenerate:', state.canGenerate(childType, parentData[selectedId]));
+    originalUpdateGenerateButton(parentData, selectedId, childType);
+    const btn = document.getElementById('generate-artifact-btn');
+    console.log('[RENDER] button display after update:', btn ? btn.style.display : 'btn not found');
+};
+
+// Переопределяем в window.renderers
+window.renderers.renderParentSelect = renderParentSelect;
+window.renderers.updateGenerateButton = updateGenerateButton;
+
+// ===== ДИАГНОСТИКА: ВСЕ ФУНКЦИИ =====
+const originalRenderProjectSelect = renderProjectSelect;
+renderProjectSelect = function(projects, currentId) {
+    console.log('[RENDER] renderProjectSelect START', { projectsCount: projects.length, currentId });
+    originalRenderProjectSelect(projects, currentId);
+    console.log('[RENDER] renderProjectSelect END');
+};
+
+const originalRenderParentSelect = renderParentSelect;
+renderParentSelect = function(artifacts, parentData, currentParentId, childType) {
+    console.log('[RENDER] renderParentSelect START', { artifactsCount: artifacts.length, childType });
+    const allowedTypes = state.getAllowedParentTypes(childType);
+    console.log('[RENDER] allowedTypes:', allowedTypes);
+    const filtered = artifacts.filter(a => allowedTypes.includes(a.type));
+    console.log('[RENDER] filtered count:', filtered.length);
+    originalRenderParentSelect(artifacts, parentData, currentParentId, childType);
+    console.log('[RENDER] renderParentSelect END');
+};
+
+const originalUpdateGenerateButton = updateGenerateButton;
+updateGenerateButton = function(parentData, selectedId, childType) {
+    console.log('[RENDER] updateGenerateButton START', { selectedId, childType });
+    console.log('[RENDER] parentData keys:', Object.keys(parentData));
+    console.log('[RENDER] parentType:', parentData[selectedId]);
+    console.log('[RENDER] canGenerate:', state.canGenerate(childType, parentData[selectedId]));
+    originalUpdateGenerateButton(parentData, selectedId, childType);
+    console.log('[RENDER] updateGenerateButton END');
+};
+
+const originalRenderRequirementsInContainer = renderRequirementsInContainer;
+renderRequirementsInContainer = function(container, requirements) {
+    console.log('[RENDER] renderRequirementsInContainer START', { requirementsType: typeof requirements, isArray: Array.isArray(requirements) });
+    originalRenderRequirementsInContainer(container, requirements);
+    console.log('[RENDER] renderRequirementsInContainer END');
+};
+
+const originalRenderReqEngineeringAnalysis = renderReqEngineeringAnalysis;
+renderReqEngineeringAnalysis = function(container, analysis) {
+    console.log('[RENDER] renderReqEngineeringAnalysis START');
+    originalRenderReqEngineeringAnalysis(container, analysis);
+    console.log('[RENDER] renderReqEngineeringAnalysis END');
+};
+
+// Переопределяем window.renderers
+window.renderers = {
+    renderProjectSelect,
+    renderParentSelect,
+    updateGenerateButton,
+    renderRequirementsInContainer,
+    renderReqEngineeringAnalysis,
+};

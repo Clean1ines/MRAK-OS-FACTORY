@@ -101,3 +101,25 @@ window.api = {
 };
 
 console.log('[API] загрузка завершена, window.api определён:', !!window.api);
+
+async function sendChatMessage(prompt, mode, model, projectId) {
+    console.log('[API] sendChatMessage', { prompt, mode, model, projectId });
+    return fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, mode, model, project_id: projectId })
+    });
+}
+
+window.api.sendChatMessage = sendChatMessage;
+
+async function sendChatMessage(prompt, mode, model, projectId) {
+    console.log('[API] sendChatMessage', { prompt, mode, model, projectId });
+    return fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, mode, model, project_id: projectId })
+    });
+}
+
+window.api.sendChatMessage = sendChatMessage;

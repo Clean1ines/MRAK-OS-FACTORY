@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 from server import app
+import db  # импортируем db для моков
 
 client = TestClient(app)
 
@@ -10,9 +11,9 @@ def test_get_models():
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
-@patch("server.get_projects")
-@patch("server.create_project")
-@patch("server.get_artifacts")
+@patch("db.get_projects")
+@patch("db.create_project")
+@patch("db.get_artifacts")
 def test_projects_crud(mock_get_artifacts, mock_create_project, mock_get_projects):
     # Мокаем create_project
     mock_create_project.return_value = "test-proj-id"

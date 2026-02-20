@@ -1,8 +1,10 @@
-// modals.js - работа с модальными окнами
+// modals.js - модальные окна
+console.log('[MODALS] загрузка начата');
 
 let currentModal = null;
 
 function closeModal() {
+    console.log('[MODALS] closeModal');
     if (currentModal) {
         currentModal.style.display = 'none';
         document.body.removeChild(currentModal);
@@ -11,6 +13,7 @@ function closeModal() {
 }
 
 function openRequirementsModal(artifactType, content, onSave, onAddMore, onCancel) {
+    console.log('[MODALS] openRequirementsModal', { artifactType, contentSummary: typeof content });
     if (currentModal) closeModal();
 
     const modal = document.createElement('div');
@@ -28,7 +31,6 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     modal.style.padding = '1rem';
 
     const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
     modalContent.style.background = '#111';
     modalContent.style.border = '1px solid #222';
     modalContent.style.borderRadius = '12px';
@@ -53,26 +55,19 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'px-3 py-1 bg-zinc-700 rounded';
     cancelBtn.innerText = 'Отмена';
-    cancelBtn.onclick = () => {
-        if (onCancel) onCancel();
-        closeModal();
-    };
+    cancelBtn.onclick = () => { if (onCancel) onCancel(); closeModal(); };
     btnDiv.appendChild(cancelBtn);
 
     const addMoreBtn = document.createElement('button');
     addMoreBtn.className = 'px-3 py-1 bg-blue-600/20 text-blue-500 rounded';
     addMoreBtn.innerText = 'Добавить ещё';
-    addMoreBtn.onclick = () => {
-        if (onAddMore) onAddMore();
-    };
+    addMoreBtn.onclick = () => { if (onAddMore) onAddMore(); };
     btnDiv.appendChild(addMoreBtn);
 
     const saveBtn = document.createElement('button');
     saveBtn.className = 'px-3 py-1 bg-emerald-600/20 text-emerald-500 rounded';
     saveBtn.innerText = 'Сохранить';
-    saveBtn.onclick = () => {
-        if (onSave) onSave();
-    };
+    saveBtn.onclick = () => { if (onSave) onSave(); };
     btnDiv.appendChild(saveBtn);
 
     modalContent.appendChild(btnDiv);
@@ -80,49 +75,12 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     document.body.appendChild(modal);
     currentModal = modal;
 
-    // Выбор рендерера в зависимости от типа артефакта
     if (artifactType === 'ReqEngineeringAnalysis') {
-        window.renderers.renderReqEngineeringAnalysis(container, content);
+        window.renderers?.renderReqEngineeringAnalysis(container, content);
     } else {
-        window.renderers.renderRequirementsInContainer(container, content);
+        window.renderers?.renderRequirementsInContainer(container, content);
     }
 }
 
-window.modals = {
-    closeModal,
-    openRequirementsModal,
-};
-
-// ===== ДИАГНОСТИКА MODALS =====
-console.log('[MODALS] файл загружен, currentModal =', typeof currentModal !== 'undefined' ? currentModal : 'undefined');
-
-const originalCloseModal = window.modals?.closeModal;
-if (originalCloseModal) {
-    window.modals.closeModal = function() {
-        console.log('[MODALS] closeModal called');
-        originalCloseModal();
-    };
-}
-
-const originalOpenRequirementsModal = window.modals?.openRequirementsModal;
-if (originalOpenRequirementsModal) {
-    window.modals.openRequirementsModal = function(artifactType, content, onSave, onAddMore, onCancel) {
-        console.log('[MODALS] openRequirementsModal', { artifactType, contentSummary: typeof content });
-        originalOpenRequirementsModal(artifactType, content, onSave, onAddMore, onCancel);
-    };
-}
-console.log('[MODALS] файл загружен, currentModal =', typeof currentModal !== 'undefined' ? currentModal : 'undefined');
-const originalCloseModal = window.modals?.closeModal;
-if (originalCloseModal) {
-    window.modals.closeModal = function() {
-        console.log('[MODALS] closeModal called');
-        originalCloseModal();
-    };
-}
-const originalOpenRequirementsModal = window.modals?.openRequirementsModal;
-if (originalOpenRequirementsModal) {
-    window.modals.openRequirementsModal = function(artifactType, content, onSave, onAddMore, onCancel) {
-        console.log('[MODALS] openRequirementsModal', { artifactType, contentSummary: typeof content });
-        originalOpenRequirementsModal(artifactType, content, onSave, onAddMore, onCancel);
-    };
-}
+window.modals = { closeModal, openRequirementsModal };
+console.log('[MODALS] загрузка завершена');

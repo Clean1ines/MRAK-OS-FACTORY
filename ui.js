@@ -47,12 +47,13 @@ function renderParentSelect(artifacts, parentData, currentParentId, childType) {
 }
 
 function updateGenerateButton(parentData, selectedId, childType) {
-    console.log("updateGenerateButton called with:", { parentData, selectedId, childType });
     
-    console.log("parentType:", parentType, "canGenerate:", state.canGenerate(childType, parentType));
     const btn = document.getElementById('generate-artifact-btn');
     if (!btn) return;
     const parentType = parentData[selectedId];
+    console.log("updateGenerateButton called with:", { parentData, selectedId, childType });
+    
+    console.log("parentType:", parentType, "canGenerate:", state.canGenerate(childType, parentType));
     if (parentType && state.canGenerate(childType, parentType)) {
         btn.style.display = 'inline-block';
         btn.innerText = `Создать/редактировать ${childType}`;

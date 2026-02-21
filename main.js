@@ -6,6 +6,7 @@
     const messagesDiv = document.getElementById("messages");
     const scrollAnchor = document.getElementById("scroll-anchor");
     const modelSelect = document.getElementById("model-select");
+    const modeSelect = document.getElementById("mode-select");
     const statusText = document.getElementById("status-text");
     const projectSelect = document.getElementById("project-select");
     const newProjectBtn = document.getElementById("new-project-btn");
@@ -16,6 +17,9 @@
     const deleteArtifactBtn = document.getElementById("delete-artifact-btn");
     const saveArtifactBtn = document.getElementById("save-artifact-btn");
     const generateArtifactBtn = document.getElementById("generate-artifact-btn");
+
+    // Экспортируем функцию loadParents для использования в simpleMode.js
+    window.loadParents = loadParents;
 
     marked.setOptions({ gfm: true, breaks: true });
 
@@ -67,6 +71,28 @@
         }
     }
 
+    // Новая функция: загрузка режимов промптов
+    async function loadModes() {
+        try {
+            const modes = await api.fetchModes(); // нужно добавить в api.js
+            modeSelect.innerHTML = '';
+            if (modes && modes.length) {
+                modes.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.innerText = m.name;
+                    if (m.default) opt.selected = true;
+                    modeSelect.appendChild(opt);
+                });
+            } else {
+                modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки режимов:', e);
+            modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
+        }
+    }
+
     // ========== ОБРАБОТЧИКИ СОБЫТИЙ ==========
     newProjectBtn.onclick = async () => {
         const name = prompt("Введите название проекта:");
@@ -88,7 +114,6 @@
         if (!pid) return;
         if (!confirm('Удалить проект? Все артефакты будут безвозвратно удалены.')) return;
         try {
-            // Предполагаем, что есть эндпоинт /api/projects/{id} с методом DELETE
             await apiFetch(`/api/projects/${pid}`, { method: 'DELETE' });
             await loadProjects();
             state.setCurrentProjectId('');
@@ -195,7 +220,6 @@
         }
         if (!confirm('Удалить выбранный артефакт?')) return;
         try {
-            // Эндпоинт для удаления артефакта
             await apiFetch(`/api/artifact/${artifactId}`, { method: 'DELETE' });
             ui.showNotification('Артефакт удалён', 'success');
             await loadParents();
@@ -213,7 +237,7 @@
             ui.showNotification("Сначала выберите проект", 'error');
             return;
         }
-        const mode = document.getElementById("mode-select").value;
+        const mode = modeSelect.value;
         const model = modelSelect.value;
 
         input.value = ""; input.style.height = "44px";
@@ -254,7 +278,10 @@
                 }
                 raw += chunk;
                 assistantDiv.innerHTML = marked.parse(raw);
-                scrollAnchor.scrollIntoView({ behavior: "smooth" });
+                // Проверяем, что scrollAnchor существует
+                if (scrollAnchor) {
+                    scrollAnchor.scrollIntoView({ behavior: "smooth" });
+                }
             }
         } catch (e) {
             assistantDiv.innerHTML = `<span class="text-red-500">SYSTEM_ERROR: ${e.message}</span>`;
@@ -272,6 +299,7 @@
     // ========== ИНИЦИАЛИЗАЦИЯ ==========
     window.onload = async function() {
         await loadModels();
+        await loadModes();  // Загружаем режимы
         await loadProjects();
         if (state.getCurrentProjectId()) await loadParents();
         // Инициализируем простой режим

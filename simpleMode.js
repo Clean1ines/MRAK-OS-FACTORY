@@ -67,6 +67,8 @@ async function handleNext() {
                     const stageRes = await fetch(`/api/workflow/next?project_id=${encodeURIComponent(projectId)}`);
                     const stageData = await stageRes.json();
                     renderProgressBar(stageData.next_stage);
+                    // Обновляем список артефактов для расширенного режима
+                    await loadParentsIfAdvanced(); // вызовем функцию из main (нужно определить)
                 } catch (e) {
                     ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                 }
@@ -81,6 +83,13 @@ async function handleNext() {
     }
 }
 
+// Функция для обновления родителей в расширенном режиме (будет вызвана после сохранения)
+async function loadParentsIfAdvanced() {
+    if (!isSimpleMode && typeof window.loadParents === 'function') {
+        await window.loadParents();
+    }
+}
+
 // Переключение режимов
 function switchMode(mode) {
     isSimpleMode = (mode === 'simple');
@@ -89,12 +98,14 @@ function switchMode(mode) {
     const simpleBtn = document.getElementById('simple-mode-btn');
     const advancedBtn = document.getElementById('advanced-mode-btn');
 
+    if (!simpleControls || !advancedControls || !simpleBtn || !advancedBtn) return;
+
     if (isSimpleMode) {
         simpleControls.classList.remove('hidden');
         advancedControls.classList.add('hidden');
         simpleBtn.classList.add('bg-cyan-600/30');
         advancedBtn.classList.remove('bg-cyan-600/30');
-        document.getElementById('progress-bar-container').classList.remove('hidden');
+        document.getElementById('progress-bar-container')?.classList.remove('hidden');
         // Обновляем прогресс
         const projectId = state.getCurrentProjectId();
         if (projectId) {
@@ -108,7 +119,7 @@ function switchMode(mode) {
         advancedControls.classList.remove('hidden');
         advancedBtn.classList.add('bg-cyan-600/30');
         simpleBtn.classList.remove('bg-cyan-600/30');
-        document.getElementById('progress-bar-container').classList.add('hidden');
+        document.getElementById('progress-bar-container')?.classList.add('hidden');
     }
 }
 

@@ -69,6 +69,10 @@ const generationRules = {
     "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
     "ReqEngineeringAnalysis": ["BusinessRequirementPackage"],
     "FunctionalRequirementPackage": ["ReqEngineeringAnalysis"],
+    "ArchitectureAnalysis": ["FunctionalRequirementPackage"],
+    "AtomicTask": ["ArchitectureAnalysis"],
+    "CodeArtifact": ["AtomicTask"],
+    "TestPackage": ["CodeArtifact"],
 };
 
 function canGenerate(childType, parentType) {
@@ -102,6 +106,18 @@ function clearArtifactCache(parentId, childType) {
     }
 }
 
+// Новая функция: получить последний артефакт по типу (среди всех проектов или для текущего проекта)
+function getLastArtifactByType(type, projectId = AppState.currentProjectId) {
+    if (!projectId) return null;
+    // Фильтруем артефакты по проекту и типу, сортируем по created_at, берём последний
+    const filtered = AppState.artifacts.filter(a => a.type === type && a.status === 'VALIDATED');
+    if (filtered.length === 0) return null;
+    // Сортировка по created_at (новые сверху)
+    filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return filtered[0];
+}
+
+// Экспортируем в глобальную область
 window.state = {
     getProjects,
     setProjects,
@@ -121,5 +137,6 @@ window.state = {
     setArtifactCache,
     getArtifactCache,
     clearArtifactCache,
+    getLastArtifactByType,
     subscribe,
 };

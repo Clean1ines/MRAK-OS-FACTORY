@@ -254,3 +254,21 @@ async def delete_artifact(artifact_id: str):
     except Exception as e:
         logger.error(f"Error deleting artifact {artifact_id}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project_endpoint(project_id: str):
+    try:
+        await db.delete_project(project_id)
+        return JSONResponse(status_code=204, content={})
+    except Exception as e:
+        logger.error(f"Error deleting project {project_id}: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.delete("/api/artifacts/{artifact_id}")
+async def delete_artifact_endpoint(artifact_id: str):
+    try:
+        await db.delete_artifact(artifact_id)
+        return JSONResponse(status_code=204, content={})
+    except Exception as e:
+        logger.error(f"Error deleting artifact {artifact_id}: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)

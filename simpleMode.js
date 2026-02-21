@@ -67,8 +67,10 @@ async function handleNext() {
                     const stageRes = await fetch(`/api/workflow/next?project_id=${encodeURIComponent(projectId)}`);
                     const stageData = await stageRes.json();
                     renderProgressBar(stageData.next_stage);
-                    // Обновляем список артефактов для расширенного режима
-                    await loadParentsIfAdvanced(); // вызовем функцию из main (нужно определить)
+                    // Обновляем список артефактов для расширенного режима, если мы не в простом
+                    if (!isSimpleMode && typeof window.loadParents === 'function') {
+                        await window.loadParents();
+                    }
                 } catch (e) {
                     ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                 }
@@ -80,13 +82,6 @@ async function handleNext() {
         );
     } catch (e) {
         ui.showNotification('Ошибка: ' + e.message, 'error');
-    }
-}
-
-// Функция для обновления родителей в расширенном режиме (будет вызвана после сохранения)
-async function loadParentsIfAdvanced() {
-    if (!isSimpleMode && typeof window.loadParents === 'function') {
-        await window.loadParents();
     }
 }
 
@@ -120,6 +115,10 @@ function switchMode(mode) {
         advancedBtn.classList.add('bg-cyan-600/30');
         simpleBtn.classList.remove('bg-cyan-600/30');
         document.getElementById('progress-bar-container')?.classList.add('hidden');
+        // При переходе в расширенный режим обновляем список родителей
+        if (typeof window.loadParents === 'function') {
+            window.loadParents();
+        }
     }
 }
 

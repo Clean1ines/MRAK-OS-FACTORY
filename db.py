@@ -94,6 +94,29 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) ->
     finally:
         await conn.close()
 
+async def get_last_artifact(project_id: str) -> Optional[Dict[str, Any]]:
+    """Возвращает самый последний артефакт в проекте (по created_at) независимо от статуса."""
+    conn = await get_connection()
+    try:
+        row = await conn.fetchrow('''
+            SELECT * FROM artifacts
+            WHERE project_id = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''', project_id)
+        if row:
+            art = dict(row)
+            art['id'] = str(art['id'])
+            art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
+            art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
+            art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
+            if isinstance(art['content'], str):
+                art['content'] = json.loads(art['content'])
+            return art
+        return None
+    finally:
+        await conn.close()
+
 async def get_last_validated_artifact(project_id: str) -> Optional[Dict[str, Any]]:
     """Возвращает последний валидированный артефакт в проекте (по created_at)."""
     conn = await get_connection()

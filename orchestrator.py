@@ -63,7 +63,7 @@ class MrakOrchestrator:
 
         # Маппинг типа артефакта на режим промпта (для генерации)
         self.type_to_mode = {
-            "StructuredIdea": "02_IDEA_CLARIFIER",
+            "BusinessIdea": "02_IDEA_CLARIFIER",
             "ProductCouncilAnalysis": "03_PRODUCT_COUNCIL",
             "BusinessRequirementPackage": "04_BUSINESS_REQ_GEN",
             "ReqEngineeringAnalysis": "05_REQ_ENG_COUNCIL",
@@ -214,18 +214,19 @@ class MrakOrchestrator:
         - parent_id: ID родительского артефакта
         - description: описание для интерфейса
         """
-        last = await db.get_last_validated_artifact(project_id)
+        # Берём самый последний артефакт (любой статус), чтобы видеть созданные в расширенном режиме
+        last = await db.get_last_artifact(project_id)
         if not last:
-            # Нет ни одного валидированного артефакта – начинаем с идеи
+            # Нет ни одного артефакта – начинаем с идеи
             return {
                 "next_stage": "idea",
-                "prompt_type": "StructuredIdea",
+                "prompt_type": "BusinessIdea",
                 "parent_id": None,
                 "description": "Введите идею и уточните её"
             }
         last_type = last['type']
-        if last_type == "StructuredIdea":
-            # После идеи – анализ продуктового совета
+        # Маппинг текущего типа на следующий шаг
+        if last_type == "BusinessIdea":
             return {
                 "next_stage": "requirements",
                 "prompt_type": "ProductCouncilAnalysis",
@@ -254,7 +255,6 @@ class MrakOrchestrator:
                 "description": "Сгенерировать функциональные требования"
             }
         elif last_type == "FunctionalRequirementPackage":
-            # Можно предложить QA или сразу архитектуру – выберем архитектуру
             return {
                 "next_stage": "architecture",
                 "prompt_type": "ArchitectureAnalysis",
@@ -269,13 +269,10 @@ class MrakOrchestrator:
                 "description": "Декомпозировать на задачи"
             }
         elif last_type == "AtomicTask":
-            # После списка задач – генерация кода (для первой задачи)
-            # Но здесь сложнее: нужно выбрать конкретную задачу. Пока упростим – возвращаем код для первой задачи.
-            # В реальности нужно получать список невыполненных задач.
             return {
                 "next_stage": "code",
                 "prompt_type": "CodeArtifact",
-                "parent_id": last['id'],  # предполагаем, что у задачи есть родитель (пакет)
+                "parent_id": last['id'],
                 "description": "Сгенерировать код для задачи"
             }
         elif last_type == "CodeArtifact":

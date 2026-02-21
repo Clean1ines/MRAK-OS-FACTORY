@@ -200,8 +200,8 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
 
         return JSONResponse(content={"result": result})
     except Exception as e:
-        logger.error(f"Error generating artifact: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        logger.error(f"Error generating artifact: {e}", exc_info=True)
+        return JSONResponse(content={"error": f"Internal server error: {str(e)}"}, status_code=500)
 
 @app.post("/api/save_artifact_package")
 async def save_artifact_package(req: SavePackageRequest):
@@ -232,7 +232,7 @@ async def save_artifact_package(req: SavePackageRequest):
             artifact_type=req.artifact_type,
             content=content_to_save,
             owner="user",
-            status="DRAFT",
+            status="DRAFT",  # Можно изменить на "VALIDATED", если нужно сразу подтверждать
             project_id=req.project_id,
             parent_id=req.parent_id,
             content_hash=new_hash
@@ -301,76 +301,50 @@ async def get_models():
 # ==================== РЕЖИМЫ (ПРОМПТЫ) ====================
 
 @app.get("/api/modes")
-async def get_available_modes(self):
+async def get_available_modes():
     """Возвращает список доступных режимов промптов для селектора."""
     # Можно брать из self.mode_map, но там только URL. Лучше захардкодить или получить из базы.
     # Для простоты вернём список, который был в старом фронтенде.
     return [
         {"id": "01_CORE", "name": "01: CORE_SYSTEM", "default": True},
-        {"id": "02_UI_UX", "name": "02: UI_UX_DESIGN"},
-        {"id": "03_SOFT_ENG", "name": "03: TITAN_DEV"},
-        {"id": "04_FAILURE", "name": "04: FAILURE_ANALYSIS"},
-        {"id": "06_TRANSLATOR", "name": "06: PROMPT_ENG"},
-        {"id": "07_BYPASS", "name": "07: RAW_BYPASS"},
-        {"id": "07_INTEGRATION_PLAN", "name": "07: INTEGRATION_PLAN"},
-        {"id": "08_PROMPT_COUNCIL", "name": "08: PROMPT_COUNCIL"},
-        {"id": "09_ALGO_COUNCIL", "name": "09: ALGO_COUNCIL"},
-        {"id": "10_FULL_CODE_GEN", "name": "10: FULL_CODE_GEN"},
-        {"id": "11_REQ_COUNCIL", "name": "11: REQ_COUNCIL"},
-        {"id": "12_SELF_ANALYSIS_FACTORY", "name": "12: SELF_ANALYSIS_FACTORY"},
-        {"id": "13_ARTIFACT_OUTPUT", "name": "13: ARTIFACT_OUTPUT"},
-        {"id": "14_PRODUCT_COUNCIL", "name": "14: PRODUCT_COUNCIL"},
+        {"id": "02_IDEA_CLARIFIER", "name": "02: IDEA_CLARIFIER"},
+        {"id": "03_PRODUCT_COUNCIL", "name": "03: PRODUCT_COUNCIL"},
+        {"id": "04_BUSINESS_REQ_GEN", "name": "04: BUSINESS_REQ_GEN"},
+        {"id": "05_REQ_ENG_COUNCIL", "name": "05: REQ_ENG_COUNCIL"},
+        {"id": "06_SYSTEM_REQ_GEN", "name": "06: SYSTEM_REQ_GEN"},
+        {"id": "07_QA_COUNCIL", "name": "07: QA_COUNCIL"},
+        {"id": "08_ARCHITECTURE_COUNCIL", "name": "08: ARCHITECTURE_COUNCIL"},
+        {"id": "09_CODE_TASK_GEN", "name": "09: CODE_TASK_GEN"},
+        {"id": "10_CODE_GEN", "name": "10: CODE_GEN"},
+        {"id": "11_TEST_GEN", "name": "11: TEST_GEN"},
+        {"id": "12_FAILURE_DETECTOR", "name": "12: FAILURE_DETECTOR"},
+        {"id": "13_SELF_ANALYSIS_FACTORY", "name": "13: SELF_ANALYSIS_FACTORY"},
+        {"id": "14_PROMPT_ENGINEERING_COUNCIL", "name": "14: PROMPT_ENGINEERING_COUNCIL"},
+        {"id": "15_ALGORITHM_COUNCIL", "name": "15: ALGORITHM_COUNCIL"},
+        {"id": "16_UI_UX_COUNCIL", "name": "16: UI_UX_COUNCIL"},
+        {"id": "17_SOFT_ENG_COUNCIL", "name": "17: SOFT_ENG_COUNCIL"},
+        {"id": "18_TRANSLATOR", "name": "18: TRANSLATOR"},
+        {"id": "19_INTEGRATION_PLAN", "name": "19: INTEGRATION_PLAN"},
+        {"id": "20_SECURITY_REQ_GEN", "name": "20: SECURITY_REQ_GEN"},
+        {"id": "21_THREAT_MODELING_ASSISTANT", "name": "21: THREAT_MODELING_ASSISTANT"},
+        {"id": "22_INFRASTRUCTURE_SPEC_GEN", "name": "22: INFRASTRUCTURE_SPEC_GEN"},
+        {"id": "23_OBSERVABILITY_SPEC_GEN", "name": "23: OBSERVABILITY_SPEC_GEN"},
+        {"id": "24_TECH_DESIGN_DOC_GEN", "name": "24: TECH_DESIGN_DOC_GEN"},
+        {"id": "25_USER_DOC_GEN", "name": "25: USER_DOC_GEN"},
+        {"id": "26_API_DOC_GEN", "name": "26: API_DOC_GEN"},
+        {"id": "27_UAT_SCRIPT_GEN", "name": "27: UAT_SCRIPT_GEN"},
+        {"id": "28_JIRA_ISSUE_FORMATTER", "name": "28: JIRA_ISSUE_FORMATTER"},
+        {"id": "29_PROJECT_STATUS_REPORTER", "name": "29: PROJECT_STATUS_REPORTER"},
+        {"id": "30_INCIDENT_POST_MORTEM_GEN", "name": "30: INCIDENT_POST_MORTEM_GEN"},
+        {"id": "31_KNOWLEDGE_QUERY_ASSISTANT", "name": "31: KNOWLEDGE_QUERY_ASSISTANT"},
+        {"id": "32_CHANGE_IMPACT_ANALYZER", "name": "32: CHANGE_IMPACT_ANALYZER"},
+        {"id": "33_FEATURE_TO_USER_STORY_GEN", "name": "33: FEATURE_TO_USER_STORY_GEN"},
+        {"id": "34_RESEARCH_METODOLOGY_GEN", "name": "34: RESEARCH_METODOLOGY_GEN"},
+        {"id": "35_ANALYSIS_SUMMARIZER", "name": "35: ANALYSIS_SUMMARIZER"},
+        {"id": "36_REQUIREMENT_SUMMARIZER", "name": "36: REQUIREMENT_SUMMARIZER"},
+        {"id": "37_SYSTEM_REQUIREMENTS_SUMMARIZER", "name": "37: SYSTEM_REQUIREMENTS_SUMMARIZER"},
+        {"id": "38_CODE_CONTEXT_SUMMARIZER", "name": "38: CODE_CONTEXT_SUMMARIZER"},
     ]
-
-async def get_next_step(self, project_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Определяет следующий шаг для проекта в простом режиме.
-    Возвращает словарь с ключами: next_stage, prompt_type, parent_id, description.
-    """
-    # Получаем последний валидированный артефакт в проекте
-    conn = await db.get_connection()
-    try:
-        # Ищем артефакты со статусом VALIDATED, сортируем по created_at
-        row = await conn.fetchrow("""
-            SELECT * FROM artifacts 
-            WHERE project_id = $1 AND status = 'VALIDATED'
-            ORDER BY created_at DESC
-            LIMIT 1
-        """, project_id)
-        if not row:
-            # Нет валидированных артефактов – значит, нужно начать с идеи
-            return {
-                "next_stage": "idea",
-                "prompt_type": "BusinessIdea",  # тип, который будет создан
-                "parent_id": None,
-                "description": "Введите описание идеи"
-            }
-        artifact = dict(row)
-        artifact_type = artifact['type']
-        # Определяем следующий шаг по таблице переходов (можно захардкодить)
-        next_map = {
-            "BusinessIdea": ("ProductCouncilAnalysis", "Product Titans Council"),
-            "ProductCouncilAnalysis": ("BusinessRequirementPackage", "Business Requirements Generator"),
-            "BusinessRequirementPackage": ("ReqEngineeringAnalysis", "Requirements Engineering Titans Council"),
-            "ReqEngineeringAnalysis": ("FunctionalRequirementPackage", "System Requirements Generator"),
-            "FunctionalRequirementPackage": ("QAAnalysis", "Titans’ Council of QA"),
-            "QAAnalysis": ("ArchitectureAnalysis", "Titans’ Council of Software Architecture"),
-            "ArchitectureAnalysis": ("AtomicTask", "Atomic Code Task Generator"),
-            "AtomicTask": ("CodeArtifact", "Code Generator"),
-            "CodeArtifact": ("TestPackage", "Test Suite Generator"),
-        }
-        if artifact_type in next_map:
-            next_type, prompt_desc = next_map[artifact_type]
-            return {
-                "next_stage": next_type,
-                "prompt_type": next_type,
-                "parent_id": artifact['id'],
-                "description": f"Следующий шаг: {prompt_desc}"
-            }
-        else:
-            return None  # нет определённого следующего шага
-    finally:
-        await conn.close()
 
 # ==================== ЧАТ ====================
 

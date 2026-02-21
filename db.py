@@ -7,7 +7,6 @@ import uuid
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mrak_user:mrak_pass@localhost:5432/mrak_db")
 
 async def get_connection():
-    """Возвращает подключение к базе данных."""
     return await asyncpg.connect(DATABASE_URL)
 
 # ==================== ПРОЕКТЫ ====================
@@ -57,12 +56,19 @@ async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
     finally:
         await conn.close()
 
+async def delete_project(project_id: str) -> None:
+    conn = await get_connection()
+    try:
+        await conn.execute('DELETE FROM projects WHERE id = $1', project_id)
+    finally:
+        await conn.close()
+
 # ==================== АРТЕФАКТЫ ====================
 
 async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) -> List[Dict[str, Any]]:
     conn = await get_connection()
     try:
-        query = 'SELECT id, type, parent_id, content, created_at, updated_at, version, content_hash FROM artifacts WHERE project_id = $1'
+        query = 'SELECT id, type, parent_id, content, created_at, updated_at, version, status, content_hash FROM artifacts WHERE project_id = $1'
         params = [project_id]
         if artifact_type:
             query += ' AND type = $2'
@@ -85,6 +91,29 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) ->
                 art['summary'] = str(content)[:100]
             artifacts.append(art)
         return artifacts
+    finally:
+        await conn.close()
+
+async def get_last_validated_artifact(project_id: str) -> Optional[Dict[str, Any]]:
+    """Возвращает последний валидированный артефакт в проекте (по created_at)."""
+    conn = await get_connection()
+    try:
+        row = await conn.fetchrow('''
+            SELECT * FROM artifacts
+            WHERE project_id = $1 AND status = 'VALIDATED'
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''', project_id)
+        if row:
+            art = dict(row)
+            art['id'] = str(art['id'])
+            art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
+            art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
+            art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
+            if isinstance(art['content'], str):
+                art['content'] = json.loads(art['content'])
+            return art
+        return None
     finally:
         await conn.close()
 
@@ -156,40 +185,17 @@ async def save_artifact(
     finally:
         await conn.close()
 
-async def find_artifact_by_path(file_path: str, artifact_type: str = "CodeFile", project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+async def update_artifact_status(artifact_id: str, status: str) -> None:
     conn = await get_connection()
     try:
-        query = '''
-            SELECT * FROM artifacts 
-            WHERE type = $1 AND content->>'file_path' = $2
-        '''
-        params = [artifact_type, file_path]
-        if project_id:
-            query += ' AND project_id = $3'
-            params.append(project_id)
-        query += ' ORDER BY version DESC LIMIT 1'
-        row = await conn.fetchrow(query, *params)
-        if row:
-            art = dict(row)
-            art['id'] = str(art['id'])
-            art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
-            art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
-            art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
-            if isinstance(art['content'], str):
-                art['content'] = json.loads(art['content'])
-            return art
-        return None
+        await conn.execute('UPDATE artifacts SET status = $1, updated_at = NOW() WHERE id = $2', status, artifact_id)
     finally:
         await conn.close()
 
-async def update_artifact(artifact_id: str, new_content: Dict[str, Any], new_version: str, new_hash: str) -> None:
+async def delete_artifact(artifact_id: str) -> None:
     conn = await get_connection()
     try:
-        await conn.execute('''
-            UPDATE artifacts
-            SET content = $1, version = $2, content_hash = $3, updated_at = NOW()
-            WHERE id = $4
-        ''', json.dumps(new_content), new_version, new_hash, artifact_id)
+        await conn.execute('DELETE FROM artifacts WHERE id = $1', artifact_id)
     finally:
         await conn.close()
 
@@ -207,21 +213,5 @@ async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
                 art['content'] = json.loads(art['content'])
             return art
         return None
-    finally:
-        await conn.close()
-
-async def delete_project(project_id: str) -> None:
-    """Удаляет проект (каскадно удаляет все его артефакты благодаря ON DELETE CASCADE)."""
-    conn = await get_connection()
-    try:
-        await conn.execute("DELETE FROM projects WHERE id = $1", project_id)
-    finally:
-        await conn.close()
-
-async def delete_artifact(artifact_id: str) -> None:
-    """Удаляет артефакт. Дочерние артефакты (parent_id = artifact_id) получат parent_id = NULL (ON DELETE SET NULL)."""
-    conn = await get_connection()
-    try:
-        await conn.execute("DELETE FROM artifacts WHERE id = $1", artifact_id)
     finally:
         await conn.close()

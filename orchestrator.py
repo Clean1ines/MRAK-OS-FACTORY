@@ -116,6 +116,24 @@ class MrakOrchestrator:
         text = re.sub(r"(gsk_|sk-)[a-zA-Z0-9]{20,}", "[KEY_REDACTED]", text)
         return text
 
+    # ADDED: Non‑streaming LLM call for clarification dialogues
+    async def get_chat_completion(self, messages: List[Dict[str, str]], model_id: str) -> str:
+        """
+        Выполняет запрос к LLM без стриминга, возвращает полный текст ответа.
+        messages: список словарей с ключами 'role' и 'content' (например, [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}])
+        """
+        try:
+            completion = self.groq_client.client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                temperature=0.6,
+                stream=False
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            logger.error(f"LLM call failed: {e}")
+            raise
+
     async def generate_artifact(self, artifact_type: str, user_input: str,
                                  parent_artifact: Optional[Dict[str, Any]] = None,
                                  model_id: Optional[str] = None,

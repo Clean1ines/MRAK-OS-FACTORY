@@ -16,12 +16,8 @@ function renderProjectSelect(projects, currentId) {
 function renderParentSelect(artifacts, parentData, currentParentId, childType) {
     const select = document.getElementById('parent-select');
     if (!select) return;
-    // Получаем разрешённые родительские типы для данного дочернего типа
     const allowedTypes = state.getAllowedParentTypes(childType);
-    // Фильтруем артефакты по разрешённым типам
     let filtered = artifacts.filter(a => allowedTypes.includes(a.type));
-    
-    // Группируем по типу и оставляем только последнюю версию (наибольшая версия)
     const latestByType = {};
     filtered.forEach(a => {
         const type = a.type;
@@ -47,13 +43,9 @@ function renderParentSelect(artifacts, parentData, currentParentId, childType) {
 }
 
 function updateGenerateButton(parentData, selectedId, childType) {
-    
     const btn = document.getElementById('generate-artifact-btn');
     if (!btn) return;
     const parentType = parentData[selectedId];
-    console.log("updateGenerateButton called with:", { parentData, selectedId, childType });
-    
-    console.log("parentType:", parentType, "canGenerate:", state.canGenerate(childType, parentType));
     if (parentType && state.canGenerate(childType, parentType)) {
         btn.style.display = 'inline-block';
         btn.innerText = `Создать/редактировать ${childType}`;
@@ -340,6 +332,22 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     }
 }
 
+// Функция для рендера прогресс-бара (вызывается из simpleMode)
+function renderProgressBar(stage) {
+    const steps = ['idea', 'requirements', 'architecture', 'code', 'tests'];
+    const stepElements = document.querySelectorAll('.progress-step');
+    if (!stepElements.length) return;
+    stepElements.forEach(el => {
+        const step = el.dataset.step;
+        el.classList.remove('active', 'completed');
+        if (step === stage) {
+            el.classList.add('active');
+        } else if (steps.indexOf(step) < steps.indexOf(stage)) {
+            el.classList.add('completed');
+        }
+    });
+}
+
 window.ui = {
     renderProjectSelect,
     renderParentSelect,
@@ -347,4 +355,5 @@ window.ui = {
     showNotification,
     openRequirementsModal,
     closeModal,
+    renderProgressBar,
 };

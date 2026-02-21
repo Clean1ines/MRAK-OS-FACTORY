@@ -267,11 +267,25 @@ async def execute_next_step(project_id: str, model: Optional[str] = None):
         if step['next_stage'] == 'idea':
             # Для идеи просто возвращаем информацию, что нужно ввести текст
             return JSONResponse(content={"action": "input_idea", "description": step['description']})
-        # Генерируем артефакт
+
+        # Проверяем, существует ли уже валидированный артефакт этого типа с таким parent_id
+        existing = await db.get_last_version_by_parent_and_type(step['parent_id'], step['prompt_type'])
+        if existing and existing['status'] == 'VALIDATED':
+            # Возвращаем существующий
+            return JSONResponse(content={
+                "artifact_id": existing['id'],
+                "artifact_type": step['prompt_type'],
+                "content": existing['content'],
+                "parent_id": step['parent_id'],
+                "next_stage": step['next_stage'],
+                "existing": True
+            })
+
+        # Генерируем новый артефакт
         parent = await db.get_artifact(step['parent_id']) if step.get('parent_id') else None
         if not parent:
             return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
-        # Используем универсальную генерацию
+
         new_id = await orch.generate_artifact(
             artifact_type=step['prompt_type'],
             user_input="",  # фидбек пока пустой, можно добавить позже
@@ -285,7 +299,8 @@ async def execute_next_step(project_id: str, model: Optional[str] = None):
             "artifact_type": step['prompt_type'],
             "content": artifact['content'] if artifact else None,
             "parent_id": step['parent_id'],
-            "next_stage": step['next_stage']
+            "next_stage": step['next_stage'],
+            "existing": False
         })
     except Exception as e:
         logger.error(f"Error executing next step: {e}")
@@ -303,8 +318,6 @@ async def get_models():
 @app.get("/api/modes")
 async def get_available_modes():
     """Возвращает список доступных режимов промптов для селектора."""
-    # Можно брать из self.mode_map, но там только URL. Лучше захардкодить или получить из базы.
-    # Для простоты вернём список, который был в старом фронтенде.
     return [
         {"id": "01_CORE", "name": "01: CORE_SYSTEM", "default": True},
         {"id": "02_IDEA_CLARIFIER", "name": "02: IDEA_CLARIFIER"},

@@ -35,6 +35,7 @@ function renderParentSelect(artifacts, parentData, currentParentId, childType) {
         opt.innerText = `${a.type} (v${a.version}) : ${a.summary || ''}`;
         select.appendChild(opt);
     });
+    // Если сохранённый parentId подходит под новый тип, выбираем его
     if (currentParentId && parentData[currentParentId] && allowedTypes.includes(parentData[currentParentId])) {
         const exists = latestArtifacts.some(a => a.id === currentParentId);
         if (exists) select.value = currentParentId;
@@ -54,6 +55,7 @@ function updateGenerateButton(parentData, selectedId, childType) {
     }
 }
 
+// Стилизованное уведомление
 function showNotification(message, type = 'info') {
     let container = document.getElementById('notification-container');
     if (!container) {
@@ -67,12 +69,14 @@ function showNotification(message, type = 'info') {
     }
     const notification = document.createElement('div');
     notification.innerText = message;
-    notification.style.background = type === 'error' ? '#f56565' : '#48bb78';
-    notification.style.color = 'white';
+    notification.style.background = type === 'error' ? '#f56565' : '#0f172a';
+    notification.style.color = type === 'error' ? 'white' : '#0ff';
+    notification.style.border = type === 'error' ? '1px solid #f56565' : '1px solid #0ff';
+    notification.style.boxShadow = type === 'error' ? '0 0 10px #f56565' : '0 0 10px #0ff';
     notification.style.padding = '10px 20px';
     notification.style.marginBottom = '10px';
     notification.style.borderRadius = '5px';
-    notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+    notification.style.fontFamily = "'JetBrains Mono', monospace";
     container.appendChild(notification);
     setTimeout(() => notification.remove(), 3000);
 }
@@ -275,22 +279,28 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';
     modalContent.style.background = '#111';
-    modalContent.style.border = '1px solid #222';
+    modalContent.style.border = '1px solid #0ff';
     modalContent.style.borderRadius = '12px';
     modalContent.style.width = '95%';
     modalContent.style.maxWidth = '900px';
     modalContent.style.maxHeight = '90%';
     modalContent.style.overflowY = 'auto';
     modalContent.style.padding = '1.5rem';
+    modalContent.style.boxShadow = '0 0 20px #0ff';
 
     const title = document.createElement('h2');
     title.className = 'text-lg font-bold mb-4';
+    title.style.color = '#0ff';
     title.innerText = artifactType;
     modalContent.appendChild(title);
 
     const container = document.createElement('div');
     container.id = 'modal-content-container';
     modalContent.appendChild(container);
+
+    // Отслеживаем изменения
+    let contentChanged = false;
+    const markChanged = () => { contentChanged = true; saveBtn.disabled = false; };
 
     const btnDiv = document.createElement('div');
     btnDiv.className = 'flex justify-end gap-3 mt-4 flex-wrap';
@@ -304,19 +314,25 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     };
     btnDiv.appendChild(cancelBtn);
 
-    const addMoreBtn = document.createElement('button');
-    addMoreBtn.className = 'px-3 py-1 bg-blue-600/20 text-blue-500 rounded';
-    addMoreBtn.innerText = 'Добавить ещё';
-    addMoreBtn.onclick = () => {
-        if (onAddMore) onAddMore();
+    // Кнопка "Подтвердить" (валидация)
+    const validateBtn = document.createElement('button');
+    validateBtn.className = 'px-3 py-1 bg-green-600/20 text-green-500 rounded';
+    validateBtn.innerText = 'Подтвердить';
+    validateBtn.onclick = () => {
+        // Собираем текущее содержимое
+        const updatedContent = gatherContent();
+        if (onSave) onSave(updatedContent, true);
     };
-    btnDiv.appendChild(addMoreBtn);
+    btnDiv.appendChild(validateBtn);
 
+    // Кнопка "Сохранить" (без валидации)
     const saveBtn = document.createElement('button');
     saveBtn.className = 'px-3 py-1 bg-emerald-600/20 text-emerald-500 rounded';
     saveBtn.innerText = 'Сохранить';
+    saveBtn.disabled = true; // по умолчанию неактивна
     saveBtn.onclick = () => {
-        if (onSave) onSave();
+        const updatedContent = gatherContent();
+        if (onSave) onSave(updatedContent, false);
     };
     btnDiv.appendChild(saveBtn);
 
@@ -325,10 +341,31 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     document.body.appendChild(modal);
     currentModal = modal;
 
+    // Функция сбора текущего содержимого
+    function gatherContent() {
+        if (artifactType === 'ReqEngineeringAnalysis') {
+            // нужно собрать из DOM
+            // упрощённо: возвращаем то, что в state (но оно уже должно обновляться через oninput)
+            // для полноты можно реализовать парсинг, но пока так
+            return content; // заглушка
+        } else {
+            // для массива требований
+            return content; // заглушка
+        }
+    }
+
+    // Рендерим контент и добавляем слушатели изменений
     if (artifactType === 'ReqEngineeringAnalysis') {
         renderReqEngineeringAnalysis(container, content);
+        // Добавляем слушатели для отслеживания изменений
+        container.querySelectorAll('input, textarea').forEach(el => {
+            el.addEventListener('input', markChanged);
+        });
     } else {
         renderRequirementsInContainer(container, content);
+        container.querySelectorAll('input, textarea').forEach(el => {
+            el.addEventListener('input', markChanged);
+        });
     }
 }
 

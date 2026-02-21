@@ -20,6 +20,21 @@ function renderProgressBar(currentStage) {
     });
 }
 
+// Обновить прогресс на основе текущего проекта
+async function updateProgress() {
+    const projectId = state.getCurrentProjectId();
+    if (!projectId) return;
+    try {
+        const res = await fetch(`/api/workflow/next?project_id=${encodeURIComponent(projectId)}`);
+        const data = await res.json();
+        if (!data.error) {
+            renderProgressBar(data.next_stage);
+        }
+    } catch (e) {
+        console.error('Failed to update progress', e);
+    }
+}
+
 // Обработчик кнопки "Далее"
 async function handleNext() {
     const projectId = state.getCurrentProjectId();
@@ -53,33 +68,72 @@ async function handleNext() {
             ui.showNotification(execData.error, 'error');
             return;
         }
-        // Показываем результат в модальном окне
-        ui.openRequirementsModal(
-            execData.artifact_type,
-            execData.content,
-            async () => {
-                // Сохраняем
-                try {
-                    const saved = await api.saveArtifactPackage(projectId, execData.parent_id, execData.artifact_type, execData.content);
-                    ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
-                    ui.closeModal();
-                    // Обновляем прогресс
-                    const stageRes = await fetch(`/api/workflow/next?project_id=${encodeURIComponent(projectId)}`);
-                    const stageData = await stageRes.json();
-                    renderProgressBar(stageData.next_stage);
-                    // Обновляем список артефактов для расширенного режима, если мы не в простом
-                    if (!isSimpleMode && typeof window.loadParents === 'function') {
-                        await window.loadParents();
+        if (execData.existing) {
+            // Артефакт уже существует
+            ui.showNotification('Этот этап уже пройден. Открываю существующий артефакт.', 'info');
+            ui.openRequirementsModal(
+                execData.artifact_type,
+                execData.content,
+                async (updatedContent, validate) => {
+                    // Сохраняем изменения
+                    try {
+                        const saved = await api.saveArtifactPackage(projectId, execData.parent_id, execData.artifact_type, updatedContent);
+                        if (validate) {
+                            await apiFetch('/api/validate_artifact', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ artifact_id: saved.id, status: 'VALIDATED' })
+                            });
+                        }
+                        ui.showNotification('Артефакт обновлён', 'success');
+                        ui.closeModal();
+                        await updateProgress();
+                        // Обновляем список родителей для расширенного режима
+                        if (!isSimpleMode && typeof window.loadParents === 'function') {
+                            await window.loadParents();
+                        }
+                    } catch (e) {
+                        ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                     }
-                } catch (e) {
-                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
-                }
-            },
-            () => {
-                ui.showNotification('Догенерация пока не поддерживается', 'info');
-            },
-            () => { ui.closeModal(); }
-        );
+                },
+                () => {
+                    ui.showNotification('Догенерация пока не поддерживается', 'info');
+                },
+                () => { ui.closeModal(); }
+            );
+        } else {
+            // Новый артефакт
+            ui.openRequirementsModal(
+                execData.artifact_type,
+                execData.content,
+                async (updatedContent, validate) => {
+                    try {
+                        const saved = await api.saveArtifactPackage(projectId, execData.parent_id, execData.artifact_type, updatedContent);
+                        if (validate) {
+                            await apiFetch('/api/validate_artifact', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ artifact_id: saved.id, status: 'VALIDATED' })
+                            });
+                            ui.showNotification('Артефакт подтверждён', 'success');
+                        } else {
+                            ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
+                        }
+                        ui.closeModal();
+                        await updateProgress();
+                        if (!isSimpleMode && typeof window.loadParents === 'function') {
+                            await window.loadParents();
+                        }
+                    } catch (e) {
+                        ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                    }
+                },
+                () => {
+                    ui.showNotification('Догенерация пока не поддерживается', 'info');
+                },
+                () => { ui.closeModal(); }
+            );
+        }
     } catch (e) {
         ui.showNotification('Ошибка: ' + e.message, 'error');
     }
@@ -102,13 +156,7 @@ function switchMode(mode) {
         advancedBtn.classList.remove('bg-cyan-600/30');
         document.getElementById('progress-bar-container')?.classList.remove('hidden');
         // Обновляем прогресс
-        const projectId = state.getCurrentProjectId();
-        if (projectId) {
-            fetch(`/api/workflow/next?project_id=${encodeURIComponent(projectId)}`)
-                .then(res => res.json())
-                .then(data => renderProgressBar(data.next_stage))
-                .catch(() => {});
-        }
+        updateProgress();
     } else {
         simpleControls.classList.add('hidden');
         advancedControls.classList.remove('hidden');
@@ -120,6 +168,10 @@ function switchMode(mode) {
             window.loadParents();
         }
     }
+    // Сохраняем выбор режима
+    const state = JSON.parse(localStorage.getItem('mrak_ui_state') || '{}');
+    state.isSimple = isSimpleMode;
+    localStorage.setItem('mrak_ui_state', JSON.stringify(state));
 }
 
 // Инициализация
@@ -137,13 +189,24 @@ function initSimpleMode() {
     if (nextBtn) {
         nextBtn.addEventListener('click', handleNext);
     }
-    // По умолчанию – расширенный режим
-    switchMode('advanced');
+    // По умолчанию – расширенный режим, но может быть переопределён restoreState
+    const saved = localStorage.getItem('mrak_ui_state');
+    if (saved) {
+        const st = JSON.parse(saved);
+        if (st.isSimple) {
+            switchMode('simple');
+        } else {
+            switchMode('advanced');
+        }
+    } else {
+        switchMode('advanced');
+    }
 }
 
 window.simpleMode = {
     init: initSimpleMode,
     switchMode,
     renderProgressBar,
-    handleNext
+    handleNext,
+    updateProgress
 };

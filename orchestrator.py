@@ -187,8 +187,6 @@ class MrakOrchestrator:
         existing_analysis: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Генерация QA-анализа на основе функциональных требований."""
-        # Здесь может быть вызов промпта 07_QA_COUNCIL
-        # Реализация в artifact_generator должна быть добавлена аналогично
         raise NotImplementedError("QA analysis generation not yet implemented")
 
     async def generate_architecture_analysis(
@@ -207,79 +205,78 @@ class MrakOrchestrator:
 
     async def get_next_step(self, project_id: str) -> Optional[Dict[str, Any]]:
         """
-        Определяет следующий шаг для простого режима.
+        Определяет следующий шаг для простого режима на основе последнего ВАЛИДИРОВАННОГО артефакта.
         Возвращает словарь с полями:
-        - next_stage: следующий этап (requirements, architecture, code, tests)
+        - next_stage: следующий этап (idea, requirements, architecture, code, tests)
         - prompt_type: тип артефакта для генерации
         - parent_id: ID родительского артефакта
         - description: описание для интерфейса
         """
-        # Берём самый последний артефакт (любой статус), чтобы видеть созданные в расширенном режиме
-        last = await db.get_last_artifact(project_id)
-        if not last:
-            # Нет ни одного артефакта – начинаем с идеи
+        last_valid = await db.get_last_validated_artifact(project_id)
+        if not last_valid:
+            # Нет валидированных артефактов – начинаем с идеи
             return {
                 "next_stage": "idea",
                 "prompt_type": "BusinessIdea",
                 "parent_id": None,
                 "description": "Введите идею и уточните её"
             }
-        last_type = last['type']
+        last_type = last_valid['type']
         # Маппинг текущего типа на следующий шаг
         if last_type == "BusinessIdea":
             return {
                 "next_stage": "requirements",
                 "prompt_type": "ProductCouncilAnalysis",
-                "parent_id": last['id'],
+                "parent_id": last_valid['id'],
                 "description": "Сгенерировать анализ продуктового совета"
             }
         elif last_type == "ProductCouncilAnalysis":
             return {
                 "next_stage": "requirements",
                 "prompt_type": "BusinessRequirementPackage",
-                "parent_id": last['id'],
+                "parent_id": last_valid['id'],
                 "description": "Сгенерировать бизнес-требования"
             }
         elif last_type == "BusinessRequirementPackage":
             return {
                 "next_stage": "requirements",
                 "prompt_type": "ReqEngineeringAnalysis",
-                "parent_id": last['id'],
+                "parent_id": last_valid['id'],
                 "description": "Сгенерировать анализ инженерии требований"
             }
         elif last_type == "ReqEngineeringAnalysis":
             return {
                 "next_stage": "requirements",
                 "prompt_type": "FunctionalRequirementPackage",
-                "parent_id": last['id'],
+                "parent_id": last_valid['id'],
                 "description": "Сгенерировать функциональные требования"
             }
         elif last_type == "FunctionalRequirementPackage":
             return {
                 "next_stage": "architecture",
                 "prompt_type": "ArchitectureAnalysis",
-                "parent_id": last['id'],
+                "parent_id": last_valid['id'],
                 "description": "Сгенерировать архитектурный анализ"
             }
         elif last_type == "ArchitectureAnalysis":
             return {
                 "next_stage": "code",
                 "prompt_type": "AtomicTask",
-                "parent_id": last['id'],
+                "parent_id": last_valid['id'],
                 "description": "Декомпозировать на задачи"
             }
         elif last_type == "AtomicTask":
             return {
                 "next_stage": "code",
                 "prompt_type": "CodeArtifact",
-                "parent_id": last['id'],
+                "parent_id": last_valid['id'],
                 "description": "Сгенерировать код для задачи"
             }
         elif last_type == "CodeArtifact":
             return {
                 "next_stage": "tests",
                 "prompt_type": "TestPackage",
-                "parent_id": last['id'],
+                "parent_id": last_valid['id'],
                 "description": "Сгенерировать тесты"
             }
         else:

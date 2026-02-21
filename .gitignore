@@ -52,3 +52,4 @@ epic_detailer.py
 
 # Временные выводы
 tree_output.txt
+backup_*.sql

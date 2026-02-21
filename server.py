@@ -5,7 +5,7 @@ from orchestrator import MrakOrchestrator
 import logging
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-import db
+import db  # для проверки подключения
 import json
 import os
 import hashlib
@@ -42,11 +42,22 @@ class SavePackageRequest(BaseModel):
     artifact_type: str
     content: Any
 
+class ValidateArtifactRequest(BaseModel):
+    artifact_id: str
+    status: str  # "VALIDATED" или "REJECTED"
+
+class NextStepResponse(BaseModel):
+    next_stage: str
+    prompt_type: str
+    parent_id: Optional[str]
+    description: str
+
 def compute_content_hash(content):
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 @app.on_event("startup")
 async def startup_event():
+    """Проверяем подключение к базе, но ничего не создаём."""
     logger.info("Starting up... Testing database connection.")
     try:
         conn = await db.get_connection()
@@ -55,6 +66,8 @@ async def startup_event():
         logger.info("Database connection OK.")
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
+
+# ==================== ПРОЕКТЫ ====================
 
 @app.get("/api/projects")
 async def list_projects():
@@ -68,12 +81,10 @@ async def create_project_endpoint(project: ProjectCreate):
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project_endpoint(project_id: str):
-    try:
-        await db.delete_project(project_id)
-        return JSONResponse(status_code=204, content={})
-    except Exception as e:
-        logger.error(f"Error deleting project {project_id}: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+    await db.delete_project(project_id)
+    return JSONResponse(content={"status": "deleted"})
+
+# ==================== АРТЕФАКТЫ ====================
 
 @app.get("/api/projects/{project_id}/artifacts")
 async def list_artifacts(project_id: str, type: Optional[str] = None):
@@ -112,15 +123,6 @@ async def create_artifact(artifact: ArtifactCreate):
         logger.error(f"Error creating artifact: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-@app.delete("/api/artifacts/{artifact_id}")
-async def delete_artifact_endpoint(artifact_id: str):
-    try:
-        await db.delete_artifact(artifact_id)
-        return JSONResponse(status_code=204, content={})
-    except Exception as e:
-        logger.error(f"Error deleting artifact {artifact_id}: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
 @app.get("/api/latest_artifact")
 async def latest_artifact(parent_id: str, type: str):
     pkg = await db.get_last_version_by_parent_and_type(parent_id, type)
@@ -133,9 +135,31 @@ async def latest_artifact(parent_id: str, type: str):
     else:
         return JSONResponse(content={"exists": False})
 
+@app.post("/api/validate_artifact")
+async def validate_artifact(req: ValidateArtifactRequest):
+    """Изменяет статус артефакта (VALIDATED/REJECTED)."""
+    try:
+        await db.update_artifact_status(req.artifact_id, req.status)
+        return JSONResponse(content={"status": "updated"})
+    except Exception as e:
+        logger.error(f"Error validating artifact: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.delete("/api/artifact/{artifact_id}")
+async def delete_artifact_endpoint(artifact_id: str):
+    try:
+        await db.delete_artifact(artifact_id)
+        return JSONResponse(content={"status": "deleted"})
+    except Exception as e:
+        logger.error(f"Error deleting artifact: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+# ==================== ГЕНЕРАЦИЯ АРТЕФАКТОВ ====================
+
 @app.post("/api/generate_artifact")
 async def generate_artifact_endpoint(req: GenerateArtifactRequest):
     try:
+        # Используем универсальный метод, но поддерживаем старые специализированные для обратной совместимости
         if req.artifact_type == "BusinessRequirementPackage":
             result = await orch.generate_business_requirements(
                 analysis_id=req.parent_id,
@@ -161,7 +185,16 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 existing_requirements=req.existing_content
             )
         else:
-            return JSONResponse(content={"error": "Unsupported artifact type"}, status_code=400)
+            # Для всех остальных типов используем универсальный метод
+            parent = await db.get_artifact(req.parent_id) if req.parent_id else None
+            new_id = await orch.generate_artifact(
+                artifact_type=req.artifact_type,
+                user_input=req.feedback,
+                parent_artifact=parent,
+                model_id=req.model,
+                project_id=req.project_id
+            )
+            return JSONResponse(content={"result": {"id": new_id}})
 
         return JSONResponse(content={"result": result})
     except Exception as e:
@@ -183,10 +216,8 @@ async def save_artifact_package(req: SavePackageRequest):
             except (ValueError, TypeError):
                 last_version = 0
             version = str(last_version + 1)
-            previous_versions = [last_pkg['id']]
         else:
             version = "1"
-            previous_versions = []
 
         content_to_save = req.content
         if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"] and isinstance(content_to_save, list):
@@ -209,19 +240,63 @@ async def save_artifact_package(req: SavePackageRequest):
         logger.error(f"Error saving package: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+# ==================== ПРОСТОЙ РЕЖИМ ====================
+
+@app.get("/api/workflow/next")
+async def get_next_step(project_id: str):
+    """Возвращает следующий рекомендуемый шаг для проекта в простом режиме."""
+    try:
+        step = await orch.get_next_step(project_id)
+        if step:
+            return JSONResponse(content=step)
+        else:
+            return JSONResponse(content={"next_stage": "finished", "description": "Проект завершён"})
+    except Exception as e:
+        logger.error(f"Error getting next step: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/workflow/execute_next")
+async def execute_next_step(project_id: str, model: Optional[str] = None):
+    """Выполняет следующий шаг: генерирует артефакт и возвращает его для предпросмотра."""
+    try:
+        step = await orch.get_next_step(project_id)
+        if not step:
+            return JSONResponse(content={"error": "No next step"}, status_code=400)
+        if step['next_stage'] == 'idea':
+            # Для идеи просто возвращаем информацию, что нужно ввести текст
+            return JSONResponse(content={"action": "input_idea", "description": step['description']})
+        # Генерируем артефакт
+        if step['parent_id'] is None:
+            # Нет родителя – значит, это первый шаг, но обычно так не бывает
+            return JSONResponse(content={"error": "No parent"}, status_code=400)
+        result = await orch.generate_artifact(
+            artifact_type=step['prompt_type'],
+            user_input="",  # фидбек пока пустой
+            parent_artifact=await db.get_artifact(step['parent_id']),
+            model_id=model,
+            project_id=project_id
+        )
+        # В result должен быть ID созданного артефакта (черновик)
+        # Получим его содержимое
+        artifact = await db.get_artifact(result)
+        return JSONResponse(content={
+            "artifact_id": result,
+            "artifact_type": step['prompt_type'],
+            "content": artifact['content'] if artifact else None,
+            "next_stage": step['next_stage']
+        })
+    except Exception as e:
+        logger.error(f"Error executing next step: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+# ==================== МОДЕЛИ ====================
+
 @app.get("/api/models")
 async def get_models():
     models = orch.get_active_models()
     return JSONResponse(content=models)
 
-@app.get("/api/modes")
-async def get_modes():
-    """
-    Возвращает список доступных режимов (ключи из mode_map) для заполнения селекта.
-    """
-    # Предполагаем, что orch.mode_map уже содержит все ключи
-    modes = [{"id": key, "name": key} for key in orch.mode_map.keys()]
-    return JSONResponse(content=modes)
+# ==================== ЧАТ ====================
 
 @app.post("/api/analyze")
 async def analyze(request: Request):
@@ -259,4 +334,3 @@ async def analyze(request: Request):
     )
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
-

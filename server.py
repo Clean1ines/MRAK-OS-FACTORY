@@ -496,7 +496,7 @@ async def add_message(session_id: str, req: MessageRequest):
     if not mode:
         return JSONResponse(content={"error": f"No prompt mode found for artifact type {session['target_artifact_type']}"}, status_code=500)
 
-    # Получаем системный промпт (он уже есть в истории, но для генерации следующего ответа используем его же)
+    # Получаем системный промпт
     sys_prompt = await orch.get_system_prompt(mode)
     if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
         return JSONResponse(content={"error": sys_prompt}, status_code=500)
@@ -506,7 +506,8 @@ async def add_message(session_id: str, req: MessageRequest):
     for msg in history:
         messages.append({"role": msg['role'], "content": msg['content']})
 
-    model = req.model or "llama-3.3-70b-versatile"  # можно передавать модель, но пока берём дефолтную
+    # FIXED: Используем фиксированную модель, так как в запросе её нет
+    model = "llama-3.3-70b-versatile"
     try:
         assistant_message = await orch.get_chat_completion(messages, model)
     except Exception as e:

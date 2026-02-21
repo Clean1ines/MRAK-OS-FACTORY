@@ -9,6 +9,7 @@ import db
 import json
 import os
 import hashlib
+import datetime  # ADDED: for timestamps
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
@@ -51,6 +52,26 @@ class NextStepResponse(BaseModel):
     prompt_type: str
     parent_id: Optional[str]
     description: str
+
+# ========== ADDED: Pydantic models for clarification ==========
+class StartClarificationRequest(BaseModel):
+    project_id: str
+    target_artifact_type: str
+    model: Optional[str] = None  # если не указано, будет использована модель по умолчанию
+
+class MessageRequest(BaseModel):
+    message: str
+
+class ClarificationSessionResponse(BaseModel):
+    id: str
+    project_id: str
+    target_artifact_type: str
+    history: List[Dict[str, Any]]
+    status: str
+    context_summary: Optional[str] = None
+    final_artifact_id: Optional[str] = None
+    created_at: str
+    updated_at: str
 
 def compute_content_hash(content):
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
@@ -395,5 +416,163 @@ async def analyze(request: Request):
         orch.stream_analysis(prompt, sys_prompt, model, mode, project_id=project_id),
         media_type="text/plain",
     )
+
+# ==================== ADDED: Clarification session endpoints ====================
+
+@app.post("/api/clarification/start", response_model=ClarificationSessionResponse)
+async def start_clarification(req: StartClarificationRequest):
+    """Создаёт новую сессию уточнения и генерирует первое сообщение ассистента."""
+    # Проверяем существование проекта
+    project = await db.get_project(req.project_id)
+    if not project:
+        return JSONResponse(content={"error": "Project not found"}, status_code=404)
+
+    # Определяем режим промпта по типу артефакта
+    mode = orch.type_to_mode.get(req.target_artifact_type)
+    if not mode:
+        return JSONResponse(content={"error": f"No prompt mode found for artifact type {req.target_artifact_type}"}, status_code=400)
+
+    # Получаем системный промпт
+    sys_prompt = await orch.get_system_prompt(mode)
+    if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
+        return JSONResponse(content={"error": sys_prompt}, status_code=500)
+
+    # Создаём сессию в БД
+    session_id = await db.create_clarification_session(req.project_id, req.target_artifact_type)
+
+    # Формируем сообщения для LLM: системный промпт + пустой пользовательский запрос?
+    # Для первого сообщения ассистент должен задать вопрос, поэтому отправляем системный промпт и, возможно, инструкцию "Начни диалог".
+    # Используем модель из запроса или дефолтную
+    model = req.model or "llama-3.3-70b-versatile"
+    messages = [
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": "Начни уточняющий диалог. Задай первый вопрос, чтобы понять идею пользователя."}
+    ]
+    try:
+        assistant_message = await orch.get_chat_completion(messages, model)
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        return JSONResponse(content={"error": "Failed to generate first message"}, status_code=500)
+
+    # Добавляем сообщение ассистента в историю
+    await db.add_message_to_session(session_id, "assistant", assistant_message)
+
+    # Получаем обновлённую сессию
+    session = await db.get_clarification_session(session_id)
+    if not session:
+        return JSONResponse(content={"error": "Session created but not found"}, status_code=500)
+
+    return ClarificationSessionResponse(
+        id=session['id'],
+        project_id=session['project_id'],
+        target_artifact_type=session['target_artifact_type'],
+        history=session['history'],
+        status=session['status'],
+        context_summary=session.get('context_summary'),
+        final_artifact_id=session.get('final_artifact_id'),
+        created_at=session['created_at'],
+        updated_at=session['updated_at']
+    )
+
+@app.post("/api/clarification/{session_id}/message", response_model=ClarificationSessionResponse)
+async def add_message(session_id: str, req: MessageRequest):
+    """Добавляет сообщение пользователя, генерирует ответ ассистента и обновляет историю."""
+    session = await db.get_clarification_session(session_id)
+    if not session:
+        return JSONResponse(content={"error": "Session not found"}, status_code=404)
+
+    if session['status'] != 'active':
+        return JSONResponse(content={"error": "Session is not active"}, status_code=400)
+
+    # Добавляем сообщение пользователя
+    await db.add_message_to_session(session_id, "user", req.message)
+
+    # Получаем обновлённую историю
+    session = await db.get_clarification_session(session_id)
+    history = session['history']
+
+    # Определяем режим промпта по типу артефакта
+    mode = orch.type_to_mode.get(session['target_artifact_type'])
+    if not mode:
+        return JSONResponse(content={"error": f"No prompt mode found for artifact type {session['target_artifact_type']}"}, status_code=500)
+
+    # Получаем системный промпт (он уже есть в истории, но для генерации следующего ответа используем его же)
+    sys_prompt = await orch.get_system_prompt(mode)
+    if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
+        return JSONResponse(content={"error": sys_prompt}, status_code=500)
+
+    # Формируем полную историю для LLM
+    messages = [{"role": "system", "content": sys_prompt}]
+    for msg in history:
+        messages.append({"role": msg['role'], "content": msg['content']})
+
+    model = req.model or "llama-3.3-70b-versatile"  # можно передавать модель, но пока берём дефолтную
+    try:
+        assistant_message = await orch.get_chat_completion(messages, model)
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        return JSONResponse(content={"error": "Failed to generate assistant message"}, status_code=500)
+
+    # Добавляем ответ ассистента в историю
+    await db.add_message_to_session(session_id, "assistant", assistant_message)
+
+    # Получаем финальную версию сессии
+    session = await db.get_clarification_session(session_id)
+
+    return ClarificationSessionResponse(
+        id=session['id'],
+        project_id=session['project_id'],
+        target_artifact_type=session['target_artifact_type'],
+        history=session['history'],
+        status=session['status'],
+        context_summary=session.get('context_summary'),
+        final_artifact_id=session.get('final_artifact_id'),
+        created_at=session['created_at'],
+        updated_at=session['updated_at']
+    )
+
+@app.get("/api/clarification/{session_id}", response_model=ClarificationSessionResponse)
+async def get_clarification_session_endpoint(session_id: str):
+    """Возвращает текущее состояние сессии."""
+    session = await db.get_clarification_session(session_id)
+    if not session:
+        return JSONResponse(content={"error": "Session not found"}, status_code=404)
+    return ClarificationSessionResponse(
+        id=session['id'],
+        project_id=session['project_id'],
+        target_artifact_type=session['target_artifact_type'],
+        history=session['history'],
+        status=session['status'],
+        context_summary=session.get('context_summary'),
+        final_artifact_id=session.get('final_artifact_id'),
+        created_at=session['created_at'],
+        updated_at=session['updated_at']
+    )
+
+@app.post("/api/clarification/{session_id}/complete")
+async def complete_clarification_session(session_id: str):
+    """Помечает сессию как завершённую (заглушка для будущей генерации артефакта)."""
+    session = await db.get_clarification_session(session_id)
+    if not session:
+        return JSONResponse(content={"error": "Session not found"}, status_code=404)
+    if session['status'] != 'active':
+        return JSONResponse(content={"error": "Session already completed"}, status_code=400)
+
+    await db.update_clarification_session(session_id, status="completed")
+    return JSONResponse(content={"status": "completed", "session_id": session_id})
+
+@app.get("/api/projects/{project_id}/clarification/active")
+async def get_active_sessions(project_id: str):
+    """Возвращает все активные сессии для проекта (для восстановления после перезагрузки)."""
+    sessions = await db.list_active_sessions_for_project(project_id)
+    return JSONResponse(content=[
+        {
+            "id": s['id'],
+            "target_artifact_type": s['target_artifact_type'],
+            "created_at": s['created_at'],
+            "updated_at": s['updated_at']
+        }
+        for s in sessions
+    ])
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

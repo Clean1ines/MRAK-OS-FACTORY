@@ -5,7 +5,7 @@ from orchestrator import MrakOrchestrator
 import logging
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-import db  # для проверки подключения
+import db
 import json
 import os
 import hashlib
@@ -47,7 +47,6 @@ def compute_content_hash(content):
 
 @app.on_event("startup")
 async def startup_event():
-    """Проверяем подключение к базе, но ничего не создаём."""
     logger.info("Starting up... Testing database connection.")
     try:
         conn = await db.get_connection()
@@ -56,7 +55,6 @@ async def startup_event():
         logger.info("Database connection OK.")
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
-        # Приложение может продолжать работу, но без базы функциональность ограничена
 
 @app.get("/api/projects")
 async def list_projects():
@@ -67,6 +65,15 @@ async def list_projects():
 async def create_project_endpoint(project: ProjectCreate):
     project_id = await db.create_project(project.name, project.description)
     return JSONResponse(content={"id": project_id, "name": project.name})
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project_endpoint(project_id: str):
+    try:
+        await db.delete_project(project_id)
+        return JSONResponse(status_code=204, content={})
+    except Exception as e:
+        logger.error(f"Error deleting project {project_id}: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.get("/api/projects/{project_id}/artifacts")
 async def list_artifacts(project_id: str, type: Optional[str] = None):
@@ -103,6 +110,15 @@ async def create_artifact(artifact: ArtifactCreate):
             return JSONResponse(content={"id": new_id, "generated": False})
     except Exception as e:
         logger.error(f"Error creating artifact: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.delete("/api/artifacts/{artifact_id}")
+async def delete_artifact_endpoint(artifact_id: str):
+    try:
+        await db.delete_artifact(artifact_id)
+        return JSONResponse(status_code=204, content={})
+    except Exception as e:
+        logger.error(f"Error deleting artifact {artifact_id}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.get("/api/latest_artifact")
@@ -234,41 +250,3 @@ async def analyze(request: Request):
     )
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
-
-@app.delete("/api/projects/{project_id}")
-async def delete_project(project_id: str):
-    """Удаляет проект и все связанные с ним артефакты (каскадно)."""
-    try:
-        await db.delete_project(project_id)
-        return JSONResponse(status_code=204, content={})
-    except Exception as e:
-        logger.error(f"Error deleting project {project_id}: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.delete("/api/artifacts/{artifact_id}")
-async def delete_artifact(artifact_id: str):
-    """Удаляет конкретный артефакт. Связанные артефакты (дочерние) остаются, но их parent_id становится NULL."""
-    try:
-        await db.delete_artifact(artifact_id)
-        return JSONResponse(status_code=204, content={})
-    except Exception as e:
-        logger.error(f"Error deleting artifact {artifact_id}: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.delete("/api/projects/{project_id}")
-async def delete_project_endpoint(project_id: str):
-    try:
-        await db.delete_project(project_id)
-        return JSONResponse(status_code=204, content={})
-    except Exception as e:
-        logger.error(f"Error deleting project {project_id}: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.delete("/api/artifacts/{artifact_id}")
-async def delete_artifact_endpoint(artifact_id: str):
-    try:
-        await db.delete_artifact(artifact_id)
-        return JSONResponse(status_code=204, content={})
-    except Exception as e:
-        logger.error(f"Error deleting artifact {artifact_id}: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)

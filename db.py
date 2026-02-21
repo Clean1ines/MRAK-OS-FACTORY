@@ -95,7 +95,6 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) ->
         await conn.close()
 
 async def get_last_artifact(project_id: str) -> Optional[Dict[str, Any]]:
-    """Возвращает самый последний артефакт в проекте (по created_at) независимо от статуса."""
     conn = await get_connection()
     try:
         row = await conn.fetchrow('''
@@ -118,7 +117,6 @@ async def get_last_artifact(project_id: str) -> Optional[Dict[str, Any]]:
         await conn.close()
 
 async def get_last_validated_artifact(project_id: str) -> Optional[Dict[str, Any]]:
-    """Возвращает последний валидированный артефакт в проекте (по created_at)."""
     conn = await get_connection()
     try:
         row = await conn.fetchrow('''
@@ -236,5 +234,115 @@ async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
                 art['content'] = json.loads(art['content'])
             return art
         return None
+    finally:
+        await conn.close()
+
+# ==================== СЕССИИ УТОЧНЕНИЯ ==================== #
+# ADDED: New functions for clarification sessions
+
+async def create_clarification_session(
+    project_id: str,
+    target_artifact_type: str
+) -> str:
+    """Создаёт новую сессию уточнения, возвращает её ID."""
+    conn = await get_connection()
+    try:
+        session_id = str(uuid.uuid4())
+        await conn.execute('''
+            INSERT INTO clarification_sessions (id, project_id, target_artifact_type, history, status)
+            VALUES ($1, $2, $3, $4, $5)
+        ''', session_id, project_id, target_artifact_type, json.dumps([]), 'active')
+        return session_id
+    finally:
+        await conn.close()
+
+async def get_clarification_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Возвращает сессию по ID."""
+    conn = await get_connection()
+    try:
+        row = await conn.fetchrow('SELECT * FROM clarification_sessions WHERE id = $1', session_id)
+        if row:
+            sess = dict(row)
+            sess['id'] = str(sess['id'])
+            sess['project_id'] = str(sess['project_id']) if sess['project_id'] else None
+            sess['final_artifact_id'] = str(sess['final_artifact_id']) if sess['final_artifact_id'] else None
+            # history хранится как JSONB, парсим
+            if isinstance(sess['history'], str):
+                sess['history'] = json.loads(sess['history'])
+            sess['created_at'] = sess['created_at'].isoformat() if sess['created_at'] else None
+            sess['updated_at'] = sess['updated_at'].isoformat() if sess['updated_at'] else None
+            return sess
+        return None
+    finally:
+        await conn.close()
+
+async def update_clarification_session(
+    session_id: str,
+    **kwargs
+) -> None:
+    """Обновляет поля сессии (кроме id и project_id). Допустимые ключи: history, status, context_summary, final_artifact_id."""
+    if not kwargs:
+        return
+    conn = await get_connection()
+    try:
+        set_clauses = []
+        values = []
+        idx = 1
+        for key, value in kwargs.items():
+            if key in ('history', 'context_summary', 'status', 'final_artifact_id'):
+                set_clauses.append(f"{key} = ${idx}")
+                # Если history, нужно сериализовать в JSON
+                if key == 'history' and value is not None:
+                    values.append(json.dumps(value))
+                else:
+                    values.append(value)
+                idx += 1
+        if not set_clauses:
+            return
+        set_clauses.append("updated_at = NOW()")
+        query = f"UPDATE clarification_sessions SET {', '.join(set_clauses)} WHERE id = ${idx}"
+        values.append(session_id)
+        await conn.execute(query, *values)
+    finally:
+        await conn.close()
+
+async def add_message_to_session(
+    session_id: str,
+    role: str,  # 'user' или 'assistant'
+    content: str
+) -> None:
+    """Добавляет сообщение в историю сессии."""
+    session = await get_clarification_session(session_id)
+    if not session:
+        raise ValueError(f"Session {session_id} not found")
+    history = session.get('history', [])
+    history.append({
+        "role": role,
+        "content": content,
+        "timestamp": datetime.datetime.now().isoformat()
+    })
+    await update_clarification_session(session_id, history=history)
+
+async def list_active_sessions_for_project(project_id: str) -> List[Dict[str, Any]]:
+    """Возвращает все активные сессии для проекта."""
+    conn = await get_connection()
+    try:
+        rows = await conn.fetch('''
+            SELECT * FROM clarification_sessions
+            WHERE project_id = $1 AND status = 'active'
+            ORDER BY created_at DESC
+        ''', project_id)
+        sessions = []
+        for row in rows:
+            sess = dict(row)
+            sess['id'] = str(sess['id'])
+            sess['project_id'] = str(sess['project_id'])
+            sess['final_artifact_id'] = str(sess['final_artifact_id']) if sess['final_artifact_id'] else None
+            if isinstance(sess['history'], str):
+                sess['history'] = json.loads(sess['history'])
+            sess['created_at'] = sess['created_at'].isoformat() if sess['created_at'] else None
+            sess['updated_at'] = sess['updated_at'].isoformat() if sess['updated_at'] else None
+            sessions.append(sess)
+        return sessions
     finally:
         await conn.close()

@@ -81,6 +81,7 @@ async def create_project_endpoint(project: ProjectCreate):
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project_endpoint(project_id: str):
+    """Удаляет проект и все его артефакты (каскадно)."""
     await db.delete_project(project_id)
     return JSONResponse(content={"status": "deleted"})
 
@@ -147,6 +148,7 @@ async def validate_artifact(req: ValidateArtifactRequest):
 
 @app.delete("/api/artifact/{artifact_id}")
 async def delete_artifact_endpoint(artifact_id: str):
+    """Удаляет артефакт и все связи (каскадно)."""
     try:
         await db.delete_artifact(artifact_id)
         return JSONResponse(content={"status": "deleted"})
@@ -266,23 +268,23 @@ async def execute_next_step(project_id: str, model: Optional[str] = None):
             # Для идеи просто возвращаем информацию, что нужно ввести текст
             return JSONResponse(content={"action": "input_idea", "description": step['description']})
         # Генерируем артефакт
-        if step['parent_id'] is None:
-            # Нет родителя – значит, это первый шаг, но обычно так не бывает
-            return JSONResponse(content={"error": "No parent"}, status_code=400)
-        result = await orch.generate_artifact(
+        parent = await db.get_artifact(step['parent_id']) if step.get('parent_id') else None
+        if not parent:
+            return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
+        # Используем универсальную генерацию
+        new_id = await orch.generate_artifact(
             artifact_type=step['prompt_type'],
-            user_input="",  # фидбек пока пустой
-            parent_artifact=await db.get_artifact(step['parent_id']),
+            user_input="",  # фидбек пока пустой, можно добавить позже
+            parent_artifact=parent,
             model_id=model,
             project_id=project_id
         )
-        # В result должен быть ID созданного артефакта (черновик)
-        # Получим его содержимое
-        artifact = await db.get_artifact(result)
+        artifact = await db.get_artifact(new_id)
         return JSONResponse(content={
-            "artifact_id": result,
+            "artifact_id": new_id,
             "artifact_type": step['prompt_type'],
             "content": artifact['content'] if artifact else None,
+            "parent_id": step['parent_id'],
             "next_stage": step['next_stage']
         })
     except Exception as e:
@@ -295,6 +297,80 @@ async def execute_next_step(project_id: str, model: Optional[str] = None):
 async def get_models():
     models = orch.get_active_models()
     return JSONResponse(content=models)
+
+# ==================== РЕЖИМЫ (ПРОМПТЫ) ====================
+
+@app.get("/api/modes")
+async def get_available_modes(self):
+    """Возвращает список доступных режимов промптов для селектора."""
+    # Можно брать из self.mode_map, но там только URL. Лучше захардкодить или получить из базы.
+    # Для простоты вернём список, который был в старом фронтенде.
+    return [
+        {"id": "01_CORE", "name": "01: CORE_SYSTEM", "default": True},
+        {"id": "02_UI_UX", "name": "02: UI_UX_DESIGN"},
+        {"id": "03_SOFT_ENG", "name": "03: TITAN_DEV"},
+        {"id": "04_FAILURE", "name": "04: FAILURE_ANALYSIS"},
+        {"id": "06_TRANSLATOR", "name": "06: PROMPT_ENG"},
+        {"id": "07_BYPASS", "name": "07: RAW_BYPASS"},
+        {"id": "07_INTEGRATION_PLAN", "name": "07: INTEGRATION_PLAN"},
+        {"id": "08_PROMPT_COUNCIL", "name": "08: PROMPT_COUNCIL"},
+        {"id": "09_ALGO_COUNCIL", "name": "09: ALGO_COUNCIL"},
+        {"id": "10_FULL_CODE_GEN", "name": "10: FULL_CODE_GEN"},
+        {"id": "11_REQ_COUNCIL", "name": "11: REQ_COUNCIL"},
+        {"id": "12_SELF_ANALYSIS_FACTORY", "name": "12: SELF_ANALYSIS_FACTORY"},
+        {"id": "13_ARTIFACT_OUTPUT", "name": "13: ARTIFACT_OUTPUT"},
+        {"id": "14_PRODUCT_COUNCIL", "name": "14: PRODUCT_COUNCIL"},
+    ]
+
+async def get_next_step(self, project_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Определяет следующий шаг для проекта в простом режиме.
+    Возвращает словарь с ключами: next_stage, prompt_type, parent_id, description.
+    """
+    # Получаем последний валидированный артефакт в проекте
+    conn = await db.get_connection()
+    try:
+        # Ищем артефакты со статусом VALIDATED, сортируем по created_at
+        row = await conn.fetchrow("""
+            SELECT * FROM artifacts 
+            WHERE project_id = $1 AND status = 'VALIDATED'
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, project_id)
+        if not row:
+            # Нет валидированных артефактов – значит, нужно начать с идеи
+            return {
+                "next_stage": "idea",
+                "prompt_type": "BusinessIdea",  # тип, который будет создан
+                "parent_id": None,
+                "description": "Введите описание идеи"
+            }
+        artifact = dict(row)
+        artifact_type = artifact['type']
+        # Определяем следующий шаг по таблице переходов (можно захардкодить)
+        next_map = {
+            "BusinessIdea": ("ProductCouncilAnalysis", "Product Titans Council"),
+            "ProductCouncilAnalysis": ("BusinessRequirementPackage", "Business Requirements Generator"),
+            "BusinessRequirementPackage": ("ReqEngineeringAnalysis", "Requirements Engineering Titans Council"),
+            "ReqEngineeringAnalysis": ("FunctionalRequirementPackage", "System Requirements Generator"),
+            "FunctionalRequirementPackage": ("QAAnalysis", "Titans’ Council of QA"),
+            "QAAnalysis": ("ArchitectureAnalysis", "Titans’ Council of Software Architecture"),
+            "ArchitectureAnalysis": ("AtomicTask", "Atomic Code Task Generator"),
+            "AtomicTask": ("CodeArtifact", "Code Generator"),
+            "CodeArtifact": ("TestPackage", "Test Suite Generator"),
+        }
+        if artifact_type in next_map:
+            next_type, prompt_desc = next_map[artifact_type]
+            return {
+                "next_stage": next_type,
+                "prompt_type": next_type,
+                "parent_id": artifact['id'],
+                "description": f"Следующий шаг: {prompt_desc}"
+            }
+        else:
+            return None  # нет определённого следующего шага
+    finally:
+        await conn.close()
 
 # ==================== ЧАТ ====================
 

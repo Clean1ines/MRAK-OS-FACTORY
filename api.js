@@ -81,7 +81,7 @@ async function fetchModels() {
     return apiFetch('/api/models');
 }
 
-// Режимы
+// Режимы (промпты)
 async function fetchModes() {
     return apiFetch('/api/modes');
 }

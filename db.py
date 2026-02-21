@@ -209,3 +209,19 @@ async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
         return None
     finally:
         await conn.close()
+
+async def delete_project(project_id: str) -> None:
+    """Удаляет проект (каскадно удаляет все его артефакты благодаря ON DELETE CASCADE)."""
+    conn = await get_connection()
+    try:
+        await conn.execute("DELETE FROM projects WHERE id = $1", project_id)
+    finally:
+        await conn.close()
+
+async def delete_artifact(artifact_id: str) -> None:
+    """Удаляет артефакт. Дочерние артефакты (parent_id = artifact_id) получат parent_id = NULL (ON DELETE SET NULL)."""
+    conn = await get_connection()
+    try:
+        await conn.execute("DELETE FROM artifacts WHERE id = $1", artifact_id)
+    finally:
+        await conn.close()

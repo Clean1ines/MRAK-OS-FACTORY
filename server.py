@@ -234,3 +234,23 @@ async def analyze(request: Request):
     )
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    """Удаляет проект и все связанные с ним артефакты (каскадно)."""
+    try:
+        await db.delete_project(project_id)
+        return JSONResponse(status_code=204, content={})
+    except Exception as e:
+        logger.error(f"Error deleting project {project_id}: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.delete("/api/artifacts/{artifact_id}")
+async def delete_artifact(artifact_id: str):
+    """Удаляет конкретный артефакт. Связанные артефакты (дочерние) остаются, но их parent_id становится NULL."""
+    try:
+        await db.delete_artifact(artifact_id)
+        return JSONResponse(status_code=204, content={})
+    except Exception as e:
+        logger.error(f"Error deleting artifact {artifact_id}: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)

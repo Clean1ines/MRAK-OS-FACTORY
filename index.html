@@ -99,6 +99,7 @@
                 <option value="">-- Выберите проект --</option>
             </select>
             <button id="new-project-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30">+ Новый</button>
+            <button id="delete-project-btn" class="bg-red-600/20 text-red-500 text-xs px-3 py-1 rounded hover:bg-red-600/30 ml-2">🗑️ Удалить проект</button>
         </div>
         <div class="flex items-center gap-2">
             <span class="text-xs text-zinc-400">Тип:</span>
@@ -117,6 +118,7 @@
                 <option value="">-- нет --</option>
             </select>
             <button id="refresh-parents" class="bg-zinc-700 text-white text-xs px-2 py-1 rounded">⟲</button>
+            <button id="delete-artifact-btn" class="bg-red-600/20 text-red-500 text-xs px-3 py-1 rounded hover:bg-red-600/30 ml-2">🗑️ Удалить выбранный</button>
         </div>
         <div class="flex items-center gap-2">
             <label class="flex items-center gap-1 text-xs">
@@ -163,6 +165,8 @@
             const generateCheckbox = document.getElementById("generate-checkbox");
             const saveArtifactBtn = document.getElementById("save-artifact-btn");
             const generateArtifactBtn = document.getElementById("generate-artifact-btn");
+            const deleteProjectBtn = document.getElementById("delete-project-btn");
+            const deleteArtifactBtn = document.getElementById("delete-artifact-btn");
 
             // Флаг для блокировки повторных сохранений
             let isSaving = false;
@@ -401,6 +405,53 @@
                     ui.showNotification('Ошибка: ' + e.message, 'error');
                 } finally {
                     setLoading(generateArtifactBtn, false);
+                }
+            };
+
+            // Удаление проекта
+            deleteProjectBtn.onclick = async () => {
+                const pid = state.getCurrentProjectId();
+                if (!pid) {
+                    ui.showNotification("Нет выбранного проекта", "error");
+                    return;
+                }
+                if (!confirm("Вы уверены, что хотите удалить проект и все его артефакты? Это действие необратимо.")) return;
+                try {
+                    const res = await fetch(`/api/projects/${pid}`, { method: "DELETE" });
+                    if (res.ok) {
+                        ui.showNotification("Проект удалён", "success");
+                        state.setCurrentProjectId("");
+                        await loadProjects();
+                        parentSelect.innerHTML = '<option value="">-- нет --</option>';
+                        generateArtifactBtn.style.display = "none";
+                    } else {
+                        const err = await res.json();
+                        ui.showNotification("Ошибка удаления: " + err.error, "error");
+                    }
+                } catch (e) {
+                    ui.showNotification("Ошибка сети: " + e.message, "error");
+                }
+            };
+
+            // Удаление выбранного артефакта
+            deleteArtifactBtn.onclick = async () => {
+                const aid = parentSelect.value;
+                if (!aid) {
+                    ui.showNotification("Нет выбранного артефакта", "error");
+                    return;
+                }
+                if (!confirm("Удалить выбранный артефакт? Дочерние артефакты останутся, но потеряют связь.")) return;
+                try {
+                    const res = await fetch(`/api/artifacts/${aid}`, { method: "DELETE" });
+                    if (res.ok) {
+                        ui.showNotification("Артефакт удалён", "success");
+                        await loadParents();
+                    } else {
+                        const err = await res.json();
+                        ui.showNotification("Ошибка удаления: " + err.error, "error");
+                    }
+                } catch (e) {
+                    ui.showNotification("Ошибка сети: " + e.message, "error");
                 }
             };
 

@@ -34,43 +34,19 @@
                 <span class="text-[8px] tracking-[0.3em] text-emerald-500 font-bold uppercase">Prompt_Mode</span>
                 <select id="mode-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer">
                     <option value="01_CORE">01: CORE_SYSTEM</option>
-                    <option value="02_IDEA_CLARIFIER">02: IDEA_CLARIFIER</option>
-                    <option value="03_PRODUCT_COUNCIL">03: PRODUCT_COUNCIL</option>
-                    <option value="04_BUSINESS_REQ_GEN">04: BUSINESS_REQ_GEN</option>
-                    <option value="05_REQ_ENG_COUNCIL">05: REQ_ENG_COUNCIL</option>
-                    <option value="06_SYSTEM_REQ_GEN">06: SYSTEM_REQ_GEN</option>
-                    <option value="07_QA_COUNCIL">07: QA_COUNCIL</option>
-                    <option value="08_ARCHITECTURE_COUNCIL">08: ARCHITECTURE_COUNCIL</option>
-                    <option value="09_CODE_TASK_GEN">09: CODE_TASK_GEN</option>
-                    <option value="10_CODE_GEN">10: CODE_GEN</option>
-                    <option value="11_TEST_GEN">11: TEST_GEN</option>
-                    <option value="12_FAILURE_DETECTOR">12: FAILURE_DETECTOR</option>
-                    <option value="13_SELF_ANALYSIS_FACTORY">13: SELF_ANALYSIS_FACTORY</option>
-                    <option value="14_PROMPT_ENGINEERING_COUNCIL">14: PROMPT_ENGINEERING_COUNCIL</option>
-                    <option value="15_ALGORITHM_COUNCIL">15: ALGORITHM_COUNCIL</option>
-                    <option value="16_UI_UX_COUNCIL">16: UI_UX_COUNCIL</option>
-                    <option value="17_SOFT_ENG_COUNCIL">17: SOFT_ENG_COUNCIL</option>
-                    <option value="18_TRANSLATOR">18: TRANSLATOR</option>
-                    <option value="19_INTEGRATION_PLAN">19: INTEGRATION_PLAN</option>
-                    <option value="20_SECURITY_REQ_GEN">20: SECURITY_REQ_GEN</option>
-                    <option value="21_THREAT_MODELING_ASSISTANT">21: THREAT_MODELING_ASSISTANT</option>
-                    <option value="22_INFRASTRUCTURE_SPEC_GEN">22: INFRASTRUCTURE_SPEC_GEN</option>
-                    <option value="23_OBSERVABILITY_SPEC_GEN">23: OBSERVABILITY_SPEC_GEN</option>
-                    <option value="24_TECH_DESIGN_DOC_GEN">24: TECH_DESIGN_DOC_GEN</option>
-                    <option value="25_USER_DOC_GEN">25: USER_DOC_GEN</option>
-                    <option value="26_API_DOC_GEN">26: API_DOC_GEN</option>
-                    <option value="27_UAT_SCRIPT_GEN">27: UAT_SCRIPT_GEN</option>
-                    <option value="28_JIRA_ISSUE_FORMATTER">28: JIRA_ISSUE_FORMATTER</option>
-                    <option value="29_PROJECT_STATUS_REPORTER">29: PROJECT_STATUS_REPORTER</option>
-                    <option value="30_INCIDENT_POST_MORTEM_GEN">30: INCIDENT_POST_MORTEM_GEN</option>
-                    <option value="31_KNOWLEDGE_QUERY_ASSISTANT">31: KNOWLEDGE_QUERY_ASSISTANT</option>
-                    <option value="32_CHANGE_IMPACT_ANALYZER">32: CHANGE_IMPACT_ANALYZER</option>
-                    <option value="33_FEATURE_TO_USER_STORY_GEN">33: FEATURE_TO_USER_STORY_GEN</option>
-                    <option value="34_RESEARCH_METODOLOGY_GEN">34: RESEARCH_METODOLOGY_GEN</option>
-                    <option value="35_ANALYSIS_SUMMARIZER">35: ANALYSIS_SUMMARIZER</option>
-                    <option value="36_REQUIREMENT_SUMMARIZER">36: REQUIREMENT_SUMMARIZER</option>
-                    <option value="37_SYSTEM_REQUIREMENTS_SUMMARIZER">37: SYSTEM_REQUIREMENTS_SUMMARIZER</option>
-                    <option value="38_CODE_CONTEXT_SUMMARIZER">38: CODE_CONTEXT_SUMMARIZER</option>
+                    <option value="02_UI_UX">02: UI_UX_DESIGN</option>
+                    <option value="03_SOFT_ENG">03: TITAN_DEV</option>
+                    <option value="04_FAILURE">04: FAILURE_ANALYSIS</option>
+                    <option value="06_TRANSLATOR">06: PROMPT_ENG</option>
+                    <option value="07_BYPASS">07: RAW_BYPASS</option>
+                    <option value="07_INTEGRATION_PLAN">07: INTEGRATION_PLAN</option>
+                    <option value="08_PROMPT_COUNCIL">08: PROMPT_COUNCIL</option>
+                    <option value="09_ALGO_COUNCIL">09: ALGO_COUNCIL</option>
+                    <option value="10_FULL_CODE_GEN">10: FULL_CODE_GEN</option>
+                    <option value="11_REQ_COUNCIL">11: REQ_COUNCIL</option>
+                    <option value="12_SELF_ANALYSIS_FACTORY">12: SELF_ANALYSIS_FACTORY</option>
+                    <option value="13_ARTIFACT_OUTPUT">13_ARTIFACT_OURPUT</option>
+                    <option value="14_PRODUCT_COUNCIL">14: PRODUCT_COUNCIL</option>
                 </select>
             </div>
             <div class="flex flex-col">
@@ -159,14 +135,14 @@
             const statusText = document.getElementById("status-text");
             const projectSelect = document.getElementById("project-select");
             const newProjectBtn = document.getElementById("new-project-btn");
+            const deleteProjectBtn = document.getElementById("delete-project-btn");
             const artifactTypeSelect = document.getElementById("artifact-type-select");
             const parentSelect = document.getElementById("parent-select");
             const refreshParentsBtn = document.getElementById("refresh-parents");
+            const deleteArtifactBtn = document.getElementById("delete-artifact-btn");
             const generateCheckbox = document.getElementById("generate-checkbox");
             const saveArtifactBtn = document.getElementById("save-artifact-btn");
             const generateArtifactBtn = document.getElementById("generate-artifact-btn");
-            const deleteProjectBtn = document.getElementById("delete-project-btn");
-            const deleteArtifactBtn = document.getElementById("delete-artifact-btn");
 
             // Флаг для блокировки повторных сохранений
             let isSaving = false;
@@ -257,7 +233,6 @@
                 if (selectedParentId) {
                     ui.updateGenerateButton(state.getParentData(), selectedParentId, artifactTypeSelect.value);
                 }
-                // При смене типа нужно перерисовать список родителей с учётом нового типа
                 loadParents();
             });
 
@@ -294,7 +269,7 @@
                 }
             };
 
-            // Универсальный обработчик генерации/редактирования
+            // Обработчик генерации артефакта
             generateArtifactBtn.onclick = async () => {
                 const parentId = parentSelect.value;
                 const childType = artifactTypeSelect.value;
@@ -306,7 +281,6 @@
 
                 setLoading(generateArtifactBtn, true);
                 try {
-                    // Проверяем кеш
                     let cached = state.getArtifactCache(parentId, childType);
                     let contentToShow;
 
@@ -314,7 +288,6 @@
                         contentToShow = cached.content;
                         state.setCurrentArtifact(cached);
                     } else {
-                        // Кеша нет, запрос к серверу
                         const data = await api.fetchLatestArtifact(parentId, childType);
                         if (data.exists) {
                             state.setArtifactCache(parentId, childType, {
@@ -327,9 +300,7 @@
                                 content: data.content
                             });
                         } else {
-                            // Нет существующего артефакта, генерируем
                             const genData = await api.generateArtifact(childType, parentId, feedback, model, pid, null);
-                            // Сервер возвращает поле result (массив или объект)
                             contentToShow = genData.result;
                             state.setCurrentArtifact({ content: contentToShow });
                         }
@@ -349,7 +320,6 @@
                             } else {
                                 ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
                             }
-                            // Обновляем кеш
                             state.setArtifactCache(parentId, childType, {
                                 id: saved.id,
                                 content: currentContent
@@ -425,15 +395,22 @@
                         parentSelect.innerHTML = '<option value="">-- нет --</option>';
                         generateArtifactBtn.style.display = "none";
                     } else {
-                        const err = await res.json();
-                        ui.showNotification("Ошибка удаления: " + err.error, "error");
+                        let errorText = "Ошибка удаления";
+                        const contentType = res.headers.get("content-type");
+                        if (contentType && contentType.includes("application/json")) {
+                            const err = await res.json();
+                            errorText = err.error || errorText;
+                        } else {
+                            errorText = await res.text();
+                        }
+                        ui.showNotification(errorText, "error");
                     }
                 } catch (e) {
                     ui.showNotification("Ошибка сети: " + e.message, "error");
                 }
             };
 
-            // Удаление выбранного артефакта
+            // Удаление артефакта
             deleteArtifactBtn.onclick = async () => {
                 const aid = parentSelect.value;
                 if (!aid) {
@@ -447,8 +424,15 @@
                         ui.showNotification("Артефакт удалён", "success");
                         await loadParents();
                     } else {
-                        const err = await res.json();
-                        ui.showNotification("Ошибка удаления: " + err.error, "error");
+                        let errorText = "Ошибка удаления";
+                        const contentType = res.headers.get("content-type");
+                        if (contentType && contentType.includes("application/json")) {
+                            const err = await res.json();
+                            errorText = err.error || errorText;
+                        } else {
+                            errorText = await res.text();
+                        }
+                        ui.showNotification(errorText, "error");
                     }
                 } catch (e) {
                     ui.showNotification("Ошибка сети: " + e.message, "error");

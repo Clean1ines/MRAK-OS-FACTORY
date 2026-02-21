@@ -3,6 +3,7 @@ import json
 import asyncpg
 from typing import Optional, Dict, Any, List
 import uuid
+import datetime  # ADDED: for timestamps in clarification sessions
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mrak_user:mrak_pass@localhost:5432/mrak_db")
 
@@ -319,7 +320,7 @@ async def add_message_to_session(
     history.append({
         "role": role,
         "content": content,
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.datetime.now().isoformat()  # NOW datetime is defined
     })
     await update_clarification_session(session_id, history=history)
 

@@ -71,69 +71,39 @@ async function handleNext() {
         if (execData.existing) {
             // Артефакт уже существует
             ui.showNotification('Этот этап уже пройден. Открываю существующий артефакт.', 'info');
-            ui.openRequirementsModal(
-                execData.artifact_type,
-                execData.content,
-                async (updatedContent, validate) => {
-                    // Сохраняем изменения
-                    try {
-                        const saved = await api.saveArtifactPackage(projectId, execData.parent_id, execData.artifact_type, updatedContent);
-                        if (validate) {
-                            await apiFetch('/api/validate_artifact', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ artifact_id: saved.id, status: 'VALIDATED' })
-                            });
-                        }
-                        ui.showNotification('Артефакт обновлён', 'success');
-                        ui.closeModal();
-                        await updateProgress();
-                        // Обновляем список родителей для расширенного режима
-                        if (!isSimpleMode && typeof window.loadParents === 'function') {
-                            await window.loadParents();
-                        }
-                    } catch (e) {
-                        ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
-                    }
-                },
-                () => {
-                    ui.showNotification('Догенерация пока не поддерживается', 'info');
-                },
-                () => { ui.closeModal(); }
-            );
-        } else {
-            // Новый артефакт
-            ui.openRequirementsModal(
-                execData.artifact_type,
-                execData.content,
-                async (updatedContent, validate) => {
-                    try {
-                        const saved = await api.saveArtifactPackage(projectId, execData.parent_id, execData.artifact_type, updatedContent);
-                        if (validate) {
-                            await apiFetch('/api/validate_artifact', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ artifact_id: saved.id, status: 'VALIDATED' })
-                            });
-                            ui.showNotification('Артефакт подтверждён', 'success');
-                        } else {
-                            ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
-                        }
-                        ui.closeModal();
-                        await updateProgress();
-                        if (!isSimpleMode && typeof window.loadParents === 'function') {
-                            await window.loadParents();
-                        }
-                    } catch (e) {
-                        ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
-                    }
-                },
-                () => {
-                    ui.showNotification('Догенерация пока не поддерживается', 'info');
-                },
-                () => { ui.closeModal(); }
-            );
         }
+        // Открываем модальное окно с содержимым (новым или существующим)
+        ui.openRequirementsModal(
+            execData.artifact_type,
+            execData.content,
+            async (updatedContent, validate) => {
+                try {
+                    const saved = await api.saveArtifactPackage(projectId, execData.parent_id, execData.artifact_type, updatedContent);
+                    if (validate) {
+                        await apiFetch('/api/validate_artifact', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ artifact_id: saved.id, status: 'VALIDATED' })
+                        });
+                        ui.showNotification('Артефакт подтверждён', 'success');
+                    } else {
+                        ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
+                    }
+                    ui.closeModal();
+                    await updateProgress();
+                    // Обновляем список родителей для расширенного режима
+                    if (!isSimpleMode && typeof window.loadParents === 'function') {
+                        await window.loadParents();
+                    }
+                } catch (e) {
+                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                }
+            },
+            () => {
+                ui.showNotification('Догенерация пока не поддерживается', 'info');
+            },
+            () => { ui.closeModal(); }
+        );
     } catch (e) {
         ui.showNotification('Ошибка: ' + e.message, 'error');
     }
@@ -169,9 +139,9 @@ function switchMode(mode) {
         }
     }
     // Сохраняем выбор режима
-    const state = JSON.parse(localStorage.getItem('mrak_ui_state') || '{}');
-    state.isSimple = isSimpleMode;
-    localStorage.setItem('mrak_ui_state', JSON.stringify(state));
+    const savedState = JSON.parse(localStorage.getItem('mrak_ui_state') || '{}');
+    savedState.isSimple = isSimpleMode;
+    localStorage.setItem('mrak_ui_state', JSON.stringify(savedState));
 }
 
 // Инициализация

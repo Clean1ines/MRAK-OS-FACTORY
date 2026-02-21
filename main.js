@@ -4,6 +4,7 @@
     const messagesDiv = document.getElementById("messages");
     const scrollAnchor = document.getElementById("scroll-anchor");
     const modelSelect = document.getElementById("model-select");
+    const modeSelect = document.getElementById("mode-select");
     const statusText = document.getElementById("status-text");
     const projectSelect = document.getElementById("project-select");
     const newProjectBtn = document.getElementById("new-project-btn");
@@ -12,9 +13,14 @@
     const parentSelect = document.getElementById("parent-select");
     const refreshParentsBtn = document.getElementById("refresh-parents");
     const deleteArtifactBtn = document.getElementById("delete-artifact-btn");
-    const generateCheckbox = document.getElementById("generate-checkbox");
     const saveArtifactBtn = document.getElementById("save-artifact-btn");
     const generateArtifactBtn = document.getElementById("generate-artifact-btn");
+    const simpleModeBtn = document.getElementById("simple-mode-btn");
+    const advancedModeBtn = document.getElementById("advanced-mode-btn");
+    const nextBtn = document.getElementById("next-btn");
+    const progressBarContainer = document.getElementById("progress-bar-container");
+    const advancedControls = document.getElementById("advanced-controls");
+    const simpleControls = document.getElementById("simple-controls");
 
     let isSaving = false;
 
@@ -36,6 +42,211 @@
             button.disabled = false;
             button.innerText = button.dataset.originalText || button.innerText;
         }
+    }
+
+    // Переключение режимов
+    function setMode(mode) {
+        state.setSimpleMode(mode);
+        if (mode) {
+            simpleModeBtn.classList.add('bg-emerald-600/20', 'text-emerald-500');
+            simpleModeBtn.classList.remove('bg-zinc-700');
+            advancedModeBtn.classList.add('bg-zinc-700');
+            advancedModeBtn.classList.remove('bg-emerald-600/20', 'text-emerald-500');
+            document.querySelectorAll('.advanced-only').forEach(el => el.style.display = 'none');
+            advancedControls.style.display = 'none';
+            simpleControls.style.display = 'block';
+            progressBarContainer.classList.remove('hidden');
+        } else {
+            advancedModeBtn.classList.add('bg-emerald-600/20', 'text-emerald-500');
+            advancedModeBtn.classList.remove('bg-zinc-700');
+            simpleModeBtn.classList.add('bg-zinc-700');
+            simpleModeBtn.classList.remove('bg-emerald-600/20', 'text-emerald-500');
+            document.querySelectorAll('.advanced-only').forEach(el => el.style.display = 'inline-block');
+            advancedControls.style.display = 'flex';
+            simpleControls.style.display = 'none';
+            progressBarContainer.classList.add('hidden');
+        }
+    }
+
+    simpleModeBtn.onclick = () => setMode(true);
+    advancedModeBtn.onclick = () => setMode(false);
+
+    // Загрузка режимов с бэкенда
+    async function loadModes() {
+        try {
+            const res = await fetch('/api/modes');
+            const modes = await res.json();
+            modeSelect.innerHTML = '';
+            modes.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.innerText = m.name; // показываем тот же id, можно заменить на человеко-читаемое
+                if (m.id === '01_CORE') opt.selected = true; // выбираем по умолчанию CORE
+                modeSelect.appendChild(opt);
+            });
+        } catch (e) {
+            console.error('Failed to load modes:', e);
+            modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM (fallback)</option>';
+        }
+    }
+
+    // Определение следующего этапа для простого режима
+    function getNextStage() {
+        const artifacts = state.getArtifacts();
+        const hasValidated = (type) => artifacts.some(a => a.type === type && a.status === 'VALIDATED');
+
+        if (!hasValidated('BusinessRequirementPackage')) {
+            const idea = artifacts.find(a => a.type === 'StructuredIdea' && a.status === 'VALIDATED');
+            const analysis = artifacts.find(a => a.type === 'ProductCouncilAnalysis' && a.status === 'VALIDATED');
+            return { type: 'BusinessRequirementPackage', parentId: analysis ? analysis.id : (idea ? idea.id : null) };
+        }
+        if (!hasValidated('FunctionalRequirementPackage')) {
+            const br = artifacts.find(a => a.type === 'BusinessRequirementPackage' && a.status === 'VALIDATED');
+            const analysis = artifacts.find(a => a.type === 'ReqEngineeringAnalysis' && a.status === 'VALIDATED');
+            return { type: 'FunctionalRequirementPackage', parentId: analysis ? analysis.id : (br ? br.id : null) };
+        }
+        if (!hasValidated('ArchitectureAnalysis')) {
+            const func = artifacts.find(a => a.type === 'FunctionalRequirementPackage' && a.status === 'VALIDATED');
+            return { type: 'ArchitectureAnalysis', parentId: func ? func.id : null };
+        }
+        if (!hasValidated('CodeArtifact')) {
+            const arch = artifacts.find(a => a.type === 'ArchitectureAnalysis' && a.status === 'VALIDATED');
+            return { type: 'AtomicTask', parentId: arch ? arch.id : null };
+        }
+        if (!hasValidated('TestPackage')) {
+            const code = artifacts.find(a => a.type === 'CodeArtifact' && a.status === 'VALIDATED');
+            return { type: 'TestPackage', parentId: code ? code.id : null };
+        }
+        return null;
+    }
+
+    async function triggerGeneration(type, parentId, feedback = '') {
+        const model = modelSelect.value;
+        const pid = state.getCurrentProjectId();
+        if (!pid) return;
+
+        setLoading(generateArtifactBtn, true);
+        try {
+            let cached = state.getArtifactCache(parentId, type);
+            let contentToShow;
+
+            if (cached && cached.content) {
+                contentToShow = cached.content;
+                state.setCurrentArtifact(cached);
+            } else {
+                const data = await api.fetchLatestArtifact(parentId, type);
+                if (data.exists) {
+                    state.setArtifactCache(parentId, type, {
+                        id: data.artifact_id,
+                        content: data.content
+                    });
+                    contentToShow = data.content;
+                    state.setCurrentArtifact({
+                        id: data.artifact_id,
+                        content: data.content
+                    });
+                } else {
+                    const genData = await api.generateArtifact(type, parentId, feedback, model, pid, null);
+                    contentToShow = genData.result;
+                    state.setCurrentArtifact({ content: contentToShow });
+                }
+            }
+
+            const handleSave = async () => {
+                if (isSaving) return;
+                isSaving = true;
+                let currentContent = state.getCurrentArtifact()?.content;
+                if (currentContent === undefined) {
+                    currentContent = (type === 'BusinessRequirementPackage' || type === 'FunctionalRequirementPackage') ? [] : {};
+                }
+                try {
+                    const saved = await api.saveArtifactPackage(pid, parentId, type, currentContent);
+                    if (saved.duplicate) {
+                        ui.showNotification(`Пакет не изменился, ID: ${saved.id}`, 'info');
+                    } else {
+                        ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
+                    }
+                    state.setArtifactCache(parentId, type, {
+                        id: saved.id,
+                        content: currentContent
+                    });
+                    ui.closeModal();
+                    await loadParents();
+                    updateProgress();
+                } catch (e) {
+                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
+                } finally {
+                    isSaving = false;
+                }
+            };
+
+            const handleAddMore = async () => {
+                if (isSaving) return;
+                isSaving = true;
+                const newFeedback = input.value.trim();
+                const existingContent = state.getCurrentArtifact()?.content;
+                try {
+                    const newData = await api.generateArtifact(type, parentId, newFeedback, model, pid, existingContent);
+                    const newContent = newData.result;
+                    let combined;
+                    if (type === 'BusinessRequirementPackage' || type === 'FunctionalRequirementPackage') {
+                        const currentArray = Array.isArray(existingContent) ? existingContent : [];
+                        const newArray = Array.isArray(newContent) ? newContent : [];
+                        combined = currentArray.concat(newArray);
+                    } else {
+                        combined = newContent;
+                    }
+                    state.setCurrentArtifact({ content: combined });
+                    ui.openRequirementsModal(
+                        type,
+                        combined,
+                        handleSave,
+                        handleAddMore,
+                        () => { ui.closeModal(); }
+                    );
+                } catch (e) {
+                    ui.showNotification('Ошибка генерации: ' + e.message, 'error');
+                } finally {
+                    isSaving = false;
+                }
+            };
+
+            ui.openRequirementsModal(
+                type,
+                contentToShow,
+                handleSave,
+                handleAddMore,
+                () => { ui.closeModal(); }
+            );
+        } catch (e) {
+            ui.showNotification('Ошибка: ' + e.message, 'error');
+        } finally {
+            setLoading(generateArtifactBtn, false);
+        }
+    }
+
+    nextBtn.onclick = async () => {
+        const next = getNextStage();
+        if (!next) {
+            ui.showNotification('Все этапы завершены!', 'info');
+            return;
+        }
+        if (!next.parentId) {
+            ui.showNotification('Нет родительского артефакта для следующего шага', 'error');
+            return;
+        }
+        await triggerGeneration(next.type, next.parentId, input.value.trim());
+    };
+
+    function updateProgress() {
+        const artifacts = state.getArtifacts();
+        const hasValidated = (type) => artifacts.some(a => a.type === type && a.status === 'VALIDATED');
+        let stage = 'idea';
+        if (hasValidated('FunctionalRequirementPackage')) stage = 'requirements';
+        if (hasValidated('ArchitectureAnalysis')) stage = 'architecture';
+        if (hasValidated('CodeArtifact')) stage = 'code';
+        if (hasValidated('TestPackage')) stage = 'tests';
+        ui.updateProgressBar(stage);
     }
 
     async function loadProjects() {
@@ -74,6 +285,7 @@
             const artifacts = await api.fetchArtifacts(pid);
             state.setArtifacts(artifacts);
             ui.renderParentSelect(artifacts, state.getParentData(), state.getCurrentParentId(), artifactTypeSelect.value);
+            updateProgress();
         } catch (e) {
             ui.showNotification('Ошибка загрузки артефактов: ' + e.message, 'error');
         } finally {
@@ -121,13 +333,12 @@
         }
         const artifactType = artifactTypeSelect.value;
         const parentId = parentSelect.value || null;
-        const generate = generateCheckbox.checked;
         const model = modelSelect.value;
 
         isSaving = true;
         setLoading(saveArtifactBtn, true);
         try {
-            const data = await api.saveArtifact(pid, artifactType, content, parentId, generate, model);
+            const data = await api.saveArtifact(pid, artifactType, content, parentId, false, model);
             ui.showNotification(`Артефакт сохранён, ID: ${data.id}`, 'success');
             input.value = "";
             input.style.height = "44px";
@@ -144,108 +355,7 @@
         const parentId = parentSelect.value;
         const childType = artifactTypeSelect.value;
         if (!parentId || !childType) return;
-        const feedback = input.value.trim();
-        const model = modelSelect.value;
-        const pid = state.getCurrentProjectId();
-        if (!pid) return;
-
-        setLoading(generateArtifactBtn, true);
-        try {
-            let cached = state.getArtifactCache(parentId, childType);
-            let contentToShow;
-
-            if (cached && cached.content) {
-                contentToShow = cached.content;
-                state.setCurrentArtifact(cached);
-            } else {
-                const data = await api.fetchLatestArtifact(parentId, childType);
-                if (data.exists) {
-                    state.setArtifactCache(parentId, childType, {
-                        id: data.artifact_id,
-                        content: data.content
-                    });
-                    contentToShow = data.content;
-                    state.setCurrentArtifact({
-                        id: data.artifact_id,
-                        content: data.content
-                    });
-                } else {
-                    const genData = await api.generateArtifact(childType, parentId, feedback, model, pid, null);
-                    contentToShow = genData.result;
-                    state.setCurrentArtifact({ content: contentToShow });
-                }
-            }
-
-            const handleSave = async () => {
-                if (isSaving) return;
-                isSaving = true;
-                let currentContent = state.getCurrentArtifact()?.content;
-                if (currentContent === undefined) {
-                    currentContent = (childType === 'BusinessRequirementPackage' || childType === 'FunctionalRequirementPackage') ? [] : {};
-                }
-                try {
-                    const saved = await api.saveArtifactPackage(pid, parentId, childType, currentContent);
-                    if (saved.duplicate) {
-                        ui.showNotification(`Пакет не изменился, ID: ${saved.id}`, 'info');
-                    } else {
-                        ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
-                    }
-                    state.setArtifactCache(parentId, childType, {
-                        id: saved.id,
-                        content: currentContent
-                    });
-                    ui.closeModal();
-                    await loadParents();
-                } catch (e) {
-                    ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
-                } finally {
-                    isSaving = false;
-                }
-            };
-
-            const handleAddMore = async () => {
-                if (isSaving) return;
-                isSaving = true;
-                const newFeedback = input.value.trim();
-                const existingContent = state.getCurrentArtifact()?.content;
-                try {
-                    const newData = await api.generateArtifact(childType, parentId, newFeedback, model, pid, existingContent);
-                    const newContent = newData.result;
-                    let combined;
-                    if (childType === 'BusinessRequirementPackage' || childType === 'FunctionalRequirementPackage') {
-                        const currentArray = Array.isArray(existingContent) ? existingContent : [];
-                        const newArray = Array.isArray(newContent) ? newContent : [];
-                        combined = currentArray.concat(newArray);
-                    } else {
-                        combined = newContent;
-                    }
-                    state.setCurrentArtifact({ content: combined });
-                    ui.openRequirementsModal(
-                        childType,
-                        combined,
-                        handleSave,
-                        handleAddMore,
-                        () => { ui.closeModal(); }
-                    );
-                } catch (e) {
-                    ui.showNotification('Ошибка генерации: ' + e.message, 'error');
-                } finally {
-                    isSaving = false;
-                }
-            };
-
-            ui.openRequirementsModal(
-                childType,
-                contentToShow,
-                handleSave,
-                handleAddMore,
-                () => { ui.closeModal(); }
-            );
-        } catch (e) {
-            ui.showNotification('Ошибка: ' + e.message, 'error');
-        } finally {
-            setLoading(generateArtifactBtn, false);
-        }
+        await triggerGeneration(childType, parentId, input.value.trim());
     };
 
     deleteProjectBtn.onclick = async () => {
@@ -327,9 +437,11 @@
     }
 
     window.onload = async function() {
+        await loadModes();
         await loadModels();
         await loadProjects();
         if (state.getCurrentProjectId()) await loadParents();
+        setMode(false);
     };
 
     sendBtn.onclick = start;
@@ -343,7 +455,7 @@
             ui.showNotification("Сначала выберите проект", 'error');
             return;
         }
-        const mode = document.getElementById("mode-select").value;
+        const mode = modeSelect.value;
         const model = modelSelect.value;
 
         input.value = ""; input.style.height = "44px";

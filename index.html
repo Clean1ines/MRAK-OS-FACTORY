@@ -24,6 +24,11 @@
 
         #messages { background: rgba(0, 18, 25, 0.6); border-radius: 20px; border: 1px solid rgba(0,255,255,0.15); padding: 40px; box-shadow: 0 0 50px rgba(0,255,255,0.08), inset 0 0 30px rgba(0,255,255,0.05); }
 
+        /* Скрываем messages, если он пуст */
+        #messages:empty {
+            display: none;
+        }
+
         textarea::placeholder { color: rgba(0, 255, 255, 0.4); }
 
         /* =================== ВИЗУАЛЬНЫЕ ЭФФЕКТЫ =================== */
@@ -77,6 +82,35 @@
         .progress-step.completed {
             opacity: 0.8;
             color: #6f6;
+        }
+
+        /* Стили для кастомных уведомлений (создаются в ui.js) */
+        .notification {
+            background: #0f172a;
+            border: 1px solid #0ff;
+            box-shadow: 0 0 10px #0ff;
+            color: #0ff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 10px;
+        }
+        .notification.error {
+            border-color: #f56565;
+            box-shadow: 0 0 10px #f56565;
+            color: white;
+        }
+
+        /* Плейсхолдер для пустого диалога */
+        #messages-placeholder {
+            color: rgba(0, 255, 255, 0.2);
+            font-size: 1.2rem;
+            text-align: center;
+            padding: 40px;
+            border: 1px dashed rgba(0,255,255,0.1);
+            border-radius: 20px;
+            max-width: 600px;
+            margin: 0 auto;
         }
     </style>
 </head>
@@ -169,9 +203,11 @@
         <button id="next-btn">Далее</button>
     </div>
 
-    <!-- TERMINAL -->
+    <!-- TERMINAL (область сообщений) -->
     <main class="flex-1 overflow-y-auto px-6 py-6">
         <div id="messages" class="max-w-3xl w-full mx-auto space-y-8"></div>
+        <!-- Плейсхолдер, когда сообщений нет -->
+        <div id="messages-placeholder" class="max-w-3xl w-full mx-auto text-center text-zinc-700 py-20">Диалог пуст. Начните общение...</div>
         <!-- ADDED: элемент для скролла -->
         <div id="scroll-anchor" class="h-32"></div>
     </main>
@@ -186,10 +222,33 @@
         </div>
     </footer>
 
+    <!-- Скрипты подключаются в правильном порядке -->
     <script src="api.js"></script>
     <script src="state.js"></script>
     <script src="ui.js"></script>
     <script src="simpleMode.js"></script>
     <script src="main.js"></script>
+
+    <script>
+        // Дополнительная логика для скрытия плейсхолдера при появлении сообщений
+        (function() {
+            const messagesDiv = document.getElementById('messages');
+            const placeholder = document.getElementById('messages-placeholder');
+            if (messagesDiv && placeholder) {
+                const observer = new MutationObserver(() => {
+                    if (messagesDiv.children.length > 0) {
+                        placeholder.style.display = 'none';
+                    } else {
+                        placeholder.style.display = 'block';
+                    }
+                });
+                observer.observe(messagesDiv, { childList: true, subtree: true });
+                // Начальная проверка
+                if (messagesDiv.children.length > 0) {
+                    placeholder.style.display = 'none';
+                }
+            }
+        })();
+    </script>
 </body>
 </html>

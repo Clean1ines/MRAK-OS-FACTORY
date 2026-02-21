@@ -29,6 +29,43 @@
         document.getElementById("token-count").innerText = `EST_COST: ~${Math.ceil(this.value.length / 4)} TOKENS`;
     };
 
+    // ========== СОХРАНЕНИЕ СОСТОЯНИЯ ==========
+    function saveState() {
+        const state = {
+            projectId: state.getCurrentProjectId(),
+            model: modelSelect.value,
+            mode: modeSelect.value,
+            artifactType: artifactTypeSelect.value,
+            parentId: parentSelect.value,
+            isSimple: document.getElementById('simple-controls')?.classList.contains('hidden') === false
+        };
+        localStorage.setItem('mrak_ui_state', JSON.stringify(state));
+    }
+
+    function restoreState() {
+        const saved = localStorage.getItem('mrak_ui_state');
+        if (!saved) return;
+        try {
+            const st = JSON.parse(saved);
+            if (st.projectId) {
+                state.setCurrentProjectId(st.projectId);
+                // проект загрузится позже, восстановим остальное после загрузки
+            }
+            if (st.model) modelSelect.value = st.model;
+            if (st.mode) modeSelect.value = st.mode;
+            if (st.artifactType) artifactTypeSelect.value = st.artifactType;
+            if (st.parentId) {
+                // родитель будет восстановлен после загрузки артефактов
+                state.setCurrentParentId(st.parentId);
+            }
+            if (st.isSimple) {
+                window.simpleMode?.switchMode('simple');
+            } else {
+                window.simpleMode?.switchMode('advanced');
+            }
+        } catch (e) {}
+    }
+
     // ========== ЗАГРУЗКА ДАННЫХ ==========
     async function loadProjects() {
         try {
@@ -46,6 +83,7 @@
         try {
             const artifacts = await api.fetchArtifacts(pid);
             state.setArtifacts(artifacts);
+            // Передаём текущий тип артефакта для фильтрации
             ui.renderParentSelect(artifacts, state.getParentData(), state.getCurrentParentId(), artifactTypeSelect.value);
         } catch (e) {
             ui.showNotification('Ошибка загрузки артефактов: ' + e.message, 'error');
@@ -66,15 +104,21 @@
                 }
                 modelSelect.appendChild(opt);
             });
+            // Восстанавливаем сохранённую модель
+            const saved = localStorage.getItem('mrak_ui_state');
+            if (saved) {
+                const st = JSON.parse(saved);
+                if (st.model) modelSelect.value = st.model;
+            }
+            modelSelect.addEventListener('change', saveState);
         } catch (e) {
             ui.showNotification('Ошибка загрузки моделей: ' + e.message, 'error');
         }
     }
 
-    // Новая функция: загрузка режимов промптов
     async function loadModes() {
         try {
-            const modes = await api.fetchModes(); // нужно добавить в api.js
+            const modes = await api.fetchModes();
             modeSelect.innerHTML = '';
             if (modes && modes.length) {
                 modes.forEach(m => {
@@ -87,6 +131,13 @@
             } else {
                 modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
             }
+            // Восстанавливаем сохранённый режим
+            const saved = localStorage.getItem('mrak_ui_state');
+            if (saved) {
+                const st = JSON.parse(saved);
+                if (st.mode) modeSelect.value = st.mode;
+            }
+            modeSelect.addEventListener('change', saveState);
         } catch (e) {
             console.error('Ошибка загрузки режимов:', e);
             modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
@@ -104,6 +155,7 @@
             state.setCurrentProjectId(data.id);
             await loadParents();
             ui.showNotification('Проект создан', 'success');
+            saveState();
         } catch (e) {
             ui.showNotification('Ошибка создания проекта: ' + e.message, 'error');
         }
@@ -118,6 +170,7 @@
             await loadProjects();
             state.setCurrentProjectId('');
             ui.showNotification('Проект удалён', 'success');
+            saveState();
         } catch (e) {
             ui.showNotification('Ошибка удаления: ' + e.message, 'error');
         }
@@ -127,25 +180,31 @@
 
     projectSelect.addEventListener("change", function() {
         state.setCurrentProjectId(this.value);
+        // Сбрасываем выбранный родитель и тип при смене проекта
+        artifactTypeSelect.value = "BusinessIdea"; // или первое значение
+        parentSelect.innerHTML = '<option value="">-- нет --</option>';
+        generateArtifactBtn.style.display = 'none';
         if (this.value) {
             loadParents();
-        } else {
-            parentSelect.innerHTML = '<option value="">-- нет --</option>';
-            generateArtifactBtn.style.display = 'none';
+            // Обновляем прогресс в простом режиме
+            if (window.simpleMode && document.getElementById('simple-controls')?.classList.contains('hidden') === false) {
+                window.simpleMode.updateProgress();
+            }
         }
+        saveState();
     });
 
     parentSelect.addEventListener('change', function() {
         const selectedId = this.value;
         state.setCurrentParentId(selectedId);
         ui.updateGenerateButton(state.getParentData(), selectedId, artifactTypeSelect.value);
+        saveState();
     });
 
     artifactTypeSelect.addEventListener('change', function() {
-        const selectedParentId = parentSelect.value;
-        if (selectedParentId) {
-            ui.updateGenerateButton(state.getParentData(), selectedParentId, artifactTypeSelect.value);
-        }
+        // Мгновенно перерисовываем родительский селектор с фильтрацией по новому типу
+        ui.renderParentSelect(state.getArtifacts(), state.getParentData(), state.getCurrentParentId(), this.value);
+        saveState();
     });
 
     saveArtifactBtn.onclick = async () => {
@@ -170,6 +229,10 @@
             input.value = "";
             input.style.height = "44px";
             await loadParents();
+            // Обновляем прогресс в простом режиме
+            if (window.simpleMode && document.getElementById('simple-controls')?.classList.contains('hidden') === false) {
+                window.simpleMode.updateProgress();
+            }
         } catch (e) {
             ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
         }
@@ -191,13 +254,26 @@
             ui.openRequirementsModal(
                 childType,
                 data.result,
-                async () => {
-                    const currentContent = state.getCurrentArtifact()?.content;
+                async (updatedContent, validate) => {
+                    // Сохраняем изменения (validate = true если нажата кнопка "Подтвердить")
                     try {
-                        const saved = await api.saveArtifactPackage(pid, parentId, childType, currentContent);
-                        ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
+                        const saved = await api.saveArtifactPackage(pid, parentId, childType, updatedContent);
+                        if (validate) {
+                            await apiFetch('/api/validate_artifact', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ artifact_id: saved.id, status: 'VALIDATED' })
+                            });
+                            ui.showNotification('Артефакт подтверждён', 'success');
+                        } else {
+                            ui.showNotification(`Сохранён пакет, ID: ${saved.id}`, 'success');
+                        }
                         ui.closeModal();
                         await loadParents();
+                        // Обновляем прогресс в простом режиме
+                        if (window.simpleMode && document.getElementById('simple-controls')?.classList.contains('hidden') === false) {
+                            window.simpleMode.updateProgress();
+                        }
                     } catch (e) {
                         ui.showNotification('Ошибка сохранения: ' + e.message, 'error');
                     }
@@ -253,6 +329,9 @@
         assistantDiv.className = "markdown-body streaming";
         messagesDiv.appendChild(assistantDiv);
 
+        // Показываем messagesDiv, если он был скрыт
+        messagesDiv.classList.remove('hidden');
+
         try {
             const res = await fetch("/api/analyze", {
                 method: "POST",
@@ -278,7 +357,6 @@
                 }
                 raw += chunk;
                 assistantDiv.innerHTML = marked.parse(raw);
-                // Проверяем, что scrollAnchor существует
                 if (scrollAnchor) {
                     scrollAnchor.scrollIntoView({ behavior: "smooth" });
                 }
@@ -290,6 +368,7 @@
             input.disabled = false; sendBtn.disabled = false;
             statusText.innerText = "SYSTEM_READY";
             input.focus();
+            saveState();
         }
     }
 
@@ -299,12 +378,17 @@
     // ========== ИНИЦИАЛИЗАЦИЯ ==========
     window.onload = async function() {
         await loadModels();
-        await loadModes();  // Загружаем режимы
+        await loadModes();
         await loadProjects();
+        restoreState();
         if (state.getCurrentProjectId()) await loadParents();
         // Инициализируем простой режим
         if (window.simpleMode) {
             window.simpleMode.init();
         }
+        // Подписываемся на изменения состояния для сохранения
+        state.subscribe(() => {
+            saveState();
+        });
     };
 })();

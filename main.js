@@ -31,15 +31,21 @@
 
     // ========== СОХРАНЕНИЕ СОСТОЯНИЯ ==========
     function saveState() {
-        const state = {
-            projectId: state.getCurrentProjectId(),
-            model: modelSelect.value,
-            mode: modeSelect.value,
-            artifactType: artifactTypeSelect.value,
-            parentId: parentSelect.value,
-            isSimple: document.getElementById('simple-controls')?.classList.contains('hidden') === false
-        };
-        localStorage.setItem('mrak_ui_state', JSON.stringify(state));
+        // Проверяем, что все необходимые элементы и state существуют
+        if (!state || typeof state.getCurrentProjectId !== 'function') return;
+        try {
+            const currentState = {
+                projectId: state.getCurrentProjectId(),
+                model: modelSelect ? modelSelect.value : null,
+                mode: modeSelect ? modeSelect.value : null,
+                artifactType: artifactTypeSelect ? artifactTypeSelect.value : null,
+                parentId: parentSelect ? parentSelect.value : null,
+                isSimple: document.getElementById('simple-controls')?.classList.contains('hidden') === false
+            };
+            localStorage.setItem('mrak_ui_state', JSON.stringify(currentState));
+        } catch (e) {
+            console.warn('Failed to save state', e);
+        }
     }
 
     function restoreState() {
@@ -51,17 +57,17 @@
                 state.setCurrentProjectId(st.projectId);
                 // проект загрузится позже, восстановим остальное после загрузки
             }
-            if (st.model) modelSelect.value = st.model;
-            if (st.mode) modeSelect.value = st.mode;
-            if (st.artifactType) artifactTypeSelect.value = st.artifactType;
+            if (st.model && modelSelect) modelSelect.value = st.model;
+            if (st.mode && modeSelect) modeSelect.value = st.mode;
+            if (st.artifactType && artifactTypeSelect) artifactTypeSelect.value = st.artifactType;
             if (st.parentId) {
                 // родитель будет восстановлен после загрузки артефактов
                 state.setCurrentParentId(st.parentId);
             }
-            if (st.isSimple) {
-                window.simpleMode?.switchMode('simple');
-            } else {
-                window.simpleMode?.switchMode('advanced');
+            if (st.isSimple && window.simpleMode) {
+                window.simpleMode.switchMode('simple');
+            } else if (window.simpleMode) {
+                window.simpleMode.switchMode('advanced');
             }
         } catch (e) {}
     }
@@ -83,7 +89,6 @@
         try {
             const artifacts = await api.fetchArtifacts(pid);
             state.setArtifacts(artifacts);
-            // Передаём текущий тип артефакта для фильтрации
             ui.renderParentSelect(artifacts, state.getParentData(), state.getCurrentParentId(), artifactTypeSelect.value);
         } catch (e) {
             ui.showNotification('Ошибка загрузки артефактов: ' + e.message, 'error');
@@ -94,23 +99,25 @@
         try {
             const models = await api.fetchModels();
             state.setModels(models);
-            modelSelect.innerHTML = '';
-            models.forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m.id;
-                opt.innerText = m.id.toUpperCase();
-                if (m.id === "openai/gpt-oss-120b" || m.id === "llama-3.3-70b-versatile") {
-                    opt.selected = true;
+            if (modelSelect) {
+                modelSelect.innerHTML = '';
+                models.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.innerText = m.id.toUpperCase();
+                    if (m.id === "openai/gpt-oss-120b" || m.id === "llama-3.3-70b-versatile") {
+                        opt.selected = true;
+                    }
+                    modelSelect.appendChild(opt);
+                });
+                // Восстанавливаем сохранённую модель
+                const saved = localStorage.getItem('mrak_ui_state');
+                if (saved) {
+                    const st = JSON.parse(saved);
+                    if (st.model) modelSelect.value = st.model;
                 }
-                modelSelect.appendChild(opt);
-            });
-            // Восстанавливаем сохранённую модель
-            const saved = localStorage.getItem('mrak_ui_state');
-            if (saved) {
-                const st = JSON.parse(saved);
-                if (st.model) modelSelect.value = st.model;
+                modelSelect.addEventListener('change', saveState);
             }
-            modelSelect.addEventListener('change', saveState);
         } catch (e) {
             ui.showNotification('Ошибка загрузки моделей: ' + e.message, 'error');
         }
@@ -119,28 +126,54 @@
     async function loadModes() {
         try {
             const modes = await api.fetchModes();
-            modeSelect.innerHTML = '';
-            if (modes && modes.length) {
-                modes.forEach(m => {
-                    const opt = document.createElement('option');
-                    opt.value = m.id;
-                    opt.innerText = m.name;
-                    if (m.default) opt.selected = true;
-                    modeSelect.appendChild(opt);
-                });
-            } else {
-                modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
+            if (modeSelect) {
+                modeSelect.innerHTML = '';
+                if (modes && modes.length) {
+                    modes.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.id;
+                        opt.innerText = m.name;
+                        if (m.default) opt.selected = true;
+                        modeSelect.appendChild(opt);
+                    });
+                } else {
+                    modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
+                }
+                // Восстанавливаем сохранённый режим
+                const saved = localStorage.getItem('mrak_ui_state');
+                if (saved) {
+                    const st = JSON.parse(saved);
+                    if (st.mode) modeSelect.value = st.mode;
+                }
+                modeSelect.addEventListener('change', saveState);
             }
-            // Восстанавливаем сохранённый режим
-            const saved = localStorage.getItem('mrak_ui_state');
-            if (saved) {
-                const st = JSON.parse(saved);
-                if (st.mode) modeSelect.value = st.mode;
-            }
-            modeSelect.addEventListener('change', saveState);
         } catch (e) {
             console.error('Ошибка загрузки режимов:', e);
-            modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
+            if (modeSelect) modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
+        }
+    }
+
+    // Загрузка истории сообщений для текущего проекта
+    async function loadMessages() {
+        const pid = state.getCurrentProjectId();
+        if (!pid) return;
+        try {
+            const messages = await api.fetchMessages(pid);
+            messagesDiv.innerHTML = '';
+            messages.forEach(msg => {
+                const userDiv = document.createElement("div");
+                userDiv.className = "border-l-2 border-zinc-800 pl-6 text-sm text-zinc-400";
+                userDiv.innerText = msg.content.user_input || '...';
+                messagesDiv.appendChild(userDiv);
+
+                const assistantDiv = document.createElement("div");
+                assistantDiv.className = "markdown-body";
+                assistantDiv.innerHTML = marked.parse(msg.content.response || '');
+                messagesDiv.appendChild(assistantDiv);
+            });
+            if (scrollAnchor) scrollAnchor.scrollIntoView({ behavior: "smooth" });
+        } catch (e) {
+            console.warn('Failed to load messages', e);
         }
     }
 
@@ -154,6 +187,7 @@
             projectSelect.value = data.id;
             state.setCurrentProjectId(data.id);
             await loadParents();
+            await loadMessages();
             ui.showNotification('Проект создан', 'success');
             saveState();
         } catch (e) {
@@ -169,6 +203,7 @@
             await apiFetch(`/api/projects/${pid}`, { method: 'DELETE' });
             await loadProjects();
             state.setCurrentProjectId('');
+            messagesDiv.innerHTML = '';
             ui.showNotification('Проект удалён', 'success');
             saveState();
         } catch (e) {
@@ -181,11 +216,14 @@
     projectSelect.addEventListener("change", function() {
         state.setCurrentProjectId(this.value);
         // Сбрасываем выбранный родитель и тип при смене проекта
-        artifactTypeSelect.value = "BusinessIdea"; // или первое значение
-        parentSelect.innerHTML = '<option value="">-- нет --</option>';
-        generateArtifactBtn.style.display = 'none';
+        if (artifactTypeSelect) artifactTypeSelect.value = "BusinessIdea";
+        if (parentSelect) {
+            parentSelect.innerHTML = '<option value="">-- нет --</option>';
+        }
+        if (generateArtifactBtn) generateArtifactBtn.style.display = 'none';
         if (this.value) {
             loadParents();
+            loadMessages();
             // Обновляем прогресс в простом режиме
             if (window.simpleMode && document.getElementById('simple-controls')?.classList.contains('hidden') === false) {
                 window.simpleMode.updateProgress();
@@ -249,13 +287,13 @@
 
         try {
             const data = await api.generateArtifact(childType, parentId, feedback, model, pid, null);
+            // Ожидаем, что data.result содержит полное содержимое артефакта (объект/массив)
             state.setCurrentArtifact({ content: data.result });
             // Открываем модальное окно для редактирования/сохранения
             ui.openRequirementsModal(
                 childType,
                 data.result,
                 async (updatedContent, validate) => {
-                    // Сохраняем изменения (validate = true если нажата кнопка "Подтвердить")
                     try {
                         const saved = await api.saveArtifactPackage(pid, parentId, childType, updatedContent);
                         if (validate) {
@@ -331,6 +369,8 @@
 
         // Показываем messagesDiv, если он был скрыт
         messagesDiv.classList.remove('hidden');
+        const placeholder = document.getElementById('messages-placeholder');
+        if (placeholder) placeholder.style.display = 'none';
 
         try {
             const res = await fetch("/api/analyze", {
@@ -369,6 +409,8 @@
             statusText.innerText = "SYSTEM_READY";
             input.focus();
             saveState();
+            // Перезагружаем сообщения, чтобы новое сохранилось (оно уже в БД)
+            await loadMessages();
         }
     }
 
@@ -377,18 +419,24 @@
 
     // ========== ИНИЦИАЛИЗАЦИЯ ==========
     window.onload = async function() {
+        // Подписываемся на изменения состояния для сохранения (делаем это до восстановления)
+        if (state && typeof state.subscribe === 'function') {
+            state.subscribe(() => {
+                saveState();
+            });
+        }
+
         await loadModels();
         await loadModes();
         await loadProjects();
         restoreState();
-        if (state.getCurrentProjectId()) await loadParents();
+        if (state.getCurrentProjectId()) {
+            await loadParents();
+            await loadMessages();
+        }
         // Инициализируем простой режим
         if (window.simpleMode) {
             window.simpleMode.init();
         }
-        // Подписываемся на изменения состояния для сохранения
-        state.subscribe(() => {
-            saveState();
-        });
     };
 })();

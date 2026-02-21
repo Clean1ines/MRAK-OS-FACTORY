@@ -5,7 +5,7 @@ from orchestrator import MrakOrchestrator
 import logging
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-import db  # для проверки подключения
+import db
 import json
 import os
 import hashlib
@@ -57,7 +57,6 @@ def compute_content_hash(content):
 
 @app.on_event("startup")
 async def startup_event():
-    """Проверяем подключение к базе, но ничего не создаём."""
     logger.info("Starting up... Testing database connection.")
     try:
         conn = await db.get_connection()
@@ -81,7 +80,6 @@ async def create_project_endpoint(project: ProjectCreate):
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project_endpoint(project_id: str):
-    """Удаляет проект и все его артефакты (каскадно)."""
     await db.delete_project(project_id)
     return JSONResponse(content={"status": "deleted"})
 
@@ -138,7 +136,6 @@ async def latest_artifact(parent_id: str, type: str):
 
 @app.post("/api/validate_artifact")
 async def validate_artifact(req: ValidateArtifactRequest):
-    """Изменяет статус артефакта (VALIDATED/REJECTED)."""
     try:
         await db.update_artifact_status(req.artifact_id, req.status)
         return JSONResponse(content={"status": "updated"})
@@ -148,7 +145,6 @@ async def validate_artifact(req: ValidateArtifactRequest):
 
 @app.delete("/api/artifact/{artifact_id}")
 async def delete_artifact_endpoint(artifact_id: str):
-    """Удаляет артефакт и все связи (каскадно)."""
     try:
         await db.delete_artifact(artifact_id)
         return JSONResponse(content={"status": "deleted"})
@@ -161,7 +157,6 @@ async def delete_artifact_endpoint(artifact_id: str):
 @app.post("/api/generate_artifact")
 async def generate_artifact_endpoint(req: GenerateArtifactRequest):
     try:
-        # Используем универсальный метод, но поддерживаем старые специализированные для обратной совместимости
         if req.artifact_type == "BusinessRequirementPackage":
             result = await orch.generate_business_requirements(
                 analysis_id=req.parent_id,
@@ -187,7 +182,6 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 existing_requirements=req.existing_content
             )
         else:
-            # Для всех остальных типов используем универсальный метод
             parent = await db.get_artifact(req.parent_id) if req.parent_id else None
             new_id = await orch.generate_artifact(
                 artifact_type=req.artifact_type,
@@ -196,7 +190,12 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 model_id=req.model,
                 project_id=req.project_id
             )
-            return JSONResponse(content={"result": {"id": new_id}})
+            # Получаем полный артефакт из БД
+            artifact = await db.get_artifact(new_id)
+            if artifact:
+                return JSONResponse(content={"result": artifact['content']})
+            else:
+                return JSONResponse(content={"result": {"id": new_id}})
 
         return JSONResponse(content={"result": result})
     except Exception as e:
@@ -232,7 +231,7 @@ async def save_artifact_package(req: SavePackageRequest):
             artifact_type=req.artifact_type,
             content=content_to_save,
             owner="user",
-            status="DRAFT",  # Можно изменить на "VALIDATED", если нужно сразу подтверждать
+            status="DRAFT",
             project_id=req.project_id,
             parent_id=req.parent_id,
             content_hash=new_hash
@@ -242,11 +241,20 @@ async def save_artifact_package(req: SavePackageRequest):
         logger.error(f"Error saving package: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+# ==================== ИСТОРИЯ СООБЩЕНИЙ ====================
+
+@app.get("/api/projects/{project_id}/messages")
+async def get_project_messages(project_id: str):
+    """Возвращает все артефакты типа LLMResponse для проекта, отсортированные по времени."""
+    artifacts = await db.get_artifacts(project_id, artifact_type="LLMResponse")
+    # Сортируем по created_at (старые сначала)
+    artifacts.sort(key=lambda x: x['created_at'])
+    return JSONResponse(content=artifacts)
+
 # ==================== ПРОСТОЙ РЕЖИМ ====================
 
 @app.get("/api/workflow/next")
 async def get_next_step(project_id: str):
-    """Возвращает следующий рекомендуемый шаг для проекта в простом режиме."""
     try:
         step = await orch.get_next_step(project_id)
         if step:
@@ -259,19 +267,15 @@ async def get_next_step(project_id: str):
 
 @app.post("/api/workflow/execute_next")
 async def execute_next_step(project_id: str, model: Optional[str] = None):
-    """Выполняет следующий шаг: генерирует артефакт и возвращает его для предпросмотра."""
     try:
         step = await orch.get_next_step(project_id)
         if not step:
             return JSONResponse(content={"error": "No next step"}, status_code=400)
         if step['next_stage'] == 'idea':
-            # Для идеи просто возвращаем информацию, что нужно ввести текст
             return JSONResponse(content={"action": "input_idea", "description": step['description']})
 
-        # Проверяем, существует ли уже валидированный артефакт этого типа с таким parent_id
         existing = await db.get_last_version_by_parent_and_type(step['parent_id'], step['prompt_type'])
         if existing and existing['status'] == 'VALIDATED':
-            # Возвращаем существующий
             return JSONResponse(content={
                 "artifact_id": existing['id'],
                 "artifact_type": step['prompt_type'],
@@ -281,14 +285,13 @@ async def execute_next_step(project_id: str, model: Optional[str] = None):
                 "existing": True
             })
 
-        # Генерируем новый артефакт
         parent = await db.get_artifact(step['parent_id']) if step.get('parent_id') else None
         if not parent:
             return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
 
         new_id = await orch.generate_artifact(
             artifact_type=step['prompt_type'],
-            user_input="",  # фидбек пока пустой, можно добавить позже
+            user_input="",
             parent_artifact=parent,
             model_id=model,
             project_id=project_id
@@ -306,18 +309,15 @@ async def execute_next_step(project_id: str, model: Optional[str] = None):
         logger.error(f"Error executing next step: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# ==================== МОДЕЛИ ====================
+# ==================== МОДЕЛИ И РЕЖИМЫ ====================
 
 @app.get("/api/models")
 async def get_models():
     models = orch.get_active_models()
     return JSONResponse(content=models)
 
-# ==================== РЕЖИМЫ (ПРОМПТЫ) ====================
-
 @app.get("/api/modes")
 async def get_available_modes():
-    """Возвращает список доступных режимов промптов для селектора."""
     return [
         {"id": "01_CORE", "name": "01: CORE_SYSTEM", "default": True},
         {"id": "02_IDEA_CLARIFIER", "name": "02: IDEA_CLARIFIER"},

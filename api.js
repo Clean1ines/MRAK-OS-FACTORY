@@ -81,6 +81,11 @@ async function fetchModels() {
     return apiFetch('/api/models');
 }
 
+// Режимы
+async function fetchModes() {
+    return apiFetch('/api/modes');
+}
+
 window.api = {
     fetchProjects,
     createProject,
@@ -89,5 +94,6 @@ window.api = {
     fetchLatestArtifact,
     generateArtifact,
     saveArtifactPackage,
-    fetchModels
+    fetchModels,
+    fetchModes
 };

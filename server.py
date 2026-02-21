@@ -214,6 +214,15 @@ async def get_models():
     models = orch.get_active_models()
     return JSONResponse(content=models)
 
+@app.get("/api/modes")
+async def get_modes():
+    """
+    Возвращает список доступных режимов (ключи из mode_map) для заполнения селекта.
+    """
+    # Предполагаем, что orch.mode_map уже содержит все ключи
+    modes = [{"id": key, "name": key} for key in orch.mode_map.keys()]
+    return JSONResponse(content=modes)
+
 @app.post("/api/analyze")
 async def analyze(request: Request):
     try:
@@ -250,3 +259,4 @@ async def analyze(request: Request):
     )
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
+

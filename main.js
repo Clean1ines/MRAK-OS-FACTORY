@@ -17,6 +17,8 @@
     const deleteArtifactBtn = document.getElementById("delete-artifact-btn");
     const saveArtifactBtn = document.getElementById("save-artifact-btn");
     const generateArtifactBtn = document.getElementById("generate-artifact-btn");
+    // ADDED
+    const completeClarificationBtn = document.getElementById("complete-clarification-btn");
 
     // Экспортируем функцию loadParents для использования в simpleMode.js
     window.loadParents = loadParents;
@@ -194,7 +196,6 @@
         if (!pid) return;
         if (!confirm('Удалить проект? Все артефакты будут безвозвратно удалены.')) return;
         try {
-            // FIXED: use api.apiFetch instead of direct apiFetch
             await api.apiFetch(`/api/projects/${pid}`, { method: 'DELETE' });
             await loadProjects();
             state.setCurrentProjectId('');
@@ -215,6 +216,8 @@
             parentSelect.innerHTML = '<option value="">-- нет --</option>';
         }
         if (generateArtifactBtn) generateArtifactBtn.style.display = 'none';
+        // ADDED: сброс кнопки завершения и скрытие
+        if (completeClarificationBtn) completeClarificationBtn.style.display = 'none';
         if (this.value) {
             loadParents();
             loadMessages();
@@ -234,6 +237,9 @@
 
     artifactTypeSelect.addEventListener('change', function() {
         ui.renderParentSelect(state.getArtifacts(), state.getParentData(), state.getCurrentParentId(), this.value);
+        // ADDED: при смене типа сбрасываем сессию и кнопку завершения
+        state.setCurrentClarificationSessionId(null);
+        if (completeClarificationBtn) completeClarificationBtn.style.display = 'none';
         saveState();
     });
 
@@ -286,7 +292,6 @@
                     try {
                         const saved = await api.saveArtifactPackage(pid, parentId, childType, updatedContent);
                         if (validate) {
-                            // FIXED: use api.apiFetch
                             await api.apiFetch('/api/validate_artifact', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -323,7 +328,6 @@
         }
         if (!confirm('Удалить выбранный артефакт?')) return;
         try {
-            // FIXED: use api.apiFetch
             await api.apiFetch(`/api/artifact/${artifactId}`, { method: 'DELETE' });
             ui.showNotification('Артефакт удалён', 'success');
             await loadParents();
@@ -332,6 +336,77 @@
         }
     };
 
+    // ========== ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ СЕССИЯМИ УТОЧНЕНИЯ (ADDED) ==========
+    async function handleClarificationMessage(projectId, artifactType, message, model) {
+        let sessionId = state.getCurrentClarificationSessionId();
+        if (!sessionId) {
+            // Попытаемся найти активную сессию на сервере
+            try {
+                const sessions = await api.fetchActiveClarificationSessions(projectId);
+                const active = sessions.find(s => s.target_artifact_type === artifactType);
+                if (active) {
+                    sessionId = active.id;
+                    state.setCurrentClarificationSessionId(sessionId);
+                }
+            } catch (e) {
+                console.error('Failed to fetch active sessions', e);
+            }
+        }
+
+        if (!sessionId) {
+            // Создаём новую сессию
+            try {
+                const data = await api.startClarification(projectId, artifactType, model);
+                sessionId = data.id;
+                state.setCurrentClarificationSessionId(sessionId);
+                // Отображаем первое сообщение
+                if (data.history && data.history.length > 0) {
+                    ui.renderClarificationHistory(data.history);
+                }
+                // Показываем кнопку завершения
+                if (completeClarificationBtn) completeClarificationBtn.style.display = 'inline-block';
+            } catch (e) {
+                ui.showNotification('Ошибка создания сессии: ' + e.message, 'error');
+                return;
+            }
+        }
+
+        // Отправляем сообщение пользователя
+        try {
+            const data = await api.sendClarificationMessage(sessionId, message);
+            // Обновляем историю
+            ui.renderClarificationHistory(data.history);
+            // Показываем кнопку завершения (если скрыта)
+            if (completeClarificationBtn) completeClarificationBtn.style.display = 'inline-block';
+        } catch (e) {
+            ui.showNotification('Ошибка отправки: ' + e.message, 'error');
+        }
+    }
+
+    // Обработчик кнопки "Завершить уточнение"
+    completeClarificationBtn.onclick = async () => {
+        const sessionId = state.getCurrentClarificationSessionId();
+        if (!sessionId) {
+            ui.showNotification('Нет активной сессии', 'error');
+            return;
+        }
+        try {
+            // Завершаем сессию
+            await api.completeClarificationSession(sessionId);
+            ui.showNotification('Сессия завершена', 'success');
+            // Скрываем кнопку
+            completeClarificationBtn.style.display = 'none';
+            // Сбрасываем ID сессии
+            state.setCurrentClarificationSessionId(null);
+            // TODO: после завершения нужно сгенерировать финальный артефакт
+            // Для этого можно вызвать /api/generate_artifact с target_artifact_type
+            // Пока просто уведомление
+        } catch (e) {
+            ui.showNotification('Ошибка завершения: ' + e.message, 'error');
+        }
+    };
+
+    // ========== ЧАТ-ФУНКЦИЯ (отправка сообщения) ==========
     async function start() {
         const prompt = input.value.trim();
         if (!prompt) return;
@@ -343,6 +418,18 @@
         const mode = modeSelect.value;
         const model = modelSelect.value;
 
+        // Проверка для расширенного режима
+        const isAdvanced = document.getElementById('advanced-controls')?.classList.contains('hidden') === false;
+        if (isAdvanced) {
+            const artifactType = artifactTypeSelect.value;
+            if (state.requiresClarification(artifactType)) {
+                // Используем сессию
+                await handleClarificationMessage(pid, artifactType, prompt, model);
+                return;
+            }
+        }
+
+        // Старый код (обычный чат)
         input.value = ""; input.style.height = "44px";
         input.disabled = true; sendBtn.disabled = true;
         statusText.innerText = "NEURAL_LINK_ESTABLISHED...";

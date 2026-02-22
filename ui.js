@@ -369,6 +369,26 @@ function openRequirementsModal(artifactType, content, onSave, onAddMore, onCance
     }
 }
 
+// ADDED: отображение истории уточнения в области сообщений
+function renderClarificationHistory(history) {
+    const messagesDiv = document.getElementById('messages');
+    messagesDiv.innerHTML = '';
+    history.forEach(msg => {
+        const div = document.createElement('div');
+        if (msg.role === 'user') {
+            div.className = 'border-l-2 border-zinc-800 pl-6 text-sm text-zinc-400';
+            div.innerText = msg.content;
+        } else {
+            div.className = 'markdown-body';
+            div.innerHTML = marked.parse(msg.content);
+        }
+        messagesDiv.appendChild(div);
+    });
+    const placeholder = document.getElementById('messages-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
+    document.getElementById('scroll-anchor')?.scrollIntoView({ behavior: 'smooth' });
+}
+
 // Функция для рендера прогресс-бара (вызывается из simpleMode)
 function renderProgressBar(stage) {
     const steps = ['idea', 'requirements', 'architecture', 'code', 'tests'];
@@ -393,4 +413,6 @@ window.ui = {
     openRequirementsModal,
     closeModal,
     renderProgressBar,
+    // ADDED
+    renderClarificationHistory
 };

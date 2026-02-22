@@ -9,7 +9,7 @@ import db
 import json
 import os
 import hashlib
-import datetime  # ADDED: for timestamps
+import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
@@ -53,11 +53,11 @@ class NextStepResponse(BaseModel):
     parent_id: Optional[str]
     description: str
 
-# ========== ADDED: Pydantic models for clarification ==========
+# ========== Pydantic models for clarification ==========
 class StartClarificationRequest(BaseModel):
     project_id: str
     target_artifact_type: str
-    model: Optional[str] = None  # если не указано, будет использована модель по умолчанию
+    model: Optional[str] = None
 
 class MessageRequest(BaseModel):
     message: str
@@ -68,7 +68,7 @@ class ClarificationSessionResponse(BaseModel):
     target_artifact_type: str
     history: List[Dict[str, Any]]
     status: str
-    context_summary: Optional[str] = None
+    context_summary: Optional[Dict[str, Any]] = None  # изменено: теперь храним JSON, а не строку
     final_artifact_id: Optional[str] = None
     created_at: str
     updated_at: str
@@ -211,7 +211,6 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 model_id=req.model,
                 project_id=req.project_id
             )
-            # Получаем полный артефакт из БД
             artifact = await db.get_artifact(new_id)
             if artifact:
                 return JSONResponse(content={"result": artifact['content']})
@@ -266,9 +265,7 @@ async def save_artifact_package(req: SavePackageRequest):
 
 @app.get("/api/projects/{project_id}/messages")
 async def get_project_messages(project_id: str):
-    """Возвращает все артефакты типа LLMResponse для проекта, отсортированные по времени."""
     artifacts = await db.get_artifacts(project_id, artifact_type="LLMResponse")
-    # Сортируем по created_at (старые сначала)
     artifacts.sort(key=lambda x: x['created_at'])
     return JSONResponse(content=artifacts)
 
@@ -378,6 +375,8 @@ async def get_available_modes():
         {"id": "36_REQUIREMENT_SUMMARIZER", "name": "36: REQUIREMENT_SUMMARIZER"},
         {"id": "37_SYSTEM_REQUIREMENTS_SUMMARIZER", "name": "37: SYSTEM_REQUIREMENTS_SUMMARIZER"},
         {"id": "38_CODE_CONTEXT_SUMMARIZER", "name": "38: CODE_CONTEXT_SUMMARIZER"},
+        # ADDED: State Synthesizer (фоновый промпт)
+        {"id": "02sum_STATE_SYNTHESIZER", "name": "02sum: STATE_SYNTHESIZER"},
     ]
 
 # ==================== ЧАТ ====================
@@ -417,32 +416,24 @@ async def analyze(request: Request):
         media_type="text/plain",
     )
 
-# ==================== ADDED: Clarification session endpoints ====================
+# ==================== СЕССИИ УТОЧНЕНИЯ (с интеграцией State Synthesizer) ====================
 
 @app.post("/api/clarification/start", response_model=ClarificationSessionResponse)
 async def start_clarification(req: StartClarificationRequest):
-    """Создаёт новую сессию уточнения и генерирует первое сообщение ассистента."""
-    # Проверяем существование проекта
     project = await db.get_project(req.project_id)
     if not project:
         return JSONResponse(content={"error": "Project not found"}, status_code=404)
 
-    # Определяем режим промпта по типу артефакта
     mode = orch.type_to_mode.get(req.target_artifact_type)
     if not mode:
         return JSONResponse(content={"error": f"No prompt mode found for artifact type {req.target_artifact_type}"}, status_code=400)
 
-    # Получаем системный промпт
     sys_prompt = await orch.get_system_prompt(mode)
     if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
         return JSONResponse(content={"error": sys_prompt}, status_code=500)
 
-    # Создаём сессию в БД
     session_id = await db.create_clarification_session(req.project_id, req.target_artifact_type)
 
-    # Формируем сообщения для LLM: системный промпт + пустой пользовательский запрос?
-    # Для первого сообщения ассистент должен задать вопрос, поэтому отправляем системный промпт и, возможно, инструкцию "Начни диалог".
-    # Используем модель из запроса или дефолтную
     model = req.model or "llama-3.3-70b-versatile"
     messages = [
         {"role": "system", "content": sys_prompt},
@@ -454,21 +445,22 @@ async def start_clarification(req: StartClarificationRequest):
         logger.error(f"LLM call failed: {e}")
         return JSONResponse(content={"error": "Failed to generate first message"}, status_code=500)
 
-    # Добавляем сообщение ассистента в историю
     await db.add_message_to_session(session_id, "assistant", assistant_message)
 
-    # Получаем обновлённую сессию
+    # После первого сообщения сразу запускаем синтез состояния (хотя история короткая, но для единообразия)
     session = await db.get_clarification_session(session_id)
-    if not session:
-        return JSONResponse(content={"error": "Session created but not found"}, status_code=500)
+    if session:
+        state = await orch.synthesize_conversation_state(session['history'])
+        await db.update_clarification_session(session_id, context_summary=json.dumps(state))
 
+    session = await db.get_clarification_session(session_id)
     return ClarificationSessionResponse(
         id=session['id'],
         project_id=session['project_id'],
         target_artifact_type=session['target_artifact_type'],
         history=session['history'],
         status=session['status'],
-        context_summary=session.get('context_summary'),
+        context_summary=json.loads(session['context_summary']) if session.get('context_summary') else None,
         final_artifact_id=session.get('final_artifact_id'),
         created_at=session['created_at'],
         updated_at=session['updated_at']
@@ -476,7 +468,6 @@ async def start_clarification(req: StartClarificationRequest):
 
 @app.post("/api/clarification/{session_id}/message", response_model=ClarificationSessionResponse)
 async def add_message(session_id: str, req: MessageRequest):
-    """Добавляет сообщение пользователя, генерирует ответ ассистента и обновляет историю."""
     session = await db.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
@@ -487,7 +478,7 @@ async def add_message(session_id: str, req: MessageRequest):
     # Добавляем сообщение пользователя
     await db.add_message_to_session(session_id, "user", req.message)
 
-    # Получаем обновлённую историю
+    # Получаем обновлённую сессию
     session = await db.get_clarification_session(session_id)
     history = session['history']
 
@@ -496,17 +487,34 @@ async def add_message(session_id: str, req: MessageRequest):
     if not mode:
         return JSONResponse(content={"error": f"No prompt mode found for artifact type {session['target_artifact_type']}"}, status_code=500)
 
-    # Получаем системный промпт
     sys_prompt = await orch.get_system_prompt(mode)
     if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
         return JSONResponse(content={"error": sys_prompt}, status_code=500)
 
-    # Формируем полную историю для LLM
-    messages = [{"role": "system", "content": sys_prompt}]
-    for msg in history:
-        messages.append({"role": msg['role'], "content": msg['content']})
+    # Формируем сообщения для LLM, используя context_summary если он есть
+    context_summary = session.get('context_summary')
+    if context_summary:
+        # Парсим сохранённый JSON
+        try:
+            state = json.loads(context_summary)
+            # Берём только последние 2 сообщения для актуальности
+            recent = history[-2:] if len(history) >= 2 else history
+            recent_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent])
+            # Добавляем состояние как часть системного сообщения
+            enhanced_system = sys_prompt + f"\n\nCurrent conversation state:\n{json.dumps(state, ensure_ascii=False, indent=2)}\n\nLatest messages:\n{recent_text}"
+            messages = [{"role": "system", "content": enhanced_system}]
+        except Exception as e:
+            logger.error(f"Failed to parse context_summary: {e}")
+            # fallback на полную историю
+            messages = [{"role": "system", "content": sys_prompt}]
+            for msg in history:
+                messages.append({"role": msg['role'], "content": msg['content']})
+    else:
+        # Нет суммаризации — передаём всю историю
+        messages = [{"role": "system", "content": sys_prompt}]
+        for msg in history:
+            messages.append({"role": msg['role'], "content": msg['content']})
 
-    # FIXED: Используем фиксированную модель, так как в запросе её нет
     model = "llama-3.3-70b-versatile"
     try:
         assistant_message = await orch.get_chat_completion(messages, model)
@@ -514,10 +522,14 @@ async def add_message(session_id: str, req: MessageRequest):
         logger.error(f"LLM call failed: {e}")
         return JSONResponse(content={"error": "Failed to generate assistant message"}, status_code=500)
 
-    # Добавляем ответ ассистента в историю
     await db.add_message_to_session(session_id, "assistant", assistant_message)
 
-    # Получаем финальную версию сессии
+    # После каждого обмена запускаем синтез состояния
+    session = await db.get_clarification_session(session_id)
+    state = await orch.synthesize_conversation_state(session['history'])
+    await db.update_clarification_session(session_id, context_summary=json.dumps(state))
+
+    # Финальная сессия для ответа
     session = await db.get_clarification_session(session_id)
 
     return ClarificationSessionResponse(
@@ -526,7 +538,7 @@ async def add_message(session_id: str, req: MessageRequest):
         target_artifact_type=session['target_artifact_type'],
         history=session['history'],
         status=session['status'],
-        context_summary=session.get('context_summary'),
+        context_summary=json.loads(session['context_summary']) if session.get('context_summary') else None,
         final_artifact_id=session.get('final_artifact_id'),
         created_at=session['created_at'],
         updated_at=session['updated_at']
@@ -534,7 +546,6 @@ async def add_message(session_id: str, req: MessageRequest):
 
 @app.get("/api/clarification/{session_id}", response_model=ClarificationSessionResponse)
 async def get_clarification_session_endpoint(session_id: str):
-    """Возвращает текущее состояние сессии."""
     session = await db.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
@@ -544,7 +555,7 @@ async def get_clarification_session_endpoint(session_id: str):
         target_artifact_type=session['target_artifact_type'],
         history=session['history'],
         status=session['status'],
-        context_summary=session.get('context_summary'),
+        context_summary=json.loads(session['context_summary']) if session.get('context_summary') else None,
         final_artifact_id=session.get('final_artifact_id'),
         created_at=session['created_at'],
         updated_at=session['updated_at']
@@ -552,7 +563,6 @@ async def get_clarification_session_endpoint(session_id: str):
 
 @app.post("/api/clarification/{session_id}/complete")
 async def complete_clarification_session(session_id: str):
-    """Помечает сессию как завершённую (заглушка для будущей генерации артефакта)."""
     session = await db.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
@@ -564,7 +574,6 @@ async def complete_clarification_session(session_id: str):
 
 @app.get("/api/projects/{project_id}/clarification/active")
 async def get_active_sessions(project_id: str):
-    """Возвращает все активные сессии для проекта (для восстановления после перезагрузки)."""
     sessions = await db.list_active_sessions_for_project(project_id)
     return JSONResponse(content=[
         {

@@ -31,7 +31,6 @@
 
     // ========== СОХРАНЕНИЕ СОСТОЯНИЯ ==========
     function saveState() {
-        // Проверяем, что все необходимые элементы и state существуют
         if (!state || typeof state.getCurrentProjectId !== 'function') return;
         try {
             const currentState = {
@@ -55,13 +54,11 @@
             const st = JSON.parse(saved);
             if (st.projectId) {
                 state.setCurrentProjectId(st.projectId);
-                // проект загрузится позже, восстановим остальное после загрузки
             }
             if (st.model && modelSelect) modelSelect.value = st.model;
             if (st.mode && modeSelect) modeSelect.value = st.mode;
             if (st.artifactType && artifactTypeSelect) artifactTypeSelect.value = st.artifactType;
             if (st.parentId) {
-                // родитель будет восстановлен после загрузки артефактов
                 state.setCurrentParentId(st.parentId);
             }
             if (st.isSimple && window.simpleMode) {
@@ -110,7 +107,6 @@
                     }
                     modelSelect.appendChild(opt);
                 });
-                // Восстанавливаем сохранённую модель
                 const saved = localStorage.getItem('mrak_ui_state');
                 if (saved) {
                     const st = JSON.parse(saved);
@@ -139,7 +135,6 @@
                 } else {
                     modeSelect.innerHTML = '<option value="01_CORE">01: CORE_SYSTEM</option>';
                 }
-                // Восстанавливаем сохранённый режим
                 const saved = localStorage.getItem('mrak_ui_state');
                 if (saved) {
                     const st = JSON.parse(saved);
@@ -153,7 +148,6 @@
         }
     }
 
-    // Загрузка истории сообщений для текущего проекта
     async function loadMessages() {
         const pid = state.getCurrentProjectId();
         if (!pid) return;
@@ -200,7 +194,8 @@
         if (!pid) return;
         if (!confirm('Удалить проект? Все артефакты будут безвозвратно удалены.')) return;
         try {
-            await apiFetch(`/api/projects/${pid}`, { method: 'DELETE' });
+            // FIXED: use api.apiFetch instead of direct apiFetch
+            await api.apiFetch(`/api/projects/${pid}`, { method: 'DELETE' });
             await loadProjects();
             state.setCurrentProjectId('');
             messagesDiv.innerHTML = '';
@@ -215,7 +210,6 @@
 
     projectSelect.addEventListener("change", function() {
         state.setCurrentProjectId(this.value);
-        // Сбрасываем выбранный родитель и тип при смене проекта
         if (artifactTypeSelect) artifactTypeSelect.value = "BusinessIdea";
         if (parentSelect) {
             parentSelect.innerHTML = '<option value="">-- нет --</option>';
@@ -224,7 +218,6 @@
         if (this.value) {
             loadParents();
             loadMessages();
-            // Обновляем прогресс в простом режиме
             if (window.simpleMode && document.getElementById('simple-controls')?.classList.contains('hidden') === false) {
                 window.simpleMode.updateProgress();
             }
@@ -240,7 +233,6 @@
     });
 
     artifactTypeSelect.addEventListener('change', function() {
-        // Мгновенно перерисовываем родительский селектор с фильтрацией по новому типу
         ui.renderParentSelect(state.getArtifacts(), state.getParentData(), state.getCurrentParentId(), this.value);
         saveState();
     });
@@ -258,7 +250,7 @@
         }
         const artifactType = artifactTypeSelect.value;
         const parentId = parentSelect.value || null;
-        const generate = false; // Сохраняем как есть, без генерации
+        const generate = false;
         const model = modelSelect.value;
 
         try {
@@ -267,7 +259,6 @@
             input.value = "";
             input.style.height = "44px";
             await loadParents();
-            // Обновляем прогресс в простом режиме
             if (window.simpleMode && document.getElementById('simple-controls')?.classList.contains('hidden') === false) {
                 window.simpleMode.updateProgress();
             }
@@ -287,9 +278,7 @@
 
         try {
             const data = await api.generateArtifact(childType, parentId, feedback, model, pid, null);
-            // Ожидаем, что data.result содержит полное содержимое артефакта (объект/массив)
             state.setCurrentArtifact({ content: data.result });
-            // Открываем модальное окно для редактирования/сохранения
             ui.openRequirementsModal(
                 childType,
                 data.result,
@@ -297,7 +286,8 @@
                     try {
                         const saved = await api.saveArtifactPackage(pid, parentId, childType, updatedContent);
                         if (validate) {
-                            await apiFetch('/api/validate_artifact', {
+                            // FIXED: use api.apiFetch
+                            await api.apiFetch('/api/validate_artifact', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ artifact_id: saved.id, status: 'VALIDATED' })
@@ -308,7 +298,6 @@
                         }
                         ui.closeModal();
                         await loadParents();
-                        // Обновляем прогресс в простом режиме
                         if (window.simpleMode && document.getElementById('simple-controls')?.classList.contains('hidden') === false) {
                             window.simpleMode.updateProgress();
                         }
@@ -334,7 +323,8 @@
         }
         if (!confirm('Удалить выбранный артефакт?')) return;
         try {
-            await apiFetch(`/api/artifact/${artifactId}`, { method: 'DELETE' });
+            // FIXED: use api.apiFetch
+            await api.apiFetch(`/api/artifact/${artifactId}`, { method: 'DELETE' });
             ui.showNotification('Артефакт удалён', 'success');
             await loadParents();
         } catch (e) {
@@ -342,7 +332,6 @@
         }
     };
 
-    // ========== ЧАТ-ФУНКЦИЯ (отправка сообщения) ==========
     async function start() {
         const prompt = input.value.trim();
         if (!prompt) return;
@@ -367,7 +356,6 @@
         assistantDiv.className = "markdown-body streaming";
         messagesDiv.appendChild(assistantDiv);
 
-        // Показываем messagesDiv, если он был скрыт
         messagesDiv.classList.remove('hidden');
         const placeholder = document.getElementById('messages-placeholder');
         if (placeholder) placeholder.style.display = 'none';
@@ -409,7 +397,6 @@
             statusText.innerText = "SYSTEM_READY";
             input.focus();
             saveState();
-            // Перезагружаем сообщения, чтобы новое сохранилось (оно уже в БД)
             await loadMessages();
         }
     }
@@ -417,9 +404,7 @@
     sendBtn.onclick = start;
     input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); start(); } };
 
-    // ========== ИНИЦИАЛИЗАЦИЯ ==========
     window.onload = async function() {
-        // Подписываемся на изменения состояния для сохранения (делаем это до восстановления)
         if (state && typeof state.subscribe === 'function') {
             state.subscribe(() => {
                 saveState();
@@ -434,7 +419,6 @@
             await loadParents();
             await loadMessages();
         }
-        // Инициализируем простой режим
         if (window.simpleMode) {
             window.simpleMode.init();
         }

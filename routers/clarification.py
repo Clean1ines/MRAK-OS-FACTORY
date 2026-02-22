@@ -1,23 +1,22 @@
-# CHANGED: Added missing json import
+# CHANGED: Use services instead of orchestrator
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-import json  # ADDED
+import json
 from schemas import StartClarificationRequest, MessageRequest, ClarificationSessionResponse
-from orchestrator import MrakOrchestrator
 from session_service import SessionService
 from use_cases.start_clarification import StartClarificationUseCase
 from use_cases.add_message import AddMessageUseCase
+from services import prompt_service
 import logging
 
 logger = logging.getLogger("MRAK-SERVER")
-orch = MrakOrchestrator()
 session_service = SessionService()
 
 router = APIRouter(prefix="/api", tags=["clarification"])
 
 @router.post("/clarification/start", response_model=ClarificationSessionResponse)
 async def start_clarification(req: StartClarificationRequest):
-    use_case = StartClarificationUseCase(orch, session_service)
+    use_case = StartClarificationUseCase(prompt_service, session_service)
     try:
         result = await use_case.execute(req)
         return result
@@ -28,7 +27,7 @@ async def start_clarification(req: StartClarificationRequest):
 
 @router.post("/clarification/{session_id}/message", response_model=ClarificationSessionResponse)
 async def add_message(session_id: str, req: MessageRequest):
-    use_case = AddMessageUseCase(orch, session_service)
+    use_case = AddMessageUseCase(prompt_service, session_service)
     try:
         result = await use_case.execute(session_id, req)
         return result

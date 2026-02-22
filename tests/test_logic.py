@@ -1,50 +1,32 @@
+# CHANGED: Test use case instead of orchestrator
 import pytest
-import json
-from unittest.mock import MagicMock, patch, AsyncMock
-from logic import MrakOrchestrator
-
-
-@pytest.fixture
-def orch():
-    with patch("logic.MrakOrchestrator") as MockOrch:
-        instance = MockOrch.return_value
-        # Мокаем методы, которые будут вызваны
-        instance.generate_business_requirements = AsyncMock()
-        instance.get_active_models = MagicMock()
-        yield instance
-
+from unittest.mock import AsyncMock, patch
+from use_cases.generate_artifact import GenerateArtifactUseCase
+from schemas import GenerateArtifactRequest
+from artifact_service import ArtifactService
 
 @pytest.mark.asyncio
-async def test_generate_business_requirements_success(orch):
-    # Подготавливаем мок
-    fake_requirements = [
-        {
-            "description": "Test requirement",
-            "priority": "HIGH",
-            "stakeholder": "User",
-            "acceptance_criteria": ["criterion 1"],
-            "business_value": "test value"
-        }
-    ]
-    orch.generate_business_requirements.return_value = fake_requirements
+async def test_generate_business_requirements_success():
+    mock_artifact_service = AsyncMock(spec=ArtifactService)
+    fake_requirements = [{"description": "Test requirement", "priority": "HIGH"}]
+    mock_artifact_service.generate_business_requirements.return_value = fake_requirements
 
-    # Вызываем метод
-    result = await orch.generate_business_requirements(
-        analysis_id="test-id",
-        user_feedback="feedback",
-        model_id="llama-3.3-70b-versatile",
-        project_id="proj-id"
+    use_case = GenerateArtifactUseCase(mock_artifact_service)
+    req = GenerateArtifactRequest(
+        artifact_type="BusinessRequirementPackage",
+        parent_id="analysis-id",
+        feedback="feedback",
+        model="model",  # CHANGED: was model_id, now model
+        project_id="proj-id",
+        existing_content=None
     )
+    result = await use_case.execute(req)
 
-    assert result == fake_requirements
-    orch.generate_business_requirements.assert_awaited_once_with(
-        analysis_id="test-id",
+    assert result == {"result": fake_requirements}
+    mock_artifact_service.generate_business_requirements.assert_called_once_with(
+        analysis_id="analysis-id",
         user_feedback="feedback",
-        model_id="llama-3.3-70b-versatile",
-        project_id="proj-id"
+        model_id="model",  # здесь ожидается model_id
+        project_id="proj-id",
+        existing_requirements=None
     )
-
-
-def test_pii_filter(orch):
-    # Пример теста фильтра PII, если нужно
-    pass

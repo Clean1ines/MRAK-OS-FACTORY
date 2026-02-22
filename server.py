@@ -11,11 +11,16 @@ import os
 import hashlib
 import datetime
 
+# ADDED: Import SessionService
+from session_service import SessionService
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
 
 app = FastAPI(title="MRAK-OS Factory API")
 orch = MrakOrchestrator()
+# ADDED: Create session service instance
+session_service = SessionService()
 
 class ProjectCreate(BaseModel):
     name: str
@@ -73,7 +78,7 @@ class ClarificationSessionResponse(BaseModel):
     created_at: str
     updated_at: str
 
-# ========== ADDED: Pydantic models for workflow ==========
+# ========== Pydantic models for workflow ==========
 class WorkflowCreate(BaseModel):
     name: str
     description: str = ""
@@ -103,7 +108,6 @@ class WorkflowEdgeCreate(BaseModel):
     source_output: str = "output"
     target_input: str = "input"
 
-# ========== ADDED: Response models for workflow (optional, used for clarity) ==========
 class WorkflowResponse(BaseModel):
     id: str
     name: str
@@ -419,7 +423,6 @@ async def get_available_modes():
         {"id": "36_REQUIREMENT_SUMMARIZER", "name": "36: REQUIREMENT_SUMMARIZER"},
         {"id": "37_SYSTEM_REQUIREMENTS_SUMMARIZER", "name": "37: SYSTEM_REQUIREMENTS_SUMMARIZER"},
         {"id": "38_CODE_CONTEXT_SUMMARIZER", "name": "38: CODE_CONTEXT_SUMMARIZER"},
-        # ADDED: State Synthesizer (фоновый промпт)
         {"id": "02sum_STATE_SYNTHESIZER", "name": "02sum: STATE_SYNTHESIZER"},
     ]
 
@@ -460,7 +463,7 @@ async def analyze(request: Request):
         media_type="text/plain",
     )
 
-# ==================== СЕССИИ УТОЧНЕНИЯ ====================
+# ==================== СЕССИИ УТОЧНЕНИЯ (рефакторинг: через SessionService) ====================
 
 @app.post("/api/clarification/start", response_model=ClarificationSessionResponse)
 async def start_clarification(req: StartClarificationRequest):
@@ -476,7 +479,8 @@ async def start_clarification(req: StartClarificationRequest):
     if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
         return JSONResponse(content={"error": sys_prompt}, status_code=500)
 
-    session_id = await db.create_clarification_session(req.project_id, req.target_artifact_type)
+    # CHANGED: use session_service instead of db
+    session_id = await session_service.create_clarification_session(req.project_id, req.target_artifact_type)
 
     model = req.model or "llama-3.3-70b-versatile"
     messages = [
@@ -489,14 +493,16 @@ async def start_clarification(req: StartClarificationRequest):
         logger.error(f"LLM call failed: {e}")
         return JSONResponse(content={"error": "Failed to generate first message"}, status_code=500)
 
-    await db.add_message_to_session(session_id, "assistant", assistant_message)
+    # CHANGED: use session_service
+    await session_service.add_message_to_session(session_id, "assistant", assistant_message)
 
-    session = await db.get_clarification_session(session_id)
+    session = await session_service.get_clarification_session(session_id)
     if session:
         state = await orch.synthesize_conversation_state(session['history'])
-        await db.update_clarification_session(session_id, context_summary=json.dumps(state))
+        # CHANGED: use session_service
+        await session_service.update_clarification_session(session_id, context_summary=json.dumps(state))
 
-    session = await db.get_clarification_session(session_id)
+    session = await session_service.get_clarification_session(session_id)
     return ClarificationSessionResponse(
         id=session['id'],
         project_id=session['project_id'],
@@ -511,16 +517,18 @@ async def start_clarification(req: StartClarificationRequest):
 
 @app.post("/api/clarification/{session_id}/message", response_model=ClarificationSessionResponse)
 async def add_message(session_id: str, req: MessageRequest):
-    session = await db.get_clarification_session(session_id)
+    # CHANGED: use session_service
+    session = await session_service.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
 
     if session['status'] != 'active':
         return JSONResponse(content={"error": "Session is not active"}, status_code=400)
 
-    await db.add_message_to_session(session_id, "user", req.message)
+    # CHANGED: use session_service
+    await session_service.add_message_to_session(session_id, "user", req.message)
 
-    session = await db.get_clarification_session(session_id)
+    session = await session_service.get_clarification_session(session_id)
     history = session['history']
 
     mode = orch.type_to_mode.get(session['target_artifact_type'])
@@ -556,13 +564,15 @@ async def add_message(session_id: str, req: MessageRequest):
         logger.error(f"LLM call failed: {e}")
         return JSONResponse(content={"error": "Failed to generate assistant message"}, status_code=500)
 
-    await db.add_message_to_session(session_id, "assistant", assistant_message)
+    # CHANGED: use session_service
+    await session_service.add_message_to_session(session_id, "assistant", assistant_message)
 
-    session = await db.get_clarification_session(session_id)
+    session = await session_service.get_clarification_session(session_id)
     state = await orch.synthesize_conversation_state(session['history'])
-    await db.update_clarification_session(session_id, context_summary=json.dumps(state))
+    # CHANGED: use session_service
+    await session_service.update_clarification_session(session_id, context_summary=json.dumps(state))
 
-    session = await db.get_clarification_session(session_id)
+    session = await session_service.get_clarification_session(session_id)
 
     return ClarificationSessionResponse(
         id=session['id'],
@@ -578,7 +588,8 @@ async def add_message(session_id: str, req: MessageRequest):
 
 @app.get("/api/clarification/{session_id}", response_model=ClarificationSessionResponse)
 async def get_clarification_session_endpoint(session_id: str):
-    session = await db.get_clarification_session(session_id)
+    # CHANGED: use session_service
+    session = await session_service.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
     return ClarificationSessionResponse(
@@ -595,18 +606,21 @@ async def get_clarification_session_endpoint(session_id: str):
 
 @app.post("/api/clarification/{session_id}/complete")
 async def complete_clarification_session(session_id: str):
-    session = await db.get_clarification_session(session_id)
+    # CHANGED: use session_service
+    session = await session_service.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
     if session['status'] != 'active':
         return JSONResponse(content={"error": "Session already completed"}, status_code=400)
 
-    await db.update_clarification_session(session_id, status="completed")
+    # CHANGED: use session_service
+    await session_service.update_clarification_session(session_id, status="completed")
     return JSONResponse(content={"status": "completed", "session_id": session_id})
 
 @app.get("/api/projects/{project_id}/clarification/active")
 async def get_active_sessions(project_id: str):
-    sessions = await db.list_active_sessions_for_project(project_id)
+    # CHANGED: use session_service
+    sessions = await session_service.list_active_sessions_for_project(project_id)
     return JSONResponse(content=[
         {
             "id": s['id'],
@@ -617,23 +631,20 @@ async def get_active_sessions(project_id: str):
         for s in sessions
     ])
 
-# ==================== WORKFLOW MANAGEMENT (ADDED) ====================
+# ==================== WORKFLOW MANAGEMENT ====================
 
 @app.get("/api/workflows")
 async def list_workflows():
-    """Возвращает список всех workflow (без узлов и рёбер)."""
     workflows = await db.list_workflows()
     return JSONResponse(content=workflows)
 
 @app.post("/api/workflows", status_code=201)
 async def create_workflow(workflow: WorkflowCreate):
-    """Создаёт новый workflow."""
     wf_id = await db.create_workflow(workflow.name, workflow.description, workflow.is_default)
     return JSONResponse(content={"id": wf_id})
 
 @app.get("/api/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str):
-    """Возвращает workflow с его узлами и рёбрами."""
     wf = await db.get_workflow(workflow_id)
     if not wf:
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
@@ -647,11 +658,9 @@ async def get_workflow(workflow_id: str):
 
 @app.put("/api/workflows/{workflow_id}")
 async def update_workflow(workflow_id: str, wf_update: WorkflowUpdate):
-    """Обновляет метаданные workflow."""
     existing = await db.get_workflow(workflow_id)
     if not existing:
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
-    # Передаём только те поля, которые указаны в запросе
     update_data = wf_update.dict(exclude_unset=True)
     if update_data:
         await db.update_workflow(workflow_id, **update_data)
@@ -659,7 +668,6 @@ async def update_workflow(workflow_id: str, wf_update: WorkflowUpdate):
 
 @app.delete("/api/workflows/{workflow_id}")
 async def delete_workflow(workflow_id: str):
-    """Удаляет workflow и все его узлы/рёбра (каскадно)."""
     existing = await db.get_workflow(workflow_id)
     if not existing:
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
@@ -670,12 +678,9 @@ async def delete_workflow(workflow_id: str):
 
 @app.post("/api/workflows/{workflow_id}/nodes", status_code=201)
 async def create_workflow_node(workflow_id: str, node: WorkflowNodeCreate):
-    """Добавляет узел в workflow."""
-    # Проверяем, что workflow существует
     wf = await db.get_workflow(workflow_id)
     if not wf:
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
-    # Проверяем уникальность node_id в рамках workflow
     existing_nodes = await db.get_workflow_nodes(workflow_id)
     if any(n['node_id'] == node.node_id for n in existing_nodes):
         return JSONResponse(content={"error": f"Node with id '{node.node_id}' already exists in this workflow"}, status_code=400)
@@ -687,8 +692,6 @@ async def create_workflow_node(workflow_id: str, node: WorkflowNodeCreate):
 
 @app.put("/api/workflows/nodes/{node_record_id}")
 async def update_workflow_node(node_record_id: str, node_update: WorkflowNodeUpdate):
-    """Обновляет узел по его record_id."""
-    # Можно проверить существование узла, но db.update_workflow_node просто ничего не сделает, если нет.
     update_data = node_update.dict(exclude_unset=True)
     if update_data:
         await db.update_workflow_node(node_record_id, **update_data)
@@ -696,7 +699,6 @@ async def update_workflow_node(node_record_id: str, node_update: WorkflowNodeUpd
 
 @app.delete("/api/workflows/nodes/{node_record_id}")
 async def delete_workflow_node(node_record_id: str):
-    """Удаляет узел по его record_id."""
     await db.delete_workflow_node(node_record_id)
     return JSONResponse(content={"status": "deleted"})
 
@@ -704,11 +706,9 @@ async def delete_workflow_node(node_record_id: str):
 
 @app.post("/api/workflows/{workflow_id}/edges", status_code=201)
 async def create_workflow_edge(workflow_id: str, edge: WorkflowEdgeCreate):
-    """Добавляет ребро между узлами workflow."""
     wf = await db.get_workflow(workflow_id)
     if not wf:
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
-    # Проверяем, что оба узла существуют
     nodes = await db.get_workflow_nodes(workflow_id)
     node_ids = [n['node_id'] for n in nodes]
     if edge.source_node not in node_ids:
@@ -723,7 +723,6 @@ async def create_workflow_edge(workflow_id: str, edge: WorkflowEdgeCreate):
 
 @app.delete("/api/workflows/edges/{edge_record_id}")
 async def delete_workflow_edge(edge_record_id: str):
-    """Удаляет ребро по его ID."""
     await db.delete_workflow_edge(edge_record_id)
     return JSONResponse(content={"status": "deleted"})
 

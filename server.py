@@ -68,10 +68,54 @@ class ClarificationSessionResponse(BaseModel):
     target_artifact_type: str
     history: List[Dict[str, Any]]
     status: str
-    context_summary: Optional[Dict[str, Any]] = None  # изменено: теперь храним JSON, а не строку
+    context_summary: Optional[Dict[str, Any]] = None
     final_artifact_id: Optional[str] = None
     created_at: str
     updated_at: str
+
+# ========== ADDED: Pydantic models for workflow ==========
+class WorkflowCreate(BaseModel):
+    name: str
+    description: str = ""
+    is_default: bool = False
+
+class WorkflowUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_default: Optional[bool] = None
+
+class WorkflowNodeCreate(BaseModel):
+    node_id: str
+    prompt_key: str
+    config: Dict[str, Any] = {}
+    position_x: float
+    position_y: float
+
+class WorkflowNodeUpdate(BaseModel):
+    prompt_key: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
+
+class WorkflowEdgeCreate(BaseModel):
+    source_node: str
+    target_node: str
+    source_output: str = "output"
+    target_input: str = "input"
+
+# ========== ADDED: Response models for workflow (optional, used for clarity) ==========
+class WorkflowResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    is_default: bool
+    created_at: str
+    updated_at: str
+
+class WorkflowDetailResponse(BaseModel):
+    workflow: WorkflowResponse
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
 
 def compute_content_hash(content):
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
@@ -416,7 +460,7 @@ async def analyze(request: Request):
         media_type="text/plain",
     )
 
-# ==================== СЕССИИ УТОЧНЕНИЯ (с интеграцией State Synthesizer) ====================
+# ==================== СЕССИИ УТОЧНЕНИЯ ====================
 
 @app.post("/api/clarification/start", response_model=ClarificationSessionResponse)
 async def start_clarification(req: StartClarificationRequest):
@@ -447,7 +491,6 @@ async def start_clarification(req: StartClarificationRequest):
 
     await db.add_message_to_session(session_id, "assistant", assistant_message)
 
-    # После первого сообщения сразу запускаем синтез состояния (хотя история короткая, но для единообразия)
     session = await db.get_clarification_session(session_id)
     if session:
         state = await orch.synthesize_conversation_state(session['history'])
@@ -475,14 +518,11 @@ async def add_message(session_id: str, req: MessageRequest):
     if session['status'] != 'active':
         return JSONResponse(content={"error": "Session is not active"}, status_code=400)
 
-    # Добавляем сообщение пользователя
     await db.add_message_to_session(session_id, "user", req.message)
 
-    # Получаем обновлённую сессию
     session = await db.get_clarification_session(session_id)
     history = session['history']
 
-    # Определяем режим промпта по типу артефакта
     mode = orch.type_to_mode.get(session['target_artifact_type'])
     if not mode:
         return JSONResponse(content={"error": f"No prompt mode found for artifact type {session['target_artifact_type']}"}, status_code=500)
@@ -491,26 +531,20 @@ async def add_message(session_id: str, req: MessageRequest):
     if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
         return JSONResponse(content={"error": sys_prompt}, status_code=500)
 
-    # Формируем сообщения для LLM, используя context_summary если он есть
     context_summary = session.get('context_summary')
     if context_summary:
-        # Парсим сохранённый JSON
         try:
             state = json.loads(context_summary)
-            # Берём только последние 2 сообщения для актуальности
             recent = history[-2:] if len(history) >= 2 else history
             recent_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent])
-            # Добавляем состояние как часть системного сообщения
             enhanced_system = sys_prompt + f"\n\nCurrent conversation state:\n{json.dumps(state, ensure_ascii=False, indent=2)}\n\nLatest messages:\n{recent_text}"
             messages = [{"role": "system", "content": enhanced_system}]
         except Exception as e:
             logger.error(f"Failed to parse context_summary: {e}")
-            # fallback на полную историю
             messages = [{"role": "system", "content": sys_prompt}]
             for msg in history:
                 messages.append({"role": msg['role'], "content": msg['content']})
     else:
-        # Нет суммаризации — передаём всю историю
         messages = [{"role": "system", "content": sys_prompt}]
         for msg in history:
             messages.append({"role": msg['role'], "content": msg['content']})
@@ -524,12 +558,10 @@ async def add_message(session_id: str, req: MessageRequest):
 
     await db.add_message_to_session(session_id, "assistant", assistant_message)
 
-    # После каждого обмена запускаем синтез состояния
     session = await db.get_clarification_session(session_id)
     state = await orch.synthesize_conversation_state(session['history'])
     await db.update_clarification_session(session_id, context_summary=json.dumps(state))
 
-    # Финальная сессия для ответа
     session = await db.get_clarification_session(session_id)
 
     return ClarificationSessionResponse(
@@ -584,5 +616,115 @@ async def get_active_sessions(project_id: str):
         }
         for s in sessions
     ])
+
+# ==================== WORKFLOW MANAGEMENT (ADDED) ====================
+
+@app.get("/api/workflows")
+async def list_workflows():
+    """Возвращает список всех workflow (без узлов и рёбер)."""
+    workflows = await db.list_workflows()
+    return JSONResponse(content=workflows)
+
+@app.post("/api/workflows", status_code=201)
+async def create_workflow(workflow: WorkflowCreate):
+    """Создаёт новый workflow."""
+    wf_id = await db.create_workflow(workflow.name, workflow.description, workflow.is_default)
+    return JSONResponse(content={"id": wf_id})
+
+@app.get("/api/workflows/{workflow_id}")
+async def get_workflow(workflow_id: str):
+    """Возвращает workflow с его узлами и рёбрами."""
+    wf = await db.get_workflow(workflow_id)
+    if not wf:
+        return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
+    nodes = await db.get_workflow_nodes(workflow_id)
+    edges = await db.get_workflow_edges(workflow_id)
+    return JSONResponse(content={
+        "workflow": wf,
+        "nodes": nodes,
+        "edges": edges
+    })
+
+@app.put("/api/workflows/{workflow_id}")
+async def update_workflow(workflow_id: str, wf_update: WorkflowUpdate):
+    """Обновляет метаданные workflow."""
+    existing = await db.get_workflow(workflow_id)
+    if not existing:
+        return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
+    # Передаём только те поля, которые указаны в запросе
+    update_data = wf_update.dict(exclude_unset=True)
+    if update_data:
+        await db.update_workflow(workflow_id, **update_data)
+    return JSONResponse(content={"status": "updated"})
+
+@app.delete("/api/workflows/{workflow_id}")
+async def delete_workflow(workflow_id: str):
+    """Удаляет workflow и все его узлы/рёбра (каскадно)."""
+    existing = await db.get_workflow(workflow_id)
+    if not existing:
+        return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
+    await db.delete_workflow(workflow_id)
+    return JSONResponse(content={"status": "deleted"})
+
+# ----- Узлы -----
+
+@app.post("/api/workflows/{workflow_id}/nodes", status_code=201)
+async def create_workflow_node(workflow_id: str, node: WorkflowNodeCreate):
+    """Добавляет узел в workflow."""
+    # Проверяем, что workflow существует
+    wf = await db.get_workflow(workflow_id)
+    if not wf:
+        return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
+    # Проверяем уникальность node_id в рамках workflow
+    existing_nodes = await db.get_workflow_nodes(workflow_id)
+    if any(n['node_id'] == node.node_id for n in existing_nodes):
+        return JSONResponse(content={"error": f"Node with id '{node.node_id}' already exists in this workflow"}, status_code=400)
+    record_id = await db.create_workflow_node(
+        workflow_id, node.node_id, node.prompt_key, node.config,
+        node.position_x, node.position_y
+    )
+    return JSONResponse(content={"id": record_id})
+
+@app.put("/api/workflows/nodes/{node_record_id}")
+async def update_workflow_node(node_record_id: str, node_update: WorkflowNodeUpdate):
+    """Обновляет узел по его record_id."""
+    # Можно проверить существование узла, но db.update_workflow_node просто ничего не сделает, если нет.
+    update_data = node_update.dict(exclude_unset=True)
+    if update_data:
+        await db.update_workflow_node(node_record_id, **update_data)
+    return JSONResponse(content={"status": "updated"})
+
+@app.delete("/api/workflows/nodes/{node_record_id}")
+async def delete_workflow_node(node_record_id: str):
+    """Удаляет узел по его record_id."""
+    await db.delete_workflow_node(node_record_id)
+    return JSONResponse(content={"status": "deleted"})
+
+# ----- Рёбра -----
+
+@app.post("/api/workflows/{workflow_id}/edges", status_code=201)
+async def create_workflow_edge(workflow_id: str, edge: WorkflowEdgeCreate):
+    """Добавляет ребро между узлами workflow."""
+    wf = await db.get_workflow(workflow_id)
+    if not wf:
+        return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
+    # Проверяем, что оба узла существуют
+    nodes = await db.get_workflow_nodes(workflow_id)
+    node_ids = [n['node_id'] for n in nodes]
+    if edge.source_node not in node_ids:
+        return JSONResponse(content={"error": f"Source node '{edge.source_node}' not found in workflow"}, status_code=400)
+    if edge.target_node not in node_ids:
+        return JSONResponse(content={"error": f"Target node '{edge.target_node}' not found in workflow"}, status_code=400)
+    edge_id = await db.create_workflow_edge(
+        workflow_id, edge.source_node, edge.target_node,
+        edge.source_output, edge.target_input
+    )
+    return JSONResponse(content={"id": edge_id})
+
+@app.delete("/api/workflows/edges/{edge_record_id}")
+async def delete_workflow_edge(edge_record_id: str):
+    """Удаляет ребро по его ID."""
+    await db.delete_workflow_edge(edge_record_id)
+    return JSONResponse(content={"status": "deleted"})
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

@@ -20,7 +20,8 @@ class PromptService:
     async def get_chat_completion(self, messages: List[Dict[str, str]], model_id: str) -> str:
         """Выполняет запрос к LLM без стриминга, возвращает полный текст ответа."""
         try:
-            completion = self.groq_client.client.chat.completions.create(
+            # Используем правильный метод create_completion из groq_client
+            completion = self.groq_client.create_completion(
                 model=model_id,
                 messages=messages,
                 temperature=0.6,

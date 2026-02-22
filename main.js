@@ -17,10 +17,8 @@
     const deleteArtifactBtn = document.getElementById("delete-artifact-btn");
     const saveArtifactBtn = document.getElementById("save-artifact-btn");
     const generateArtifactBtn = document.getElementById("generate-artifact-btn");
-    // ADDED
     const completeClarificationBtn = document.getElementById("complete-clarification-btn");
 
-    // Экспортируем функцию loadParents для использования в simpleMode.js
     window.loadParents = loadParents;
 
     marked.setOptions({ gfm: true, breaks: true });
@@ -79,6 +77,15 @@
             ui.renderProjectSelect(projects, state.getCurrentProjectId());
         } catch (e) {
             ui.showNotification('Ошибка загрузки проектов: ' + e.message, 'error');
+        }
+    }
+
+    async function loadArtifactTypes() {
+        try {
+            const types = await api.fetchArtifactTypes();
+            state.setArtifactTypes(types);
+        } catch (e) {
+            console.warn('Failed to load artifact types', e);
         }
     }
 
@@ -216,7 +223,6 @@
             parentSelect.innerHTML = '<option value="">-- нет --</option>';
         }
         if (generateArtifactBtn) generateArtifactBtn.style.display = 'none';
-        // ADDED: сброс кнопки завершения и скрытие
         if (completeClarificationBtn) completeClarificationBtn.style.display = 'none';
         if (this.value) {
             loadParents();
@@ -237,7 +243,6 @@
 
     artifactTypeSelect.addEventListener('change', function() {
         ui.renderParentSelect(state.getArtifacts(), state.getParentData(), state.getCurrentParentId(), this.value);
-        // ADDED: при смене типа сбрасываем сессию и кнопку завершения
         state.setCurrentClarificationSessionId(null);
         if (completeClarificationBtn) completeClarificationBtn.style.display = 'none';
         saveState();
@@ -336,11 +341,9 @@
         }
     };
 
-    // ========== ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ СЕССИЯМИ УТОЧНЕНИЯ (ADDED) ==========
     async function handleClarificationMessage(projectId, artifactType, message, model) {
         let sessionId = state.getCurrentClarificationSessionId();
         if (!sessionId) {
-            // Попытаемся найти активную сессию на сервере
             try {
                 const sessions = await api.fetchActiveClarificationSessions(projectId);
                 const active = sessions.find(s => s.target_artifact_type === artifactType);
@@ -354,16 +357,13 @@
         }
 
         if (!sessionId) {
-            // Создаём новую сессию
             try {
                 const data = await api.startClarification(projectId, artifactType, model);
                 sessionId = data.id;
                 state.setCurrentClarificationSessionId(sessionId);
-                // Отображаем первое сообщение
                 if (data.history && data.history.length > 0) {
                     ui.renderClarificationHistory(data.history);
                 }
-                // Показываем кнопку завершения
                 if (completeClarificationBtn) completeClarificationBtn.style.display = 'inline-block';
             } catch (e) {
                 ui.showNotification('Ошибка создания сессии: ' + e.message, 'error');
@@ -371,19 +371,15 @@
             }
         }
 
-        // Отправляем сообщение пользователя
         try {
             const data = await api.sendClarificationMessage(sessionId, message);
-            // Обновляем историю
             ui.renderClarificationHistory(data.history);
-            // Показываем кнопку завершения (если скрыта)
             if (completeClarificationBtn) completeClarificationBtn.style.display = 'inline-block';
         } catch (e) {
             ui.showNotification('Ошибка отправки: ' + e.message, 'error');
         }
     }
 
-    // Обработчик кнопки "Завершить уточнение"
     completeClarificationBtn.onclick = async () => {
         const sessionId = state.getCurrentClarificationSessionId();
         if (!sessionId) {
@@ -391,22 +387,15 @@
             return;
         }
         try {
-            // Завершаем сессию
             await api.completeClarificationSession(sessionId);
             ui.showNotification('Сессия завершена', 'success');
-            // Скрываем кнопку
             completeClarificationBtn.style.display = 'none';
-            // Сбрасываем ID сессии
             state.setCurrentClarificationSessionId(null);
-            // TODO: после завершения нужно сгенерировать финальный артефакт
-            // Для этого можно вызвать /api/generate_artifact с target_artifact_type
-            // Пока просто уведомление
         } catch (e) {
             ui.showNotification('Ошибка завершения: ' + e.message, 'error');
         }
     };
 
-    // ========== ЧАТ-ФУНКЦИЯ (отправка сообщения) ==========
     async function start() {
         const prompt = input.value.trim();
         if (!prompt) return;
@@ -418,18 +407,15 @@
         const mode = modeSelect.value;
         const model = modelSelect.value;
 
-        // Проверка для расширенного режима
         const isAdvanced = document.getElementById('advanced-controls')?.classList.contains('hidden') === false;
         if (isAdvanced) {
             const artifactType = artifactTypeSelect.value;
             if (state.requiresClarification(artifactType)) {
-                // Используем сессию
                 await handleClarificationMessage(pid, artifactType, prompt, model);
                 return;
             }
         }
 
-        // Старый код (обычный чат)
         input.value = ""; input.style.height = "44px";
         input.disabled = true; sendBtn.disabled = true;
         statusText.innerText = "NEURAL_LINK_ESTABLISHED...";
@@ -472,9 +458,7 @@
                 }
                 raw += chunk;
                 assistantDiv.innerHTML = marked.parse(raw);
-                if (scrollAnchor) {
-                    scrollAnchor.scrollIntoView({ behavior: "smooth" });
-                }
+                if (scrollAnchor) scrollAnchor.scrollIntoView({ behavior: "smooth" });
             }
         } catch (e) {
             assistantDiv.innerHTML = `<span class="text-red-500">SYSTEM_ERROR: ${e.message}</span>`;
@@ -501,6 +485,7 @@
         await loadModels();
         await loadModes();
         await loadProjects();
+        await loadArtifactTypes(); // ADDED
         restoreState();
         if (state.getCurrentProjectId()) {
             await loadParents();

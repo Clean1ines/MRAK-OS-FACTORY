@@ -1,9 +1,9 @@
-# prompt_service.py
-# Service for prompt-related operations
-
+# CHANGED: Delegates state synthesis to ConversationStateSynthesizer
 import json
 import logging
 from typing import List, Dict, Any, Optional
+
+from domain.conversation_state import ConversationStateSynthesizer  # ADDED
 
 logger = logging.getLogger("PROMPT-SERVICE")
 
@@ -12,6 +12,8 @@ class PromptService:
         self.groq_client = groq_client
         self.prompt_loader = prompt_loader
         self.mode_map = mode_map
+        # ADDED: instantiate synthesizer with self
+        self.state_synthesizer = ConversationStateSynthesizer(self)
 
     async def get_system_prompt(self, mode: str) -> str:
         """Возвращает системный промпт для указанного режима."""
@@ -20,7 +22,6 @@ class PromptService:
     async def get_chat_completion(self, messages: List[Dict[str, str]], model_id: str) -> str:
         """Выполняет запрос к LLM без стриминга, возвращает полный текст ответа."""
         try:
-            # Используем правильный метод create_completion из groq_client
             completion = self.groq_client.create_completion(
                 model=model_id,
                 messages=messages,
@@ -41,44 +42,5 @@ class PromptService:
         Анализирует последние сообщения диалога и возвращает структурированное состояние.
         Использует промпт 02sum_STATE_SYNTHESIZER.
         """
-        recent = history[-4:] if len(history) > 4 else history
-        context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent])
-
-        sys_prompt = await self.get_system_prompt("02sum_STATE_SYNTHESIZER")
-        if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
-            logger.error(f"Failed to load State Synthesizer prompt: {sys_prompt}")
-            return {
-                "clear_context": [],
-                "unclear_context": [],
-                "user_questions": [],
-                "answered_questions": [],
-                "next_question": None,
-                "completion_score": 0.0
-            }
-
-        messages = [
-            {"role": "system", "content": sys_prompt},
-            {"role": "user", "content": f"Analyze this conversation and output JSON state:\n{context}"}
-        ]
-        try:
-            response = await self.get_chat_completion(messages, model_id)
-            if response.startswith("```json"):
-                response = response[7:]
-            if response.endswith("```"):
-                response = response[:-3]
-            state = json.loads(response.strip())
-            required_fields = ["clear_context", "unclear_context", "user_questions", "answered_questions", "next_question", "completion_score"]
-            for field in required_fields:
-                if field not in state:
-                    state[field] = [] if field != "completion_score" else 0.0
-            return state
-        except Exception as e:
-            logger.error(f"State synthesis failed: {e}")
-            return {
-                "clear_context": [],
-                "unclear_context": [],
-                "user_questions": [],
-                "answered_questions": [],
-                "next_question": None,
-                "completion_score": 0.0
-            }
+        # CHANGED: delegate to synthesizer
+        return await self.state_synthesizer.synthesize(history, model_id)

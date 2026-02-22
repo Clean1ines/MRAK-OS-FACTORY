@@ -1,6 +1,53 @@
+# CHANGED: Added tests for WorkflowGraph, existing tests remain
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from workflow_engine import WorkflowEngine
+from domain.workflow_graph import WorkflowGraph  # ADDED
+
+# ===== Tests for WorkflowGraph =====
+
+def test_workflow_graph_start_nodes():
+    nodes = [
+        {"node_id": "A", "prompt_key": "pA"},
+        {"node_id": "B", "prompt_key": "pB"},
+        {"node_id": "C", "prompt_key": "pC"}
+    ]
+    edges = [
+        {"source_node": "A", "target_node": "B"},
+        {"source_node": "B", "target_node": "C"}
+    ]
+    graph = WorkflowGraph(nodes, edges)
+    assert graph.get_start_nodes() == ["A"]
+
+def test_workflow_graph_start_nodes_multiple():
+    nodes = [{"node_id": "A"}, {"node_id": "B"}, {"node_id": "C"}]
+    edges = [{"source_node": "A", "target_node": "C"}, {"source_node": "B", "target_node": "C"}]
+    graph = WorkflowGraph(nodes, edges)
+    start_nodes = graph.get_start_nodes()
+    assert set(start_nodes) == {"A", "B"}
+
+def test_workflow_graph_get_next_node():
+    nodes = [{"node_id": "A"}, {"node_id": "B"}, {"node_id": "C"}]
+    edges = [{"source_node": "A", "target_node": "B"}, {"source_node": "B", "target_node": "C"}]
+    graph = WorkflowGraph(nodes, edges)
+    assert graph.get_next_node("A") == "B"
+    assert graph.get_next_node("B") == "C"
+    assert graph.get_next_node("C") is None
+
+def test_workflow_graph_is_finished():
+    nodes = [{"node_id": "A"}, {"node_id": "B"}]
+    edges = [{"source_node": "A", "target_node": "B"}]
+    graph = WorkflowGraph(nodes, edges)
+    assert not graph.is_finished("A")
+    assert graph.is_finished("B")
+
+def test_workflow_graph_get_node():
+    nodes = [{"node_id": "A", "data": 123}]
+    graph = WorkflowGraph(nodes, [])
+    assert graph.get_node("A") == {"node_id": "A", "data": 123}
+    assert graph.get_node("B") is None
+
+# ===== Existing tests for WorkflowEngine (unchanged, but mocks still work) =====
 
 @pytest.fixture
 def mock_artifact_service():

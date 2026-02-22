@@ -4,6 +4,7 @@ import re
 import asyncio
 import json
 from typing import Optional, Dict, Any, List
+import logging
 
 import db
 from groq_client import GroqClient
@@ -12,6 +13,7 @@ from artifact_generator import ArtifactGenerator
 
 load_dotenv()
 
+logger = logging.getLogger("MRAK-ORCHESTRATOR")
 
 class MrakOrchestrator:
     def __init__(self, api_key=None):
@@ -19,7 +21,7 @@ class MrakOrchestrator:
         self.groq_client = GroqClient(api_key)
         self.prompt_loader = PromptLoader(self.gh_token)
 
-        # Маппинг режимов на переменные окружения (все 38 промптов)
+        # Маппинг режимов на переменные окружения (все 38 промптов + новый суммаризатор)
         self.mode_map = {
             "01_CORE": "SYSTEM_PROMPT_URL",
             "02_IDEA_CLARIFIER": "GH_URL_IDEA_CLARIFIER",
@@ -59,6 +61,8 @@ class MrakOrchestrator:
             "36_REQUIREMENT_SUMMARIZER": "GH_URL_REQUIREMENT_SUMMARIZER",
             "37_SYSTEM_REQUIREMENTS_SUMMARIZER": "GH_URL_SYSTEM_REQUIREMENTS_SUMMARIZER",
             "38_CODE_CONTEXT_SUMMARIZER": "GH_URL_CODE_CONTEXT_SUMMARIZER",
+            # ADDED: State Synthesizer для управления диалогом
+            "02sum_STATE_SYNTHESIZER": "GH_URL_STATE_SYNTHESIZER",
         }
 
         # Маппинг типа артефакта на режим промпта (для генерации)
@@ -116,11 +120,10 @@ class MrakOrchestrator:
         text = re.sub(r"(gsk_|sk-)[a-zA-Z0-9]{20,}", "[KEY_REDACTED]", text)
         return text
 
-    # ADDED: Non‑streaming LLM call for clarification dialogues
     async def get_chat_completion(self, messages: List[Dict[str, str]], model_id: str) -> str:
         """
         Выполняет запрос к LLM без стриминга, возвращает полный текст ответа.
-        messages: список словарей с ключами 'role' и 'content' (например, [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}])
+        messages: список словарей с ключами 'role' и 'content'
         """
         try:
             completion = self.groq_client.client.chat.completions.create(
@@ -133,6 +136,59 @@ class MrakOrchestrator:
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
             raise
+
+    # ===== ADDED: State Synthesizer =====
+    async def synthesize_conversation_state(self, history: List[Dict], model_id: str = "llama-3.3-70b-versatile") -> Dict[str, Any]:
+        """
+        Анализирует последние сообщения диалога и возвращает структурированное состояние.
+        Использует промпт 02sum_STATE_SYNTHESIZER.
+        """
+        # Берём последние 4 сообщения (или всю историю, если её меньше)
+        recent = history[-4:] if len(history) > 4 else history
+        # Формируем контекст для анализа
+        context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent])
+
+        sys_prompt = await self.get_system_prompt("02sum_STATE_SYNTHESIZER")
+        if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
+            logger.error(f"Failed to load State Synthesizer prompt: {sys_prompt}")
+            # Возвращаем пустое состояние, чтобы не ломать диалог
+            return {
+                "clear_context": [],
+                "unclear_context": [],
+                "user_questions": [],
+                "answered_questions": [],
+                "next_question": None,
+                "completion_score": 0.0
+            }
+
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"Analyze this conversation and output JSON state:\n{context}"}
+        ]
+        try:
+            response = await self.get_chat_completion(messages, model_id)
+            # Очищаем ответ от возможных markdown-обёрток
+            if response.startswith("```json"):
+                response = response[7:]
+            if response.endswith("```"):
+                response = response[:-3]
+            state = json.loads(response.strip())
+            # Убедимся, что все поля есть
+            required_fields = ["clear_context", "unclear_context", "user_questions", "answered_questions", "next_question", "completion_score"]
+            for field in required_fields:
+                if field not in state:
+                    state[field] = [] if field != "completion_score" else 0.0
+            return state
+        except Exception as e:
+            logger.error(f"State synthesis failed: {e}")
+            return {
+                "clear_context": [],
+                "unclear_context": [],
+                "user_questions": [],
+                "answered_questions": [],
+                "next_question": None,
+                "completion_score": 0.0
+            }
 
     async def generate_artifact(self, artifact_type: str, user_input: str,
                                  parent_artifact: Optional[Dict[str, Any]] = None,
@@ -153,7 +209,6 @@ class MrakOrchestrator:
         project_id: Optional[str] = None,
         existing_requirements: Optional[List[Dict]] = None
     ) -> List[Dict[str, Any]]:
-        """Генерация бизнес-требований на основе анализа продуктового совета."""
         return await self.artifact_generator.generate_business_requirements(
             analysis_id=analysis_id,
             user_feedback=user_feedback,
@@ -170,7 +225,6 @@ class MrakOrchestrator:
         project_id: Optional[str] = None,
         existing_analysis: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """Генерация анализа инженерии требований на основе бизнес-требований."""
         return await self.artifact_generator.generate_req_engineering_analysis(
             parent_id=parent_id,
             user_feedback=user_feedback,
@@ -187,7 +241,6 @@ class MrakOrchestrator:
         project_id: Optional[str] = None,
         existing_requirements: Optional[List[Dict]] = None
     ) -> List[Dict[str, Any]]:
-        """Генерация функциональных требований на основе анализа инженерии требований."""
         return await self.artifact_generator.generate_functional_requirements(
             analysis_id=analysis_id,
             user_feedback=user_feedback,
@@ -204,7 +257,6 @@ class MrakOrchestrator:
         project_id: Optional[str] = None,
         existing_analysis: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """Генерация QA-анализа на основе функциональных требований."""
         raise NotImplementedError("QA analysis generation not yet implemented")
 
     async def generate_architecture_analysis(
@@ -216,23 +268,13 @@ class MrakOrchestrator:
         project_id: Optional[str] = None,
         existing_analysis: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """Генерация архитектурного анализа."""
         raise NotImplementedError("Architecture analysis generation not yet implemented")
 
     # ===== МЕТОД ДЛЯ ПОЛУЧЕНИЯ СЛЕДУЮЩЕГО ШАГА (ПРОСТОЙ РЕЖИМ) =====
 
     async def get_next_step(self, project_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Определяет следующий шаг для простого режима на основе последнего ВАЛИДИРОВАННОГО артефакта.
-        Возвращает словарь с полями:
-        - next_stage: следующий этап (idea, requirements, architecture, code, tests)
-        - prompt_type: тип артефакта для генерации
-        - parent_id: ID родительского артефакта
-        - description: описание для интерфейса
-        """
         last_valid = await db.get_last_validated_artifact(project_id)
         if not last_valid:
-            # Нет валидированных артефактов – начинаем с идеи
             return {
                 "next_stage": "idea",
                 "prompt_type": "BusinessIdea",
@@ -240,7 +282,6 @@ class MrakOrchestrator:
                 "description": "Введите идею и уточните её"
             }
         last_type = last_valid['type']
-        # Маппинг текущего типа на следующий шаг
         if last_type == "BusinessIdea":
             return {
                 "next_stage": "requirements",
@@ -298,11 +339,9 @@ class MrakOrchestrator:
                 "description": "Сгенерировать тесты"
             }
         else:
-            # Если неизвестный тип – не предлагаем следующий шаг
             return None
 
     async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str, project_id: Optional[str] = None):
-        """Стриминг ответа LLM и сохранение результата."""
         clean_input = self._pii_filter(user_input)
         full_response = ""
         try:

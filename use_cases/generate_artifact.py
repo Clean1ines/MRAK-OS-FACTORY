@@ -1,7 +1,7 @@
-# ADDED: Generate artifact use case
+# CHANGED: Use artifact_service instead of orchestrator
 import logging
 from schemas import GenerateArtifactRequest
-from orchestrator import MrakOrchestrator
+from artifact_service import ArtifactService
 from repositories.base import transaction
 import db
 from validation import ValidationError
@@ -9,13 +9,13 @@ from validation import ValidationError
 logger = logging.getLogger(__name__)
 
 class GenerateArtifactUseCase:
-    def __init__(self, orch: MrakOrchestrator):
-        self.orch = orch
+    def __init__(self, artifact_service: ArtifactService):
+        self.artifact_service = artifact_service
 
     async def execute(self, req: GenerateArtifactRequest):
         try:
             if req.artifact_type == "BusinessRequirementPackage":
-                result = await self.orch.generate_business_requirements(
+                result = await self.artifact_service.generate_business_requirements(
                     analysis_id=req.parent_id,
                     user_feedback=req.feedback,
                     model_id=req.model,
@@ -23,7 +23,7 @@ class GenerateArtifactUseCase:
                     existing_requirements=req.existing_content
                 )
             elif req.artifact_type == "ReqEngineeringAnalysis":
-                result = await self.orch.generate_req_engineering_analysis(
+                result = await self.artifact_service.generate_req_engineering_analysis(
                     parent_id=req.parent_id,
                     user_feedback=req.feedback,
                     model_id=req.model,
@@ -31,7 +31,7 @@ class GenerateArtifactUseCase:
                     existing_analysis=req.existing_content
                 )
             elif req.artifact_type == "FunctionalRequirementPackage":
-                result = await self.orch.generate_functional_requirements(
+                result = await self.artifact_service.generate_functional_requirements(
                     analysis_id=req.parent_id,
                     user_feedback=req.feedback,
                     model_id=req.model,
@@ -43,7 +43,7 @@ class GenerateArtifactUseCase:
                 if req.parent_id:
                     async with transaction() as tx:
                         parent = await db.get_artifact(req.parent_id, tx=tx)
-                new_id = await self.orch.generate_artifact(
+                new_id = await self.artifact_service.generate_artifact(
                     artifact_type=req.artifact_type,
                     user_input=req.feedback,
                     parent_artifact=parent,

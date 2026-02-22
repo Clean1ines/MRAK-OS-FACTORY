@@ -1,4 +1,4 @@
-# CHANGED: Use use cases for simple mode endpoints
+# CHANGED: Use workflow_engine directly, remove orchestrator
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from typing import Optional
@@ -8,13 +8,12 @@ from schemas import (
     WorkflowCreate, WorkflowUpdate, WorkflowNodeCreate,
     WorkflowNodeUpdate, WorkflowEdgeCreate
 )
-from orchestrator import MrakOrchestrator
 from validation import ValidationError
 from use_cases.execute_workflow_step import ExecuteWorkflowStepUseCase
+from services import workflow_engine
 import logging
 
 logger = logging.getLogger("MRAK-SERVER")
-orch = MrakOrchestrator()
 
 router = APIRouter(prefix="/api", tags=["workflows"])
 
@@ -123,7 +122,7 @@ async def delete_workflow_edge(edge_record_id: str):
 @router.get("/workflow/next")
 async def get_next_step(project_id: str):
     try:
-        step = await orch.get_next_step(project_id)
+        step = await workflow_engine.get_next_step(project_id)
         if step:
             return JSONResponse(content=step)
         else:
@@ -134,7 +133,7 @@ async def get_next_step(project_id: str):
 
 @router.post("/workflow/execute_next")
 async def execute_next_step(project_id: str, model: Optional[str] = None):
-    use_case = ExecuteWorkflowStepUseCase(orch)
+    use_case = ExecuteWorkflowStepUseCase(workflow_engine)
     try:
         result = await use_case.execute(project_id, model)
         return JSONResponse(content=result)

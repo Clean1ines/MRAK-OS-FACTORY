@@ -1,17 +1,16 @@
-# ADDED: Models, modes, and chat endpoints
+# CHANGED: Use services directly, remove orchestrator
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
-from orchestrator import MrakOrchestrator
 import logging
+from services import prompt_service, llm_stream_service
 
 logger = logging.getLogger("MRAK-SERVER")
-orch = MrakOrchestrator()
 
 router = APIRouter(prefix="/api", tags=["modes"])
 
 @router.get("/models")
 async def get_models():
-    models = orch.get_active_models()
+    models = prompt_service.groq_client.get_active_models()
     return JSONResponse(content=models)
 
 @router.get("/modes")
@@ -77,7 +76,7 @@ async def analyze(request: Request):
     if not model:
         model = "llama-3.3-70b-versatile"
 
-    sys_prompt = await orch.get_system_prompt(mode)
+    sys_prompt = await prompt_service.get_system_prompt(mode)
 
     if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
         logger.error(f"Prompt fetch failed for mode {mode}: {sys_prompt}")
@@ -89,6 +88,6 @@ async def analyze(request: Request):
     logger.info(f"Starting stream: Mode={mode}, Model={model}, Project={project_id}")
 
     return StreamingResponse(
-        orch.stream_analysis(prompt, sys_prompt, model, mode, project_id=project_id),
+        llm_stream_service.stream_analysis(prompt, sys_prompt, model, mode, project_id=project_id),
         media_type="text/plain",
     )

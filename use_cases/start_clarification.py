@@ -1,17 +1,17 @@
-# ADDED: Start clarification use case
 import json
 import logging
 from schemas import StartClarificationRequest, ClarificationSessionResponse
-from orchestrator import MrakOrchestrator
 from session_service import SessionService
+from prompt_service import PromptService
 from repositories.base import transaction
 import db
+from services import TYPE_TO_MODE
 
 logger = logging.getLogger(__name__)
 
 class StartClarificationUseCase:
-    def __init__(self, orch: MrakOrchestrator, session_service: SessionService):
-        self.orch = orch
+    def __init__(self, prompt_service: PromptService, session_service: SessionService):
+        self.prompt_service = prompt_service
         self.session_service = session_service
 
     async def execute(self, req: StartClarificationRequest) -> ClarificationSessionResponse:
@@ -20,11 +20,11 @@ class StartClarificationUseCase:
             if not project:
                 raise ValueError("Project not found")
 
-        mode = self.orch.type_to_mode.get(req.target_artifact_type)
+        mode = TYPE_TO_MODE.get(req.target_artifact_type)
         if not mode:
             raise ValueError(f"No prompt mode found for artifact type {req.target_artifact_type}")
 
-        sys_prompt = await self.orch.get_system_prompt(mode)
+        sys_prompt = await self.prompt_service.get_system_prompt(mode)
         if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
             raise RuntimeError(sys_prompt)
 
@@ -38,7 +38,7 @@ class StartClarificationUseCase:
             {"role": "user", "content": "Начни уточняющий диалог. Задай первый вопрос, чтобы понять идею пользователя."}
         ]
         try:
-            assistant_message = await self.orch.get_chat_completion(messages, model)
+            assistant_message = await self.prompt_service.get_chat_completion(messages, model)
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
             raise RuntimeError("Failed to generate first message") from e
@@ -47,7 +47,7 @@ class StartClarificationUseCase:
 
         session = await self.session_service.get_clarification_session(session_id)
         if session:
-            state = await self.orch.synthesize_conversation_state(session['history'])
+            state = await self.prompt_service.synthesize_conversation_state(session['history'], model)
             await self.session_service.update_clarification_session(
                 session_id, context_summary=json.dumps(state)
             )

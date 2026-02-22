@@ -1,16 +1,16 @@
-# ADDED: Add message use case
 import json
 import logging
 from schemas import MessageRequest, ClarificationSessionResponse
-from orchestrator import MrakOrchestrator
+from prompt_service import PromptService
 from session_service import SessionService
+from services import TYPE_TO_MODE
 import db
 
 logger = logging.getLogger(__name__)
 
 class AddMessageUseCase:
-    def __init__(self, orch: MrakOrchestrator, session_service: SessionService):
-        self.orch = orch
+    def __init__(self, prompt_service: PromptService, session_service: SessionService):
+        self.prompt_service = prompt_service
         self.session_service = session_service
 
     async def execute(self, session_id: str, req: MessageRequest) -> ClarificationSessionResponse:
@@ -26,11 +26,11 @@ class AddMessageUseCase:
         session = await self.session_service.get_clarification_session(session_id)
         history = session['history']
 
-        mode = self.orch.type_to_mode.get(session['target_artifact_type'])
+        mode = TYPE_TO_MODE.get(session['target_artifact_type'])
         if not mode:
             raise ValueError(f"No prompt mode found for artifact type {session['target_artifact_type']}")
 
-        sys_prompt = await self.orch.get_system_prompt(mode)
+        sys_prompt = await self.prompt_service.get_system_prompt(mode)
         if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
             raise RuntimeError(sys_prompt)
 
@@ -54,7 +54,7 @@ class AddMessageUseCase:
 
         model = "llama-3.3-70b-versatile"
         try:
-            assistant_message = await self.orch.get_chat_completion(messages, model)
+            assistant_message = await self.prompt_service.get_chat_completion(messages, model)
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
             raise RuntimeError("Failed to generate assistant message") from e
@@ -62,7 +62,7 @@ class AddMessageUseCase:
         await self.session_service.add_message_to_session(session_id, "assistant", assistant_message)
 
         session = await self.session_service.get_clarification_session(session_id)
-        state = await self.orch.synthesize_conversation_state(session['history'])
+        state = await self.prompt_service.synthesize_conversation_state(session['history'], model)
         await self.session_service.update_clarification_session(session_id, context_summary=json.dumps(state))
 
         session = await self.session_service.get_clarification_session(session_id)

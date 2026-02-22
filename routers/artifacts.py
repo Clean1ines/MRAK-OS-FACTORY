@@ -1,4 +1,4 @@
-# CHANGED: Use compute_content_hash from utils.hash
+# CHANGED: Use artifact_service directly, remove orchestrator
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from typing import Optional
@@ -8,17 +8,16 @@ from schemas import (
     ArtifactCreate, GenerateArtifactRequest, SavePackageRequest,
     ValidateArtifactRequest
 )
-from orchestrator import MrakOrchestrator
 from validation import ValidationError
 from use_cases.generate_artifact import GenerateArtifactUseCase
 from use_cases.save_artifact_package import SaveArtifactPackageUseCase
-from utils.hash import compute_content_hash  # CHANGED
+from utils.hash import compute_content_hash
+from services import artifact_service
 import logging
 import json
 import uuid
 
 logger = logging.getLogger("MRAK-SERVER")
-orch = MrakOrchestrator()
 
 router = APIRouter(prefix="/api", tags=["artifacts"])
 
@@ -37,7 +36,7 @@ async def create_artifact(artifact: ArtifactCreate):
                     parent = await db.get_artifact(artifact.parent_id, tx=tx)
                     if not parent:
                         return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
-            new_id = await orch.generate_artifact(
+            new_id = await artifact_service.generate_artifact(
                 artifact_type=artifact.artifact_type,
                 user_input=artifact.content,
                 parent_artifact=parent,
@@ -99,7 +98,7 @@ async def delete_artifact_endpoint(artifact_id: str):
 
 @router.post("/generate_artifact")
 async def generate_artifact_endpoint(req: GenerateArtifactRequest):
-    use_case = GenerateArtifactUseCase(orch)
+    use_case = GenerateArtifactUseCase(artifact_service)
     try:
         result = await use_case.execute(req)
         return JSONResponse(content=result)

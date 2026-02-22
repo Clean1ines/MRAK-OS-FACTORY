@@ -1,9 +1,14 @@
-# workflow_engine.py
-# Engine for executing workflows
-
+# CHANGED: Fixed imports – moved get_last_version_by_parent_and_type to artifact_repository
 import logging
 from typing import Optional, Dict, Any, List
-import db
+# CHANGED: import from workflow_repository
+from repositories.workflow_repository import (
+    list_workflows, get_workflow_nodes, get_workflow_edges
+)
+# CHANGED: import artifact functions from artifact_repository
+from repositories.artifact_repository import (
+    get_last_validated_artifact, get_artifact, get_last_version_by_parent_and_type
+)
 
 logger = logging.getLogger("WORKFLOW-ENGINE")
 
@@ -13,7 +18,7 @@ class WorkflowEngine:
 
     async def get_default_workflow_id(self) -> Optional[str]:
         """Возвращает ID дефолтного workflow (по is_default=True)."""
-        workflows = await db.list_workflows()
+        workflows = await list_workflows()
         for wf in workflows:
             if wf.get('is_default'):
                 return wf['id']
@@ -31,15 +36,15 @@ class WorkflowEngine:
         - description: описание для интерфейса
         """
         # Получаем последний валидированный артефакт
-        last_valid = await db.get_last_validated_artifact(project_id)
+        last_valid = await get_last_validated_artifact(project_id)
         if not last_valid:
             # Нет артефактов – начинаем с первого узла дефолтного workflow
             workflow_id = await self.get_default_workflow_id()
             if not workflow_id:
                 return None
             # Находим узел без входящих рёбер (стартовый)
-            nodes = await db.get_workflow_nodes(workflow_id)
-            edges = await db.get_workflow_edges(workflow_id)
+            nodes = await get_workflow_nodes(workflow_id)
+            edges = await get_workflow_edges(workflow_id)
             sources = {edge['source_node'] for edge in edges}
             targets = {edge['target_node'] for edge in edges}
             start_nodes = [n for n in nodes if n['node_id'] not in targets]
@@ -62,8 +67,8 @@ class WorkflowEngine:
             return None
 
         # Получаем все узлы и рёбра
-        nodes = await db.get_workflow_nodes(workflow_id)
-        edges = await db.get_workflow_edges(workflow_id)
+        nodes = await get_workflow_nodes(workflow_id)
+        edges = await get_workflow_edges(workflow_id)
 
         # Строим граф: для каждого узла список исходящих рёбер
         outgoing = {}
@@ -123,7 +128,7 @@ class WorkflowEngine:
 
         # Проверяем, существует ли уже валидированный артефакт этого типа с таким parent_id
         if parent_id:
-            existing = await db.get_last_version_by_parent_and_type(parent_id, prompt_type)
+            existing = await get_last_version_by_parent_and_type(parent_id, prompt_type)
             if existing and existing['status'] == 'VALIDATED':
                 # Возвращаем существующий
                 return {
@@ -136,7 +141,7 @@ class WorkflowEngine:
                 }
 
         # Генерируем новый артефакт
-        parent_artifact = await db.get_artifact(parent_id) if parent_id else None
+        parent_artifact = await get_artifact(parent_id) if parent_id else None
         new_id = await self.artifact_service.generate_artifact(
             artifact_type=prompt_type,
             user_input="",
@@ -144,7 +149,7 @@ class WorkflowEngine:
             model_id=model,
             project_id=project_id
         )
-        artifact = await db.get_artifact(new_id)
+        artifact = await get_artifact(new_id)
         return {
             "artifact_id": new_id,
             "artifact_type": prompt_type,

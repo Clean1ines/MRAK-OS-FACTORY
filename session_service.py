@@ -1,9 +1,14 @@
-# session_service.py
-# ADDED: Service for managing clarification sessions
-
+# CHANGED: Updated imports to use repositories
 import json
 from typing import Optional, Dict, Any, List
-import db
+# CHANGED: import from session_repository
+from repositories.session_repository import (
+    create_clarification_session as db_create,
+    get_clarification_session as db_get,
+    update_clarification_session as db_update,
+    add_message_to_session as db_add_message,
+    list_active_sessions_for_project as db_list_active
+)
 
 class SessionService:
     """Сервис для работы с сессиями уточнения."""
@@ -14,15 +19,15 @@ class SessionService:
         target_artifact_type: str
     ) -> str:
         """Создаёт новую сессию уточнения, возвращает её ID."""
-        return await db.create_clarification_session(project_id, target_artifact_type)
+        return await db_create(project_id, target_artifact_type)
 
     async def get_clarification_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Возвращает сессию по ID."""
-        return await db.get_clarification_session(session_id)
+        return await db_get(session_id)
 
     async def update_clarification_session(self, session_id: str, **kwargs) -> None:
         """Обновляет поля сессии."""
-        await db.update_clarification_session(session_id, **kwargs)
+        await db_update(session_id, **kwargs)
 
     async def add_message_to_session(
         self,
@@ -31,8 +36,8 @@ class SessionService:
         content: str
     ) -> None:
         """Добавляет сообщение в историю сессии."""
-        await db.add_message_to_session(session_id, role, content)
+        await db_add_message(session_id, role, content)
 
     async def list_active_sessions_for_project(self, project_id: str) -> List[Dict[str, Any]]:
         """Возвращает все активные сессии для проекта."""
-        return await db.list_active_sessions_for_project(project_id)
+        return await db_list_active(project_id)

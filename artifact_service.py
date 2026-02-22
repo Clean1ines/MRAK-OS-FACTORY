@@ -1,12 +1,11 @@
-# artifact_service.py
-# Service for generating and managing artifacts
-
+# CHANGED: Updated imports to use repositories
 import json
 import re
 import asyncio
 import logging
 from typing import Optional, Dict, Any, List
-import db
+# CHANGED: import from repositories instead of db
+from repositories.artifact_repository import save_artifact, get_artifact
 from validation import validate_json_output, ValidationError
 
 logger = logging.getLogger("artifact-service")
@@ -101,7 +100,7 @@ class ArtifactService:
             raise  # пробрасываем дальше
 
         # Сохраняем артефакт
-        artifact_id = await db.save_artifact(
+        artifact_id = await save_artifact(
             artifact_type=artifact_type,
             content=result_data,
             owner="system",
@@ -121,7 +120,7 @@ class ArtifactService:
         project_id: Optional[str] = None,
         existing_requirements: Optional[List[Dict]] = None
     ) -> List[Dict[str, Any]]:
-        analysis = await db.get_artifact(analysis_id)
+        analysis = await get_artifact(analysis_id)
         if not analysis:
             raise ValueError("Analysis not found")
         if analysis['type'] != 'ProductCouncilAnalysis':
@@ -129,7 +128,7 @@ class ArtifactService:
 
         idea = None
         if analysis.get('parent_id'):
-            idea = await db.get_artifact(analysis['parent_id'])
+            idea = await get_artifact(analysis['parent_id'])
 
         prompt_parts = []
         if idea:
@@ -174,7 +173,7 @@ class ArtifactService:
         project_id: Optional[str] = None,
         existing_analysis: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        parent = await db.get_artifact(parent_id)
+        parent = await get_artifact(parent_id)
         if not parent:
             raise ValueError("Parent artifact not found")
         if parent['type'] != 'BusinessRequirementPackage':
@@ -220,7 +219,7 @@ class ArtifactService:
         project_id: Optional[str] = None,
         existing_requirements: Optional[List[Dict]] = None
     ) -> List[Dict[str, Any]]:
-        analysis = await db.get_artifact(analysis_id)
+        analysis = await get_artifact(analysis_id)
         if not analysis:
             raise ValueError("Analysis not found")
         if analysis['type'] != 'ReqEngineeringAnalysis':

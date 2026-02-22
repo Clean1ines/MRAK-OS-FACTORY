@@ -723,4 +723,57 @@ async def delete_workflow_edge(edge_record_id: str):
     await db.delete_workflow_edge(edge_record_id)
     return JSONResponse(content={"status": "deleted"})
 
+# ==================== ТИПЫ АРТЕФАКТОВ ==================== #
+
+@app.get("/api/artifact-types")
+async def list_artifact_types():
+    """Возвращает список всех типов артефактов с метаданными."""
+    types = await db.get_artifact_types()
+    return JSONResponse(content=types)
+
+@app.get("/api/artifact-types/{type}")
+async def get_artifact_type(type: str):
+    """Возвращает метаданные конкретного типа."""
+    t = await db.get_artifact_type(type)
+    if not t:
+        return JSONResponse(content={"error": "Type not found"}, status_code=404)
+    return JSONResponse(content=t)
+
+# Для административных операций (можно защитить позже)
+@app.post("/api/artifact-types", status_code=201)
+async def create_artifact_type_endpoint(req: dict):
+    """Создаёт новый тип артефакта."""
+    # req должен содержать type, schema, allowed_parents, requires_clarification, icon
+    required = ["type", "schema"]
+    for field in required:
+        if field not in req:
+            return JSONResponse(content={"error": f"Missing field {field}"}, status_code=400)
+    await db.create_artifact_type(
+        type=req["type"],
+        schema=req["schema"],
+        allowed_parents=req.get("allowed_parents", []),
+        requires_clarification=req.get("requires_clarification", False),
+        icon=req.get("icon")
+    )
+    return JSONResponse(content={"type": req["type"]})
+
+@app.put("/api/artifact-types/{type}")
+async def update_artifact_type_endpoint(type: str, req: dict):
+    """Обновляет метаданные типа."""
+    existing = await db.get_artifact_type(type)
+    if not existing:
+        return JSONResponse(content={"error": "Type not found"}, status_code=404)
+    # передаём только те поля, которые есть в req
+    await db.update_artifact_type(type, **req)
+    return JSONResponse(content={"status": "updated"})
+
+@app.delete("/api/artifact-types/{type}")
+async def delete_artifact_type_endpoint(type: str):
+    """Удаляет тип (осторожно, могут быть зависимости)."""
+    existing = await db.get_artifact_type(type)
+    if not existing:
+        return JSONResponse(content={"error": "Type not found"}, status_code=404)
+    await db.delete_artifact_type(type)
+    return JSONResponse(content={"status": "deleted"})
+
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

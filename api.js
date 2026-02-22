@@ -86,12 +86,12 @@ async function fetchModes() {
     return apiFetch('/api/modes');
 }
 
-// ADDED: получение истории сообщений
+// История сообщений
 async function fetchMessages(projectId) {
     return apiFetch(`/api/projects/${projectId}/messages`);
 }
 
-// ADDED: сессии уточнения
+// Сессии уточнения
 async function startClarification(projectId, targetArtifactType, model = null) {
     return apiFetch('/api/clarification/start', {
         method: 'POST',
@@ -124,6 +124,15 @@ async function fetchActiveClarificationSessions(projectId) {
     return apiFetch(`/api/projects/${projectId}/clarification/active`);
 }
 
+// Типы артефактов
+async function fetchArtifactTypes() {
+    return apiFetch('/api/artifact-types');
+}
+
+async function fetchArtifactType(type) {
+    return apiFetch(`/api/artifact-types/${type}`);
+}
+
 // Экспортируем всё в глобальный объект api
 window.api = {
     apiFetch,
@@ -137,10 +146,11 @@ window.api = {
     fetchModels,
     fetchModes,
     fetchMessages,
-    // ADDED
     startClarification,
     sendClarificationMessage,
     getClarificationSession,
     completeClarificationSession,
-    fetchActiveClarificationSessions
+    fetchActiveClarificationSessions,
+    fetchArtifactTypes,
+    fetchArtifactType
 };

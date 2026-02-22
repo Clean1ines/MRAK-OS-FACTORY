@@ -10,8 +10,8 @@ import db
 from groq_client import GroqClient
 from prompt_loader import PromptLoader
 from prompt_service import PromptService
-from artifact_service import ArtifactService  # ADDED
-from workflow_engine import WorkflowEngine      # ADDED (stub)
+from artifact_service import ArtifactService
+from workflow_engine import WorkflowEngine
 
 load_dotenv()
 
@@ -23,7 +23,7 @@ class MrakOrchestrator:
         self.groq_client = GroqClient(api_key)
         self.prompt_loader = PromptLoader(self.gh_token)
 
-        # Маппинг режимов на переменные окружения (все 38 промптов + новый суммаризатор)
+        # Маппинг режимов на переменные окружения
         self.mode_map = {
             "01_CORE": "SYSTEM_PROMPT_URL",
             "02_IDEA_CLARIFIER": "GH_URL_IDEA_CLARIFIER",
@@ -66,7 +66,7 @@ class MrakOrchestrator:
             "02sum_STATE_SYNTHESIZER": "GH_URL_STATE_SYNTHESIZER",
         }
 
-        # Маппинг типа артефакта на режим промпта (для генерации)
+        # Маппинг типа артефакта на режим промпта
         self.type_to_mode = {
             "BusinessIdea": "02_IDEA_CLARIFIER",
             "ProductCouncilAnalysis": "03_PRODUCT_COUNCIL",
@@ -103,10 +103,9 @@ class MrakOrchestrator:
             "ResearchMethodology": "34_RESEARCH_METODOLOGY_GEN",
         }
 
-        # CHANGED: инициализируем сервисы
         self.prompt_service = PromptService(self.groq_client, self.prompt_loader, self.mode_map)
         self.artifact_service = ArtifactService(self.groq_client, self.prompt_loader, self.mode_map, self.type_to_mode)
-        self.workflow_engine = WorkflowEngine()  # заглушка
+        self.workflow_engine = WorkflowEngine(self.artifact_service)
 
     def get_active_models(self):
         return self.groq_client.get_active_models()
@@ -125,7 +124,6 @@ class MrakOrchestrator:
     async def synthesize_conversation_state(self, history: List[Dict], model_id: str = "llama-3.3-70b-versatile") -> Dict[str, Any]:
         return await self.prompt_service.synthesize_conversation_state(history, model_id)
 
-    # ===== ДЕЛЕГИРОВАНИЕ В ArtifactService =====
     async def generate_artifact(self, artifact_type: str, user_input: str,
                                  parent_artifact: Optional[Dict[str, Any]] = None,
                                  model_id: Optional[str] = None,
@@ -182,96 +180,20 @@ class MrakOrchestrator:
             existing_requirements=existing_requirements
         )
 
-    async def generate_qa_analysis(
-        self,
-        requirements_package_id: str,
-        user_feedback: str = "",
-        model_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        existing_analysis: Optional[Dict] = None
-    ) -> Dict[str, Any]:
-        raise NotImplementedError("QA analysis generation not yet implemented")
-
-    async def generate_architecture_analysis(
-        self,
-        requirements_package_id: str,
-        qa_analysis_id: Optional[str] = None,
-        user_feedback: str = "",
-        model_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        existing_analysis: Optional[Dict] = None
-    ) -> Dict[str, Any]:
-        raise NotImplementedError("Architecture analysis generation not yet implemented")
-
-    # ===== МЕТОД ДЛЯ ПОЛУЧЕНИЯ СЛЕДУЮЩЕГО ШАГА =====
+    # ===== МЕТОДЫ ДЛЯ ПРОСТОГО РЕЖИМА (теперь через WorkflowEngine) =====
     async def get_next_step(self, project_id: str) -> Optional[Dict[str, Any]]:
-        last_valid = await db.get_last_validated_artifact(project_id)
-        if not last_valid:
-            return {
-                "next_stage": "idea",
-                "prompt_type": "BusinessIdea",
-                "parent_id": None,
-                "description": "Введите идею и уточните её"
-            }
-        last_type = last_valid['type']
-        if last_type == "BusinessIdea":
-            return {
-                "next_stage": "requirements",
-                "prompt_type": "ProductCouncilAnalysis",
-                "parent_id": last_valid['id'],
-                "description": "Сгенерировать анализ продуктового совета"
-            }
-        elif last_type == "ProductCouncilAnalysis":
-            return {
-                "next_stage": "requirements",
-                "prompt_type": "BusinessRequirementPackage",
-                "parent_id": last_valid['id'],
-                "description": "Сгенерировать бизнес-требования"
-            }
-        elif last_type == "BusinessRequirementPackage":
-            return {
-                "next_stage": "requirements",
-                "prompt_type": "ReqEngineeringAnalysis",
-                "parent_id": last_valid['id'],
-                "description": "Сгенерировать анализ инженерии требований"
-            }
-        elif last_type == "ReqEngineeringAnalysis":
-            return {
-                "next_stage": "requirements",
-                "prompt_type": "FunctionalRequirementPackage",
-                "parent_id": last_valid['id'],
-                "description": "Сгенерировать функциональные требования"
-            }
-        elif last_type == "FunctionalRequirementPackage":
-            return {
-                "next_stage": "architecture",
-                "prompt_type": "ArchitectureAnalysis",
-                "parent_id": last_valid['id'],
-                "description": "Сгенерировать архитектурный анализ"
-            }
-        elif last_type == "ArchitectureAnalysis":
-            return {
-                "next_stage": "code",
-                "prompt_type": "AtomicTask",
-                "parent_id": last_valid['id'],
-                "description": "Декомпозировать на задачи"
-            }
-        elif last_type == "AtomicTask":
-            return {
-                "next_stage": "code",
-                "prompt_type": "CodeArtifact",
-                "parent_id": last_valid['id'],
-                "description": "Сгенерировать код для задачи"
-            }
-        elif last_type == "CodeArtifact":
-            return {
-                "next_stage": "tests",
-                "prompt_type": "TestPackage",
-                "parent_id": last_valid['id'],
-                "description": "Сгенерировать тесты"
-            }
-        else:
-            return None
+        """Возвращает следующий шаг для проекта."""
+        return await self.workflow_engine.get_next_step(project_id)
+
+    async def execute_next_step(self, project_id: str, model: Optional[str] = None) -> Dict[str, Any]:
+        """Выполняет следующий шаг."""
+        step = await self.get_next_step(project_id)
+        if not step or step['next_stage'] == 'finished':
+            return {"error": "No next step"}
+        if step['next_stage'] == 'idea':
+            # Особый случай: нужно ввести идею
+            return {"action": "input_idea", "description": step['description']}
+        return await self.workflow_engine.execute_step(project_id, step, model)
 
     async def stream_analysis(self, user_input: str, system_prompt: str, model_id: str, mode: str, project_id: Optional[str] = None):
         clean_input = self._pii_filter(user_input)

@@ -10,6 +10,8 @@ const AppState = {
     models: [],
     // ADDED: текущая сессия уточнения в расширенном режиме
     currentClarificationSessionId: null,
+    // ADDED: загруженные типы артефактов из БД
+    artifactTypes: [],
 };
 
 const listeners = [];
@@ -30,8 +32,9 @@ function getParentData() { return AppState.parentData; }
 function getCurrentArtifact() { return AppState.currentArtifact; }
 function getCurrentParentId() { return AppState.currentParentId; }
 function getModels() { return AppState.models; }
-// ADDED
 function getCurrentClarificationSessionId() { return AppState.currentClarificationSessionId; }
+// ADDED
+function getArtifactTypes() { return AppState.artifactTypes; }
 
 // Сеттеры
 function setProjects(projects) {
@@ -43,7 +46,6 @@ function setCurrentProjectId(id) {
     AppState.currentProjectId = id;
     if (id) localStorage.setItem('selectedProjectId', id);
     else localStorage.removeItem('selectedProjectId');
-    // ADDED: при смене проекта сбрасываем текущую сессию
     AppState.currentClarificationSessionId = null;
     notify();
 }
@@ -70,41 +72,32 @@ function setModels(models) {
     notify();
 }
 
-// ADDED
 function setCurrentClarificationSessionId(id) {
     AppState.currentClarificationSessionId = id;
     notify();
 }
 
-// Конфигурация генерации: для каждого типа дочернего артефакта список допустимых родительских типов
-const generationRules = {
-    "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
-    "ReqEngineeringAnalysis": ["BusinessRequirementPackage"],
-    "FunctionalRequirementPackage": ["ReqEngineeringAnalysis"],
-    "ArchitectureAnalysis": ["FunctionalRequirementPackage"],
-    "AtomicTask": ["ArchitectureAnalysis"],
-    "CodeArtifact": ["AtomicTask"],
-    "TestPackage": ["CodeArtifact"],
-};
-
-function canGenerate(childType, parentType) {
-    const allowedParents = generationRules[childType];
-    return allowedParents ? allowedParents.includes(parentType) : false;
+// ADDED
+function setArtifactTypes(types) {
+    AppState.artifactTypes = types;
+    notify();
 }
 
+// Вспомогательные функции на основе загруженных типов
 function getAllowedParentTypes(childType) {
-    return generationRules[childType] || [];
+    const typeInfo = AppState.artifactTypes.find(t => t.type === childType);
+    return typeInfo ? typeInfo.allowed_parents : [];
 }
-
-// ADDED: список типов артефактов, требующих уточнения (для расширенного режима)
-const CLARIFICATION_TYPES = [
-    "BusinessIdea",
-    "ProductCouncilAnalysis",
-    // при необходимости можно добавить другие
-];
 
 function requiresClarification(artifactType) {
-    return CLARIFICATION_TYPES.includes(artifactType);
+    const typeInfo = AppState.artifactTypes.find(t => t.type === artifactType);
+    return typeInfo ? typeInfo.requires_clarification : false;
+}
+
+// Для обратной совместимости (пока данные не загружены)
+function canGenerate(childType, parentType) {
+    const allowed = getAllowedParentTypes(childType);
+    return allowed.includes(parentType);
 }
 
 // Кеш для артефактов (parentId -> { childType: { id, content } })
@@ -129,13 +122,10 @@ function clearArtifactCache(parentId, childType) {
     }
 }
 
-// Новая функция: получить последний артефакт по типу (среди всех проектов или для текущего проекта)
 function getLastArtifactByType(type, projectId = AppState.currentProjectId) {
     if (!projectId) return null;
-    // Фильтруем артефакты по проекту и типу, сортируем по created_at, берём последний
     const filtered = AppState.artifacts.filter(a => a.type === type && a.status === 'VALIDATED');
     if (filtered.length === 0) return null;
-    // Сортировка по created_at (новые сверху)
     filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     return filtered[0];
 }
@@ -155,15 +145,16 @@ window.state = {
     setCurrentParentId,
     getModels,
     setModels,
-    canGenerate,
+    getCurrentClarificationSessionId,
+    setCurrentClarificationSessionId,
+    getArtifactTypes,
+    setArtifactTypes,
     getAllowedParentTypes,
+    requiresClarification,
+    canGenerate,
     setArtifactCache,
     getArtifactCache,
     clearArtifactCache,
     getLastArtifactByType,
     subscribe,
-    // ADDED
-    getCurrentClarificationSessionId,
-    setCurrentClarificationSessionId,
-    requiresClarification
 };

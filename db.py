@@ -3,7 +3,7 @@ import json
 import asyncpg
 from typing import Optional, Dict, Any, List
 import uuid
-import datetime  # ADDED: for timestamps in clarification sessions
+import datetime
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mrak_user:mrak_pass@localhost:5432/mrak_db")
 
@@ -12,8 +12,11 @@ async def get_connection():
 
 # ==================== ПРОЕКТЫ ====================
 
-async def get_projects() -> List[Dict[str, Any]]:
-    conn = await get_connection()
+async def get_projects(conn=None) -> List[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         rows = await conn.fetch('''
             SELECT id, name, description, created_at, updated_at
@@ -29,10 +32,14 @@ async def get_projects() -> List[Dict[str, Any]]:
             projects.append(proj)
         return projects
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def create_project(name: str, description: str = "") -> str:
-    conn = await get_connection()
+async def create_project(name: str, description: str = "", conn=None) -> str:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         project_id = str(uuid.uuid4())
         await conn.execute('''
@@ -41,10 +48,14 @@ async def create_project(name: str, description: str = "") -> str:
         ''', project_id, name, description)
         return project_id
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
-    conn = await get_connection()
+async def get_project(project_id: str, conn=None) -> Optional[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         row = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
         if row:
@@ -55,19 +66,27 @@ async def get_project(project_id: str) -> Optional[Dict[str, Any]]:
             return proj
         return None
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def delete_project(project_id: str) -> None:
-    conn = await get_connection()
+async def delete_project(project_id: str, conn=None) -> None:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         await conn.execute('DELETE FROM projects WHERE id = $1', project_id)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 # ==================== АРТЕФАКТЫ ====================
 
-async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) -> List[Dict[str, Any]]:
-    conn = await get_connection()
+async def get_artifacts(project_id: str, artifact_type: Optional[str] = None, conn=None) -> List[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         query = 'SELECT id, type, parent_id, content, created_at, updated_at, version, status, content_hash FROM artifacts WHERE project_id = $1'
         params = [project_id]
@@ -93,10 +112,14 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None) ->
             artifacts.append(art)
         return artifacts
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_last_artifact(project_id: str) -> Optional[Dict[str, Any]]:
-    conn = await get_connection()
+async def get_last_artifact(project_id: str, conn=None) -> Optional[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         row = await conn.fetchrow('''
             SELECT * FROM artifacts
@@ -115,10 +138,14 @@ async def get_last_artifact(project_id: str) -> Optional[Dict[str, Any]]:
             return art
         return None
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_last_validated_artifact(project_id: str) -> Optional[Dict[str, Any]]:
-    conn = await get_connection()
+async def get_last_validated_artifact(project_id: str, conn=None) -> Optional[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         row = await conn.fetchrow('''
             SELECT * FROM artifacts
@@ -137,10 +164,14 @@ async def get_last_validated_artifact(project_id: str) -> Optional[Dict[str, Any
             return art
         return None
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict[str, Any]]:
-    conn = await get_connection()
+async def get_last_package(parent_id: str, artifact_type: str, conn=None) -> Optional[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         row = await conn.fetchrow('''
             SELECT * FROM artifacts 
@@ -159,10 +190,11 @@ async def get_last_package(parent_id: str, artifact_type: str) -> Optional[Dict[
             return art
         return None
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_last_version_by_parent_and_type(parent_id: str, artifact_type: str) -> Optional[Dict[str, Any]]:
-    return await get_last_package(parent_id, artifact_type)
+async def get_last_version_by_parent_and_type(parent_id: str, artifact_type: str, conn=None) -> Optional[Dict[str, Any]]:
+    return await get_last_package(parent_id, artifact_type, conn=conn)
 
 async def save_artifact(
     artifact_type: str,
@@ -172,9 +204,13 @@ async def save_artifact(
     status: str = "DRAFT",
     content_hash: Optional[str] = None,
     project_id: Optional[str] = None,
-    parent_id: Optional[str] = None
+    parent_id: Optional[str] = None,
+    conn=None
 ) -> str:
-    conn = await get_connection()
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         artifact_id = str(uuid.uuid4())
         insert_fields = ['id', 'type', 'version', 'status', 'owner', 'content']
@@ -205,24 +241,36 @@ async def save_artifact(
         await conn.execute(query, *insert_values)
         return artifact_id
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def update_artifact_status(artifact_id: str, status: str) -> None:
-    conn = await get_connection()
+async def update_artifact_status(artifact_id: str, status: str, conn=None) -> None:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         await conn.execute('UPDATE artifacts SET status = $1, updated_at = NOW() WHERE id = $2', status, artifact_id)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def delete_artifact(artifact_id: str) -> None:
-    conn = await get_connection()
+async def delete_artifact(artifact_id: str, conn=None) -> None:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         await conn.execute('DELETE FROM artifacts WHERE id = $1', artifact_id)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
-    conn = await get_connection()
+async def get_artifact(artifact_id: str, conn=None) -> Optional[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         row = await conn.fetchrow('SELECT * FROM artifacts WHERE id = $1', artifact_id)
         if row:
@@ -236,17 +284,20 @@ async def get_artifact(artifact_id: str) -> Optional[Dict[str, Any]]:
             return art
         return None
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 # ==================== СЕССИИ УТОЧНЕНИЯ ==================== #
-# ADDED: New functions for clarification sessions
 
 async def create_clarification_session(
     project_id: str,
-    target_artifact_type: str
+    target_artifact_type: str,
+    conn=None
 ) -> str:
-    """Создаёт новую сессию уточнения, возвращает её ID."""
-    conn = await get_connection()
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         session_id = str(uuid.uuid4())
         await conn.execute('''
@@ -255,11 +306,14 @@ async def create_clarification_session(
         ''', session_id, project_id, target_artifact_type, json.dumps([]), 'active')
         return session_id
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_clarification_session(session_id: str) -> Optional[Dict[str, Any]]:
-    """Возвращает сессию по ID."""
-    conn = await get_connection()
+async def get_clarification_session(session_id: str, conn=None) -> Optional[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         row = await conn.fetchrow('SELECT * FROM clarification_sessions WHERE id = $1', session_id)
         if row:
@@ -267,7 +321,6 @@ async def get_clarification_session(session_id: str) -> Optional[Dict[str, Any]]
             sess['id'] = str(sess['id'])
             sess['project_id'] = str(sess['project_id']) if sess['project_id'] else None
             sess['final_artifact_id'] = str(sess['final_artifact_id']) if sess['final_artifact_id'] else None
-            # history хранится как JSONB, парсим
             if isinstance(sess['history'], str):
                 sess['history'] = json.loads(sess['history'])
             sess['created_at'] = sess['created_at'].isoformat() if sess['created_at'] else None
@@ -275,16 +328,18 @@ async def get_clarification_session(session_id: str) -> Optional[Dict[str, Any]]
             return sess
         return None
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 async def update_clarification_session(
     session_id: str,
     **kwargs
 ) -> None:
-    """Обновляет поля сессии (кроме id и project_id). Допустимые ключи: history, status, context_summary, final_artifact_id."""
-    if not kwargs:
-        return
-    conn = await get_connection()
+    conn = kwargs.pop('conn', None)
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         set_clauses = []
         values = []
@@ -292,7 +347,6 @@ async def update_clarification_session(
         for key, value in kwargs.items():
             if key in ('history', 'context_summary', 'status', 'final_artifact_id'):
                 set_clauses.append(f"{key} = ${idx}")
-                # Если history, нужно сериализовать в JSON
                 if key == 'history' and value is not None:
                     values.append(json.dumps(value))
                 else:
@@ -305,28 +359,39 @@ async def update_clarification_session(
         values.append(session_id)
         await conn.execute(query, *values)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 async def add_message_to_session(
     session_id: str,
-    role: str,  # 'user' или 'assistant'
-    content: str
+    role: str,
+    content: str,
+    conn=None
 ) -> None:
-    """Добавляет сообщение в историю сессии."""
-    session = await get_clarification_session(session_id)
-    if not session:
-        raise ValueError(f"Session {session_id} not found")
-    history = session.get('history', [])
-    history.append({
-        "role": role,
-        "content": content,
-        "timestamp": datetime.datetime.now().isoformat()  # NOW datetime is defined
-    })
-    await update_clarification_session(session_id, history=history)
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
+    try:
+        session = await get_clarification_session(session_id, conn=conn)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        history = session.get('history', [])
+        history.append({
+            "role": role,
+            "content": content,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+        await update_clarification_session(session_id, history=history, conn=conn)
+    finally:
+        if close_conn:
+            await conn.close()
 
-async def list_active_sessions_for_project(project_id: str) -> List[Dict[str, Any]]:
-    """Возвращает все активные сессии для проекта."""
-    conn = await get_connection()
+async def list_active_sessions_for_project(project_id: str, conn=None) -> List[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         rows = await conn.fetch('''
             SELECT * FROM clarification_sessions
@@ -346,16 +411,16 @@ async def list_active_sessions_for_project(project_id: str) -> List[Dict[str, An
             sessions.append(sess)
         return sessions
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 # ==================== WORKFLOWS ==================== #
-# ADDED: New functions for workflow CRUD operations
 
-async def create_workflow(name: str, description: str = "", is_default: bool = False) -> str:
-    """
-    Создаёт новый workflow, возвращает его ID.
-    """
-    conn = await get_connection()
+async def create_workflow(name: str, description: str = "", is_default: bool = False, conn=None) -> str:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         workflow_id = str(uuid.uuid4())
         await conn.execute('''
@@ -364,13 +429,14 @@ async def create_workflow(name: str, description: str = "", is_default: bool = F
         ''', workflow_id, name, description, is_default)
         return workflow_id
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_workflow(workflow_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Возвращает workflow по ID (без узлов и рёбер).
-    """
-    conn = await get_connection()
+async def get_workflow(workflow_id: str, conn=None) -> Optional[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         row = await conn.fetchrow('SELECT * FROM workflows WHERE id = $1', workflow_id)
         if row:
@@ -381,13 +447,14 @@ async def get_workflow(workflow_id: str) -> Optional[Dict[str, Any]]:
             return wf
         return None
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def list_workflows() -> List[Dict[str, Any]]:
-    """
-    Возвращает список всех workflows.
-    """
-    conn = await get_connection()
+async def list_workflows(conn=None) -> List[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         rows = await conn.fetch('SELECT * FROM workflows ORDER BY is_default DESC, name')
         workflows = []
@@ -399,15 +466,15 @@ async def list_workflows() -> List[Dict[str, Any]]:
             workflows.append(wf)
         return workflows
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 async def update_workflow(workflow_id: str, **kwargs) -> None:
-    """
-    Обновляет поля workflow (name, description, is_default).
-    """
-    if not kwargs:
-        return
-    conn = await get_connection()
+    conn = kwargs.pop('conn', None)
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         set_clauses = []
         values = []
@@ -424,17 +491,19 @@ async def update_workflow(workflow_id: str, **kwargs) -> None:
         values.append(workflow_id)
         await conn.execute(query, *values)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def delete_workflow(workflow_id: str) -> None:
-    """
-    Удаляет workflow (каскадно удаляет узлы и рёбра благодаря ON DELETE CASCADE).
-    """
-    conn = await get_connection()
+async def delete_workflow(workflow_id: str, conn=None) -> None:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         await conn.execute('DELETE FROM workflows WHERE id = $1', workflow_id)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 # ==================== WORKFLOW NODES ==================== #
 
@@ -444,12 +513,13 @@ async def create_workflow_node(
     prompt_key: str,
     config: Dict[str, Any],
     position_x: float,
-    position_y: float
+    position_y: float,
+    conn=None
 ) -> str:
-    """
-    Создаёт узел в workflow. Возвращает record_id (UUID) созданной записи.
-    """
-    conn = await get_connection()
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         record_id = str(uuid.uuid4())
         await conn.execute('''
@@ -458,13 +528,14 @@ async def create_workflow_node(
         ''', record_id, workflow_id, node_id, prompt_key, json.dumps(config), position_x, position_y)
         return record_id
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_workflow_nodes(workflow_id: str) -> List[Dict[str, Any]]:
-    """
-    Возвращает все узлы для указанного workflow.
-    """
-    conn = await get_connection()
+async def get_workflow_nodes(workflow_id: str, conn=None) -> List[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         rows = await conn.fetch('SELECT * FROM workflow_nodes WHERE workflow_id = $1', workflow_id)
         nodes = []
@@ -478,15 +549,15 @@ async def get_workflow_nodes(workflow_id: str) -> List[Dict[str, Any]]:
             nodes.append(node)
         return nodes
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 async def update_workflow_node(node_record_id: str, **kwargs) -> None:
-    """
-    Обновляет поля узла (prompt_key, config, position_x, position_y).
-    """
-    if not kwargs:
-        return
-    conn = await get_connection()
+    conn = kwargs.pop('conn', None)
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         set_clauses = []
         values = []
@@ -506,17 +577,19 @@ async def update_workflow_node(node_record_id: str, **kwargs) -> None:
         values.append(node_record_id)
         await conn.execute(query, *values)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def delete_workflow_node(node_record_id: str) -> None:
-    """
-    Удаляет узел по его record_id. (Каскадное удаление связанных рёбер обеспечивается БД.)
-    """
-    conn = await get_connection()
+async def delete_workflow_node(node_record_id: str, conn=None) -> None:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         await conn.execute('DELETE FROM workflow_nodes WHERE id = $1', node_record_id)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
 # ==================== WORKFLOW EDGES ==================== #
 
@@ -525,12 +598,13 @@ async def create_workflow_edge(
     source_node: str,
     target_node: str,
     source_output: str = "output",
-    target_input: str = "input"
+    target_input: str = "input",
+    conn=None
 ) -> str:
-    """
-    Создаёт ребро между двумя узлами workflow. Возвращает ID созданной записи.
-    """
-    conn = await get_connection()
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         edge_id = str(uuid.uuid4())
         await conn.execute('''
@@ -539,13 +613,14 @@ async def create_workflow_edge(
         ''', edge_id, workflow_id, source_node, target_node, source_output, target_input)
         return edge_id
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def get_workflow_edges(workflow_id: str) -> List[Dict[str, Any]]:
-    """
-    Возвращает все рёбра для указанного workflow.
-    """
-    conn = await get_connection()
+async def get_workflow_edges(workflow_id: str, conn=None) -> List[Dict[str, Any]]:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         rows = await conn.fetch('SELECT * FROM workflow_edges WHERE workflow_id = $1', workflow_id)
         edges = []
@@ -557,14 +632,16 @@ async def get_workflow_edges(workflow_id: str) -> List[Dict[str, Any]]:
             edges.append(edge)
         return edges
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()
 
-async def delete_workflow_edge(edge_record_id: str) -> None:
-    """
-    Удаляет ребро по его ID.
-    """
-    conn = await get_connection()
+async def delete_workflow_edge(edge_record_id: str, conn=None) -> None:
+    close_conn = False
+    if conn is None:
+        conn = await get_connection()
+        close_conn = True
     try:
         await conn.execute('DELETE FROM workflow_edges WHERE id = $1', edge_record_id)
     finally:
-        await conn.close()
+        if close_conn:
+            await conn.close()

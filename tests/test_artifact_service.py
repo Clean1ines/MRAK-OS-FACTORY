@@ -1,3 +1,4 @@
+# CHANGED: patch targets now use the imported names inside artifact_service module
 import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -6,7 +7,6 @@ from artifact_service import ArtifactService, ValidationError
 @pytest.fixture
 def mock_groq_client():
     client = MagicMock()
-    # Подставляем корректный JSON (список требований)
     mock_completion = MagicMock()
     mock_completion.choices = [MagicMock(message=MagicMock(content=json.dumps([{
         "description": "Test requirement",
@@ -32,8 +32,9 @@ def artifact_service(mock_groq_client, mock_prompt_loader):
 
 @pytest.mark.asyncio
 async def test_generate_artifact_success(artifact_service, mock_groq_client, monkeypatch):
+    # CHANGED: patch artifact_service.save_artifact (the imported name)
     mock_save = AsyncMock(return_value="artifact-id")
-    monkeypatch.setattr("artifact_service.db.save_artifact", mock_save)
+    monkeypatch.setattr("artifact_service.save_artifact", mock_save)
 
     result = await artifact_service.generate_artifact(
         artifact_type="BusinessRequirementPackage",
@@ -49,10 +50,9 @@ async def test_generate_artifact_success(artifact_service, mock_groq_client, mon
 
 @pytest.mark.asyncio
 async def test_generate_artifact_validation_failure(artifact_service, mock_groq_client, monkeypatch):
-    # Невалидный JSON (не список)
     mock_groq_client.create_completion.return_value.choices[0].message.content = '{"key": "value"}'
     mock_save = AsyncMock()
-    monkeypatch.setattr("artifact_service.db.save_artifact", mock_save)
+    monkeypatch.setattr("artifact_service.save_artifact", mock_save)
 
     with pytest.raises(ValidationError):
         await artifact_service.generate_artifact(
@@ -63,15 +63,16 @@ async def test_generate_artifact_validation_failure(artifact_service, mock_groq_
 
 @pytest.mark.asyncio
 async def test_generate_business_requirements_success(artifact_service, mock_groq_client, monkeypatch):
+    # CHANGED: patch artifact_service.get_artifact (the imported name)
     mock_get_artifact = AsyncMock(return_value={
         "id": "analysis-id",
         "type": "ProductCouncilAnalysis",
         "content": {"some": "data"},
         "parent_id": None
     })
-    monkeypatch.setattr("artifact_service.db.get_artifact", mock_get_artifact)
+    monkeypatch.setattr("artifact_service.get_artifact", mock_get_artifact)
     mock_save = AsyncMock()
-    monkeypatch.setattr("artifact_service.db.save_artifact", mock_save)
+    monkeypatch.setattr("artifact_service.save_artifact", mock_save)
 
     mock_groq_client.create_completion.return_value.choices[0].message.content = json.dumps([{
         "description": "Req",

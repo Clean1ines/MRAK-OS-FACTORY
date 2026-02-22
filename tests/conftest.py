@@ -5,6 +5,9 @@ import asyncpg
 from fastapi.testclient import TestClient
 from typing import Dict, AsyncGenerator
 import uuid
+# ADDED: load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 
 # Устанавливаем переменную окружения ДО импорта приложения
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", os.getenv("DATABASE_URL"))

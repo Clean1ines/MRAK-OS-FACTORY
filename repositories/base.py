@@ -1,4 +1,4 @@
-# ADDED: Base database utilities and transaction context manager (stub)
+# CHANGED: transaction() now returns Transaction instance directly (not a coroutine)
 import os
 import asyncpg
 
@@ -8,19 +8,26 @@ async def get_connection():
     """Return a new database connection."""
     return await asyncpg.connect(DATABASE_URL)
 
-# Stub transaction context manager (to be implemented in TASK‑101)
 class Transaction:
-    """Placeholder for transaction context manager."""
-    def __init__(self, conn):
-        self.conn = conn
+    """Async context manager for database transactions."""
+    def __init__(self):
+        self.conn = None
 
     async def __aenter__(self):
-        return self.conn
+        self.conn = await get_connection()
+        await self.conn.execute("BEGIN")
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
+        if self.conn:
+            try:
+                if exc_type is None:
+                    await self.conn.execute("COMMIT")
+                else:
+                    await self.conn.execute("ROLLBACK")
+            finally:
+                await self.conn.close()
 
-async def transaction():
-    """Return a Transaction context manager (stub)."""
-    conn = await get_connection()
-    return Transaction(conn)
+def transaction():
+    """Return a Transaction context manager (synchronous factory)."""
+    return Transaction()

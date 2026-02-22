@@ -1,12 +1,14 @@
-# ADDED: Artifact repository
+# CHANGED: Remove conn parameter, add optional tx; handle connection
 import json
 import uuid
 from typing import Optional, Dict, Any, List
 from .base import get_connection
 
-async def get_artifacts(project_id: str, artifact_type: Optional[str] = None, conn=None) -> List[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_artifacts(project_id: str, artifact_type: Optional[str] = None, tx=None) -> List[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -37,9 +39,11 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None, co
         if close_conn:
             await conn.close()
 
-async def get_last_artifact(project_id: str, conn=None) -> Optional[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_last_artifact(project_id: str, tx=None) -> Optional[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -63,9 +67,11 @@ async def get_last_artifact(project_id: str, conn=None) -> Optional[Dict[str, An
         if close_conn:
             await conn.close()
 
-async def get_last_validated_artifact(project_id: str, conn=None) -> Optional[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_last_validated_artifact(project_id: str, tx=None) -> Optional[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -89,9 +95,11 @@ async def get_last_validated_artifact(project_id: str, conn=None) -> Optional[Di
         if close_conn:
             await conn.close()
 
-async def get_last_package(parent_id: str, artifact_type: str, conn=None) -> Optional[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_last_package(parent_id: str, artifact_type: str, tx=None) -> Optional[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -115,8 +123,8 @@ async def get_last_package(parent_id: str, artifact_type: str, conn=None) -> Opt
         if close_conn:
             await conn.close()
 
-async def get_last_version_by_parent_and_type(parent_id: str, artifact_type: str, conn=None) -> Optional[Dict[str, Any]]:
-    return await get_last_package(parent_id, artifact_type, conn=conn)
+async def get_last_version_by_parent_and_type(parent_id: str, artifact_type: str, tx=None) -> Optional[Dict[str, Any]]:
+    return await get_last_package(parent_id, artifact_type, tx=tx)
 
 async def save_artifact(
     artifact_type: str,
@@ -127,10 +135,12 @@ async def save_artifact(
     content_hash: Optional[str] = None,
     project_id: Optional[str] = None,
     parent_id: Optional[str] = None,
-    conn=None
+    tx=None
 ) -> str:
-    close_conn = False
-    if conn is None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -166,9 +176,11 @@ async def save_artifact(
         if close_conn:
             await conn.close()
 
-async def update_artifact_status(artifact_id: str, status: str, conn=None) -> None:
-    close_conn = False
-    if conn is None:
+async def update_artifact_status(artifact_id: str, status: str, tx=None) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -177,9 +189,11 @@ async def update_artifact_status(artifact_id: str, status: str, conn=None) -> No
         if close_conn:
             await conn.close()
 
-async def delete_artifact(artifact_id: str, conn=None) -> None:
-    close_conn = False
-    if conn is None:
+async def delete_artifact(artifact_id: str, tx=None) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -188,9 +202,11 @@ async def delete_artifact(artifact_id: str, conn=None) -> None:
         if close_conn:
             await conn.close()
 
-async def get_artifact(artifact_id: str, conn=None) -> Optional[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_artifact(artifact_id: str, tx=None) -> Optional[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:

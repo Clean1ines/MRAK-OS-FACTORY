@@ -1,4 +1,3 @@
-# CHANGED: patch targets now use the imported names inside workflow_engine module
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from workflow_engine import WorkflowEngine
@@ -16,8 +15,7 @@ async def test_get_default_workflow_id_found(mock_artifact_service):
         {"id": "wf-1", "is_default": False},
         {"id": "wf-2", "is_default": True}
     ]
-    # CHANGED: patch workflow_engine.list_workflows (the imported name)
-    with patch("workflow_engine.list_workflows", return_value=mock_workflows):
+    with patch("workflow_engine.list_workflows", new_callable=AsyncMock, return_value=mock_workflows):
         result = await engine.get_default_workflow_id()
         assert result == "wf-2"
 
@@ -25,25 +23,23 @@ async def test_get_default_workflow_id_found(mock_artifact_service):
 async def test_get_default_workflow_id_not_found(mock_artifact_service):
     engine = WorkflowEngine(mock_artifact_service)
     mock_workflows = [{"id": "wf-1", "is_default": False}]
-    with patch("workflow_engine.list_workflows", return_value=mock_workflows):
+    with patch("workflow_engine.list_workflows", new_callable=AsyncMock, return_value=mock_workflows):
         result = await engine.get_default_workflow_id()
         assert result is None
 
 @pytest.mark.asyncio
 async def test_get_next_step_no_artifacts(mock_artifact_service):
     engine = WorkflowEngine(mock_artifact_service)
-    # CHANGED: patch workflow_engine.get_last_validated_artifact
-    with patch("workflow_engine.get_last_validated_artifact", return_value=None), \
-         patch.object(engine, "get_default_workflow_id", return_value="default-id"):
+    with patch("workflow_engine.get_last_validated_artifact", new_callable=AsyncMock, return_value=None), \
+         patch("workflow_engine.list_workflows", new_callable=AsyncMock, return_value=[{"id": "default-id", "is_default": True}]):
 
         nodes = [
             {"node_id": "BusinessIdea", "prompt_key": "02_IDEA_CLARIFIER"},
             {"node_id": "ProductCouncilAnalysis", "prompt_key": "03_PRODUCT_COUNCIL"}
         ]
         edges = [{"source_node": "BusinessIdea", "target_node": "ProductCouncilAnalysis"}]
-        # CHANGED: patch workflow_engine.get_workflow_nodes and get_workflow_edges
-        with patch("workflow_engine.get_workflow_nodes", return_value=nodes), \
-             patch("workflow_engine.get_workflow_edges", return_value=edges):
+        with patch("workflow_engine.get_workflow_nodes", new_callable=AsyncMock, return_value=nodes), \
+             patch("workflow_engine.get_workflow_edges", new_callable=AsyncMock, return_value=edges):
 
             step = await engine.get_next_step("proj-id")
             assert step is not None
@@ -55,16 +51,16 @@ async def test_get_next_step_no_artifacts(mock_artifact_service):
 async def test_get_next_step_with_last_artifact(mock_artifact_service):
     engine = WorkflowEngine(mock_artifact_service)
     last_valid = {"id": "last-id", "type": "BusinessIdea"}
-    with patch("workflow_engine.get_last_validated_artifact", return_value=last_valid), \
-         patch.object(engine, "get_default_workflow_id", return_value="default-id"):
+    with patch("workflow_engine.get_last_validated_artifact", new_callable=AsyncMock, return_value=last_valid), \
+         patch("workflow_engine.list_workflows", new_callable=AsyncMock, return_value=[{"id": "default-id", "is_default": True}]):
 
         nodes = [
             {"node_id": "BusinessIdea", "prompt_key": "02_IDEA_CLARIFIER"},
             {"node_id": "ProductCouncilAnalysis", "prompt_key": "03_PRODUCT_COUNCIL"}
         ]
         edges = [{"source_node": "BusinessIdea", "target_node": "ProductCouncilAnalysis"}]
-        with patch("workflow_engine.get_workflow_nodes", return_value=nodes), \
-             patch("workflow_engine.get_workflow_edges", return_value=edges):
+        with patch("workflow_engine.get_workflow_nodes", new_callable=AsyncMock, return_value=nodes), \
+             patch("workflow_engine.get_workflow_edges", new_callable=AsyncMock, return_value=edges):
 
             step = await engine.get_next_step("proj-id")
             assert step is not None
@@ -76,13 +72,13 @@ async def test_get_next_step_with_last_artifact(mock_artifact_service):
 async def test_get_next_step_finished(mock_artifact_service):
     engine = WorkflowEngine(mock_artifact_service)
     last_valid = {"id": "last-id", "type": "TestPackage"}
-    with patch("workflow_engine.get_last_validated_artifact", return_value=last_valid), \
-         patch.object(engine, "get_default_workflow_id", return_value="default-id"):
+    with patch("workflow_engine.get_last_validated_artifact", new_callable=AsyncMock, return_value=last_valid), \
+         patch("workflow_engine.list_workflows", new_callable=AsyncMock, return_value=[{"id": "default-id", "is_default": True}]):
 
         nodes = [{"node_id": "TestPackage", "prompt_key": "11_TEST_GEN"}]
         edges = []
-        with patch("workflow_engine.get_workflow_nodes", return_value=nodes), \
-             patch("workflow_engine.get_workflow_edges", return_value=edges):
+        with patch("workflow_engine.get_workflow_nodes", new_callable=AsyncMock, return_value=nodes), \
+             patch("workflow_engine.get_workflow_edges", new_callable=AsyncMock, return_value=edges):
 
             step = await engine.get_next_step("proj-id")
             assert step is not None
@@ -93,13 +89,13 @@ async def test_get_next_step_finished(mock_artifact_service):
 async def test_get_next_step_type_not_in_workflow(mock_artifact_service):
     engine = WorkflowEngine(mock_artifact_service)
     last_valid = {"id": "last-id", "type": "UnknownType"}
-    with patch("workflow_engine.get_last_validated_artifact", return_value=last_valid), \
-         patch.object(engine, "get_default_workflow_id", return_value="default-id"):
+    with patch("workflow_engine.get_last_validated_artifact", new_callable=AsyncMock, return_value=last_valid), \
+         patch("workflow_engine.list_workflows", new_callable=AsyncMock, return_value=[{"id": "default-id", "is_default": True}]):
 
         nodes = [{"node_id": "BusinessIdea", "prompt_key": "02_IDEA_CLARIFIER"}]
         edges = []
-        with patch("workflow_engine.get_workflow_nodes", return_value=nodes), \
-             patch("workflow_engine.get_workflow_edges", return_value=edges):
+        with patch("workflow_engine.get_workflow_nodes", new_callable=AsyncMock, return_value=nodes), \
+             patch("workflow_engine.get_workflow_edges", new_callable=AsyncMock, return_value=edges):
 
             step = await engine.get_next_step("proj-id")
             assert step is None
@@ -113,8 +109,7 @@ async def test_execute_step_existing_artifact(mock_artifact_service):
         "status": "VALIDATED",
         "content": {"some": "data"}
     }
-    # CHANGED: patch workflow_engine.get_last_version_by_parent_and_type
-    with patch("workflow_engine.get_last_version_by_parent_and_type", return_value=existing):
+    with patch("workflow_engine.get_last_version_by_parent_and_type", new_callable=AsyncMock, return_value=existing):
         result = await engine.execute_step("proj-id", step_info, model="model")
         assert result["artifact_id"] == "existing-id"
         assert result["artifact_type"] == "ProductCouncilAnalysis"
@@ -129,16 +124,17 @@ async def test_execute_step_new_artifact(mock_artifact_service):
     engine = WorkflowEngine(mock_artifact_service)
     step_info = {"prompt_type": "ProductCouncilAnalysis", "parent_id": "parent-id", "next_stage": "requirements"}
 
-    async def get_artifact_side_effect(artifact_id, conn=None):
+    async def get_artifact_side_effect(artifact_id, tx=None):
         if artifact_id == "parent-id":
             return {"id": "parent-id", "content": {}}
         elif artifact_id == "new-artifact-id":
             return {"id": "new-artifact-id", "content": {"result": "ok"}}
         return None
 
-    # CHANGED: patch workflow_engine.get_last_version_by_parent_and_type and workflow_engine.get_artifact
-    with patch("workflow_engine.get_last_version_by_parent_and_type", return_value=None), \
-         patch("workflow_engine.get_artifact", side_effect=get_artifact_side_effect):
+    mock_get_artifact = AsyncMock(side_effect=get_artifact_side_effect)
+
+    with patch("workflow_engine.get_last_version_by_parent_and_type", new_callable=AsyncMock, return_value=None), \
+         patch("workflow_engine.get_artifact", mock_get_artifact):
 
         result = await engine.execute_step("proj-id", step_info, model="model")
         assert result["artifact_id"] == "new-artifact-id"

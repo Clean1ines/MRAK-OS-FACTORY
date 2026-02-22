@@ -1,18 +1,20 @@
-# ADDED: Session repository
+# CHANGED: Remove conn, add optional tx; handle connection
 import json
 import uuid
 import datetime
 from typing import Optional, Dict, Any, List
 from .base import get_connection
-from .artifact_repository import get_artifact  # if needed, but we'll keep session functions self-contained
+from .artifact_repository import get_artifact
 
 async def create_clarification_session(
     project_id: str,
     target_artifact_type: str,
-    conn=None
+    tx=None
 ) -> str:
-    close_conn = False
-    if conn is None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -26,9 +28,11 @@ async def create_clarification_session(
         if close_conn:
             await conn.close()
 
-async def get_clarification_session(session_id: str, conn=None) -> Optional[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_clarification_session(session_id: str, tx=None) -> Optional[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -50,11 +54,13 @@ async def get_clarification_session(session_id: str, conn=None) -> Optional[Dict
 
 async def update_clarification_session(
     session_id: str,
+    tx=None,
     **kwargs
 ) -> None:
-    conn = kwargs.pop('conn', None)
-    close_conn = False
-    if conn is None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -83,14 +89,18 @@ async def add_message_to_session(
     session_id: str,
     role: str,
     content: str,
-    conn=None
+    tx=None
 ) -> None:
-    close_conn = False
-    if conn is None:
+    # This function performs two operations: get and update, so it should be called within a transaction.
+    # The caller is expected to pass tx if they want atomicity; if not, it creates its own connection (no transaction).
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
-        session = await get_clarification_session(session_id, conn=conn)
+        session = await get_clarification_session(session_id, tx=tx)  # reuse same tx if provided
         if not session:
             raise ValueError(f"Session {session_id} not found")
         history = session.get('history', [])
@@ -99,14 +109,16 @@ async def add_message_to_session(
             "content": content,
             "timestamp": datetime.datetime.now().isoformat()
         })
-        await update_clarification_session(session_id, history=history, conn=conn)
+        await update_clarification_session(session_id, tx=tx, history=history)
     finally:
         if close_conn:
             await conn.close()
 
-async def list_active_sessions_for_project(project_id: str, conn=None) -> List[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def list_active_sessions_for_project(project_id: str, tx=None) -> List[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:

@@ -9,8 +9,9 @@ import logging
 import db
 from groq_client import GroqClient
 from prompt_loader import PromptLoader
-from artifact_generator import ArtifactGenerator
-from prompt_service import PromptService  # ADDED
+from prompt_service import PromptService
+from artifact_service import ArtifactService  # ADDED
+from workflow_engine import WorkflowEngine      # ADDED (stub)
 
 load_dotenv()
 
@@ -102,21 +103,15 @@ class MrakOrchestrator:
             "ResearchMethodology": "34_RESEARCH_METODOLOGY_GEN",
         }
 
-        self.artifact_generator = ArtifactGenerator(
-            self.groq_client,
-            self.prompt_loader,
-            self.mode_map,
-            self.type_to_mode
-        )
-
-        # ADDED: Инициализация PromptService
+        # CHANGED: инициализируем сервисы
         self.prompt_service = PromptService(self.groq_client, self.prompt_loader, self.mode_map)
+        self.artifact_service = ArtifactService(self.groq_client, self.prompt_loader, self.mode_map, self.type_to_mode)
+        self.workflow_engine = WorkflowEngine()  # заглушка
 
     def get_active_models(self):
         return self.groq_client.get_active_models()
 
     async def get_system_prompt(self, mode: str):
-        # CHANGED: делегируем в PromptService
         return await self.prompt_service.get_system_prompt(mode)
 
     def _pii_filter(self, text: str) -> str:
@@ -125,22 +120,19 @@ class MrakOrchestrator:
         return text
 
     async def get_chat_completion(self, messages: List[Dict[str, str]], model_id: str) -> str:
-        # CHANGED: делегируем в PromptService
         return await self.prompt_service.get_chat_completion(messages, model_id)
 
     async def synthesize_conversation_state(self, history: List[Dict], model_id: str = "llama-3.3-70b-versatile") -> Dict[str, Any]:
-        # CHANGED: делегируем в PromptService
         return await self.prompt_service.synthesize_conversation_state(history, model_id)
 
+    # ===== ДЕЛЕГИРОВАНИЕ В ArtifactService =====
     async def generate_artifact(self, artifact_type: str, user_input: str,
                                  parent_artifact: Optional[Dict[str, Any]] = None,
                                  model_id: Optional[str] = None,
                                  project_id: Optional[str] = None) -> Optional[str]:
-        return await self.artifact_generator.generate_artifact(
+        return await self.artifact_service.generate_artifact(
             artifact_type, user_input, parent_artifact, model_id, project_id
         )
-
-    # ===== СПЕЦИАЛИЗИРОВАННЫЕ МЕТОДЫ =====
 
     async def generate_business_requirements(
         self,
@@ -150,7 +142,7 @@ class MrakOrchestrator:
         project_id: Optional[str] = None,
         existing_requirements: Optional[List[Dict]] = None
     ) -> List[Dict[str, Any]]:
-        return await self.artifact_generator.generate_business_requirements(
+        return await self.artifact_service.generate_business_requirements(
             analysis_id=analysis_id,
             user_feedback=user_feedback,
             model_id=model_id,
@@ -166,7 +158,7 @@ class MrakOrchestrator:
         project_id: Optional[str] = None,
         existing_analysis: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        return await self.artifact_generator.generate_req_engineering_analysis(
+        return await self.artifact_service.generate_req_engineering_analysis(
             parent_id=parent_id,
             user_feedback=user_feedback,
             model_id=model_id,
@@ -182,7 +174,7 @@ class MrakOrchestrator:
         project_id: Optional[str] = None,
         existing_requirements: Optional[List[Dict]] = None
     ) -> List[Dict[str, Any]]:
-        return await self.artifact_generator.generate_functional_requirements(
+        return await self.artifact_service.generate_functional_requirements(
             analysis_id=analysis_id,
             user_feedback=user_feedback,
             model_id=model_id,
@@ -212,7 +204,6 @@ class MrakOrchestrator:
         raise NotImplementedError("Architecture analysis generation not yet implemented")
 
     # ===== МЕТОД ДЛЯ ПОЛУЧЕНИЯ СЛЕДУЮЩЕГО ШАГА =====
-
     async def get_next_step(self, project_id: str) -> Optional[Dict[str, Any]]:
         last_valid = await db.get_last_validated_artifact(project_id)
         if not last_valid:

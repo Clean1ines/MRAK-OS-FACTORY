@@ -8,9 +8,9 @@ def test_start_clarification_session(sync_client: TestClient):
     assert proj_resp.status_code == 200
     project_id = proj_resp.json()["id"]
 
-    # Мокаем методы оркестратора, чтобы не ходить в реальные API
-    with patch("server.orch.get_chat_completion", new_callable=AsyncMock) as mock_get_chat, \
-         patch("server.orch.synthesize_conversation_state", new_callable=AsyncMock) as mock_synthesize:
+    # Мокаем методы оркестратора в routers.clarification
+    with patch("routers.clarification.orch.get_chat_completion", new_callable=AsyncMock) as mock_get_chat, \
+         patch("routers.clarification.orch.synthesize_conversation_state", new_callable=AsyncMock) as mock_synthesize:
 
         mock_get_chat.return_value = "Первый вопрос ассистента?"
         mock_synthesize.return_value = {
@@ -46,8 +46,8 @@ def test_add_message_to_session(sync_client: TestClient):
     proj_resp = sync_client.post("/api/projects", json={"name": "Test Project"})
     project_id = proj_resp.json()["id"]
 
-    with patch("server.orch.get_chat_completion", new_callable=AsyncMock) as mock_get_chat, \
-         patch("server.orch.synthesize_conversation_state", new_callable=AsyncMock) as mock_synthesize:
+    with patch("routers.clarification.orch.get_chat_completion", new_callable=AsyncMock) as mock_get_chat, \
+         patch("routers.clarification.orch.synthesize_conversation_state", new_callable=AsyncMock) as mock_synthesize:
 
         mock_get_chat.side_effect = [
             "Первый вопрос ассистента?",
@@ -84,8 +84,8 @@ def test_complete_clarification_session(sync_client: TestClient):
     proj_resp = sync_client.post("/api/projects", json={"name": "Test Project"})
     project_id = proj_resp.json()["id"]
 
-    with patch("server.orch.get_chat_completion", new_callable=AsyncMock) as mock_get_chat, \
-         patch("server.orch.synthesize_conversation_state", new_callable=AsyncMock) as mock_synthesize:
+    with patch("routers.clarification.orch.get_chat_completion", new_callable=AsyncMock) as mock_get_chat, \
+         patch("routers.clarification.orch.synthesize_conversation_state", new_callable=AsyncMock) as mock_synthesize:
 
         mock_get_chat.return_value = "Первый вопрос"
         mock_synthesize.return_value = {
@@ -115,8 +115,8 @@ def test_list_active_sessions(sync_client: TestClient):
     proj_resp = sync_client.post("/api/projects", json={"name": "Test Project"})
     project_id = proj_resp.json()["id"]
 
-    with patch("server.orch.get_chat_completion", new_callable=AsyncMock) as mock_get_chat, \
-         patch("server.orch.synthesize_conversation_state", new_callable=AsyncMock) as mock_synthesize:
+    with patch("routers.clarification.orch.get_chat_completion", new_callable=AsyncMock) as mock_get_chat, \
+         patch("routers.clarification.orch.synthesize_conversation_state", new_callable=AsyncMock) as mock_synthesize:
 
         mock_get_chat.return_value = "Первый вопрос"
         mock_synthesize.return_value = {

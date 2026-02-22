@@ -1,11 +1,14 @@
-# ADDED: Project repository
+# CHANGED: Remove conn parameter, add optional tx; handle connection creation
 import uuid
 from typing import Optional, Dict, Any, List
 from .base import get_connection
 
-async def get_projects(conn=None) -> List[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_projects(tx=None) -> List[Dict[str, Any]]:
+    """Return all projects."""
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -26,9 +29,12 @@ async def get_projects(conn=None) -> List[Dict[str, Any]]:
         if close_conn:
             await conn.close()
 
-async def create_project(name: str, description: str = "", conn=None) -> str:
-    close_conn = False
-    if conn is None:
+async def create_project(name: str, description: str = "", tx=None) -> str:
+    """Create a new project and return its ID."""
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -42,9 +48,12 @@ async def create_project(name: str, description: str = "", conn=None) -> str:
         if close_conn:
             await conn.close()
 
-async def get_project(project_id: str, conn=None) -> Optional[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_project(project_id: str, tx=None) -> Optional[Dict[str, Any]]:
+    """Return a project by ID."""
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -60,9 +69,12 @@ async def get_project(project_id: str, conn=None) -> Optional[Dict[str, Any]]:
         if close_conn:
             await conn.close()
 
-async def delete_project(project_id: str, conn=None) -> None:
-    close_conn = False
-    if conn is None:
+async def delete_project(project_id: str, tx=None) -> None:
+    """Delete a project (cascade)."""
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:

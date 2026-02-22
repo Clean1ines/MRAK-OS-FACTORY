@@ -1,4 +1,3 @@
-# CHANGED: patch targets now use the imported names inside artifact_service module
 import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -32,7 +31,6 @@ def artifact_service(mock_groq_client, mock_prompt_loader):
 
 @pytest.mark.asyncio
 async def test_generate_artifact_success(artifact_service, mock_groq_client, monkeypatch):
-    # CHANGED: patch artifact_service.save_artifact (the imported name)
     mock_save = AsyncMock(return_value="artifact-id")
     monkeypatch.setattr("artifact_service.save_artifact", mock_save)
 
@@ -63,7 +61,6 @@ async def test_generate_artifact_validation_failure(artifact_service, mock_groq_
 
 @pytest.mark.asyncio
 async def test_generate_business_requirements_success(artifact_service, mock_groq_client, monkeypatch):
-    # CHANGED: patch artifact_service.get_artifact (the imported name)
     mock_get_artifact = AsyncMock(return_value={
         "id": "analysis-id",
         "type": "ProductCouncilAnalysis",

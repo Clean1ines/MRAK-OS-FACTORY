@@ -1,4 +1,4 @@
-# ADDED: Workflow repository
+# CHANGED: Remove conn, add optional tx; handle connection
 import json
 import uuid
 from typing import Optional, Dict, Any, List
@@ -6,9 +6,11 @@ from .base import get_connection
 
 # ==================== WORKFLOWS ==================== #
 
-async def create_workflow(name: str, description: str = "", is_default: bool = False, conn=None) -> str:
-    close_conn = False
-    if conn is None:
+async def create_workflow(name: str, description: str = "", is_default: bool = False, tx=None) -> str:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -22,9 +24,11 @@ async def create_workflow(name: str, description: str = "", is_default: bool = F
         if close_conn:
             await conn.close()
 
-async def get_workflow(workflow_id: str, conn=None) -> Optional[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_workflow(workflow_id: str, tx=None) -> Optional[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -40,9 +44,11 @@ async def get_workflow(workflow_id: str, conn=None) -> Optional[Dict[str, Any]]:
         if close_conn:
             await conn.close()
 
-async def list_workflows(conn=None) -> List[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def list_workflows(tx=None) -> List[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -59,10 +65,11 @@ async def list_workflows(conn=None) -> List[Dict[str, Any]]:
         if close_conn:
             await conn.close()
 
-async def update_workflow(workflow_id: str, **kwargs) -> None:
-    conn = kwargs.pop('conn', None)
-    close_conn = False
-    if conn is None:
+async def update_workflow(workflow_id: str, tx=None, **kwargs) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -84,9 +91,11 @@ async def update_workflow(workflow_id: str, **kwargs) -> None:
         if close_conn:
             await conn.close()
 
-async def delete_workflow(workflow_id: str, conn=None) -> None:
-    close_conn = False
-    if conn is None:
+async def delete_workflow(workflow_id: str, tx=None) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -104,10 +113,12 @@ async def create_workflow_node(
     config: Dict[str, Any],
     position_x: float,
     position_y: float,
-    conn=None
+    tx=None
 ) -> str:
-    close_conn = False
-    if conn is None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -121,9 +132,11 @@ async def create_workflow_node(
         if close_conn:
             await conn.close()
 
-async def get_workflow_nodes(workflow_id: str, conn=None) -> List[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_workflow_nodes(workflow_id: str, tx=None) -> List[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -142,10 +155,11 @@ async def get_workflow_nodes(workflow_id: str, conn=None) -> List[Dict[str, Any]
         if close_conn:
             await conn.close()
 
-async def update_workflow_node(node_record_id: str, **kwargs) -> None:
-    conn = kwargs.pop('conn', None)
-    close_conn = False
-    if conn is None:
+async def update_workflow_node(node_record_id: str, tx=None, **kwargs) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -170,9 +184,11 @@ async def update_workflow_node(node_record_id: str, **kwargs) -> None:
         if close_conn:
             await conn.close()
 
-async def delete_workflow_node(node_record_id: str, conn=None) -> None:
-    close_conn = False
-    if conn is None:
+async def delete_workflow_node(node_record_id: str, tx=None) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -189,10 +205,12 @@ async def create_workflow_edge(
     target_node: str,
     source_output: str = "output",
     target_input: str = "input",
-    conn=None
+    tx=None
 ) -> str:
-    close_conn = False
-    if conn is None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -206,9 +224,11 @@ async def create_workflow_edge(
         if close_conn:
             await conn.close()
 
-async def get_workflow_edges(workflow_id: str, conn=None) -> List[Dict[str, Any]]:
-    close_conn = False
-    if conn is None:
+async def get_workflow_edges(workflow_id: str, tx=None) -> List[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -225,9 +245,11 @@ async def get_workflow_edges(workflow_id: str, conn=None) -> List[Dict[str, Any]
         if close_conn:
             await conn.close()
 
-async def delete_workflow_edge(edge_record_id: str, conn=None) -> None:
-    close_conn = False
-    if conn is None:
+async def delete_workflow_edge(edge_record_id: str, tx=None) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:

@@ -1,12 +1,13 @@
-# ADDED: Artifact type repository
+# CHANGED: Remove conn, add optional tx; handle connection
 import json
 from typing import Optional, Dict, Any, List
 from .base import get_connection
 
-async def get_artifact_types(conn=None) -> List[Dict[str, Any]]:
-    """Возвращает все типы артефактов."""
-    close_conn = False
-    if conn is None:
+async def get_artifact_types(tx=None) -> List[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -21,10 +22,11 @@ async def get_artifact_types(conn=None) -> List[Dict[str, Any]]:
         if close_conn:
             await conn.close()
 
-async def get_artifact_type(artifact_type: str, conn=None) -> Optional[Dict[str, Any]]:
-    """Возвращает метаданные для конкретного типа."""
-    close_conn = False
-    if conn is None:
+async def get_artifact_type(artifact_type: str, tx=None) -> Optional[Dict[str, Any]]:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -44,11 +46,12 @@ async def create_artifact_type(
     allowed_parents: List[str] = [],
     requires_clarification: bool = False,
     icon: Optional[str] = None,
-    conn=None
+    tx=None
 ) -> str:
-    """Создаёт новый тип артефакта (для администрирования)."""
-    close_conn = False
-    if conn is None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -61,11 +64,11 @@ async def create_artifact_type(
         if close_conn:
             await conn.close()
 
-async def update_artifact_type(type: str, **kwargs) -> None:
-    """Обновляет метаданные типа артефакта."""
-    conn = kwargs.pop('conn', None)
-    close_conn = False
-    if conn is None:
+async def update_artifact_type(type: str, tx=None, **kwargs) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:
@@ -92,10 +95,11 @@ async def update_artifact_type(type: str, **kwargs) -> None:
         if close_conn:
             await conn.close()
 
-async def delete_artifact_type(type: str, conn=None) -> None:
-    """Удаляет тип артефакта."""
-    close_conn = False
-    if conn is None:
+async def delete_artifact_type(type: str, tx=None) -> None:
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
         conn = await get_connection()
         close_conn = True
     try:

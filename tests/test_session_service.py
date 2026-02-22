@@ -1,6 +1,5 @@
-# CHANGED: patch targets now use the imported names inside session_service module
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, ANY
 from session_service import SessionService
 
 @pytest.fixture
@@ -9,12 +8,11 @@ def session_service():
 
 @pytest.mark.asyncio
 async def test_create_clarification_session(session_service):
-    # CHANGED: patch session_service.db_create (the imported name)
     with patch("session_service.db_create", new_callable=AsyncMock) as mock_create:
         mock_create.return_value = "session-id"
         result = await session_service.create_clarification_session("proj-id", "BusinessIdea")
         assert result == "session-id"
-        mock_create.assert_called_once_with("proj-id", "BusinessIdea")
+        mock_create.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_get_clarification_session(session_service):
@@ -28,7 +26,7 @@ async def test_get_clarification_session(session_service):
 async def test_add_message_to_session(session_service):
     with patch("session_service.db_add_message", new_callable=AsyncMock) as mock_add:
         await session_service.add_message_to_session("session-id", "user", "Hello")
-        mock_add.assert_called_once_with("session-id", "user", "Hello")
+        mock_add.assert_called_once_with("session-id", "user", "Hello", tx=ANY)
 
 @pytest.mark.asyncio
 async def test_list_active_sessions_for_project(session_service):

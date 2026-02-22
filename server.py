@@ -1,3 +1,4 @@
+# CHANGED: Full server.py with all models and endpoints, using transaction context manager
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +13,8 @@ import hashlib
 import datetime
 
 from session_service import SessionService
-from validation import ValidationError  # ADDED
+from validation import ValidationError
+from repositories.base import transaction
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
@@ -21,6 +23,7 @@ app = FastAPI(title="MRAK-OS Factory API")
 orch = MrakOrchestrator()
 session_service = SessionService()
 
+# ========== Pydantic models ==========
 class ProjectCreate(BaseModel):
     name: str
     description: str = ""
@@ -143,12 +146,14 @@ async def list_projects():
 
 @app.post("/api/projects")
 async def create_project_endpoint(project: ProjectCreate):
-    project_id = await db.create_project(project.name, project.description)
+    async with transaction() as tx:
+        project_id = await db.create_project(project.name, project.description, tx=tx)
     return JSONResponse(content={"id": project_id, "name": project.name})
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project_endpoint(project_id: str):
-    await db.delete_project(project_id)
+    async with transaction() as tx:
+        await db.delete_project(project_id, tx=tx)
     return JSONResponse(content={"status": "deleted"})
 
 # ==================== АРТЕФАКТЫ ====================
@@ -164,9 +169,10 @@ async def create_artifact(artifact: ArtifactCreate):
         if artifact.generate:
             parent = None
             if artifact.parent_id:
-                parent = await db.get_artifact(artifact.parent_id)
-                if not parent:
-                    return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
+                async with transaction() as tx:
+                    parent = await db.get_artifact(artifact.parent_id, tx=tx)
+                    if not parent:
+                        return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
             new_id = await orch.generate_artifact(
                 artifact_type=artifact.artifact_type,
                 user_input=artifact.content,
@@ -177,16 +183,18 @@ async def create_artifact(artifact: ArtifactCreate):
             return JSONResponse(content={"id": new_id, "generated": True})
         else:
             content_data = {"text": artifact.content}
-            new_id = await db.save_artifact(
-                artifact_type=artifact.artifact_type,
-                content=content_data,
-                owner="user",
-                status="DRAFT",
-                project_id=artifact.project_id,
-                parent_id=artifact.parent_id
-            )
+            async with transaction() as tx:
+                new_id = await db.save_artifact(
+                    artifact_type=artifact.artifact_type,
+                    content=content_data,
+                    owner="user",
+                    status="DRAFT",
+                    project_id=artifact.project_id,
+                    parent_id=artifact.parent_id,
+                    tx=tx
+                )
             return JSONResponse(content={"id": new_id, "generated": False})
-    except ValidationError as e:  # ADDED
+    except ValidationError as e:
         logger.warning(f"Validation error: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=422)
     except Exception as e:
@@ -208,7 +216,8 @@ async def latest_artifact(parent_id: str, type: str):
 @app.post("/api/validate_artifact")
 async def validate_artifact(req: ValidateArtifactRequest):
     try:
-        await db.update_artifact_status(req.artifact_id, req.status)
+        async with transaction() as tx:
+            await db.update_artifact_status(req.artifact_id, req.status, tx=tx)
         return JSONResponse(content={"status": "updated"})
     except Exception as e:
         logger.error(f"Error validating artifact: {e}")
@@ -217,7 +226,8 @@ async def validate_artifact(req: ValidateArtifactRequest):
 @app.delete("/api/artifact/{artifact_id}")
 async def delete_artifact_endpoint(artifact_id: str):
     try:
-        await db.delete_artifact(artifact_id)
+        async with transaction() as tx:
+            await db.delete_artifact(artifact_id, tx=tx)
         return JSONResponse(content={"status": "deleted"})
     except Exception as e:
         logger.error(f"Error deleting artifact: {e}")
@@ -253,7 +263,10 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 existing_requirements=req.existing_content
             )
         else:
-            parent = await db.get_artifact(req.parent_id) if req.parent_id else None
+            parent = None
+            if req.parent_id:
+                async with transaction() as tx:
+                    parent = await db.get_artifact(req.parent_id, tx=tx)
             new_id = await orch.generate_artifact(
                 artifact_type=req.artifact_type,
                 user_input=req.feedback,
@@ -261,14 +274,15 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 model_id=req.model,
                 project_id=req.project_id
             )
-            artifact = await db.get_artifact(new_id)
+            async with transaction() as tx:
+                artifact = await db.get_artifact(new_id, tx=tx)
             if artifact:
                 return JSONResponse(content={"result": artifact['content']})
             else:
                 return JSONResponse(content={"result": {"id": new_id}})
 
         return JSONResponse(content={"result": result})
-    except ValidationError as e:  # ADDED
+    except ValidationError as e:
         logger.warning(f"Validation error in generation: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=422)
     except Exception as e:
@@ -279,36 +293,37 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
 async def save_artifact_package(req: SavePackageRequest):
     try:
         new_hash = compute_content_hash(req.content)
-        last_pkg = await db.get_last_version_by_parent_and_type(req.parent_id, req.artifact_type)
-        if last_pkg and last_pkg.get('content_hash') == new_hash:
-            return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
+        async with transaction() as tx:
+            last_pkg = await db.get_last_version_by_parent_and_type(req.parent_id, req.artifact_type, tx=tx)
+            if last_pkg and last_pkg.get('content_hash') == new_hash:
+                return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
 
-        last_pkg = await db.get_last_version_by_parent_and_type(req.parent_id, req.artifact_type)
-        if last_pkg:
-            try:
-                last_version = int(last_pkg['version'])
-            except (ValueError, TypeError):
-                last_version = 0
-            version = str(last_version + 1)
-        else:
-            version = "1"
+            if last_pkg:
+                try:
+                    last_version = int(last_pkg['version'])
+                except (ValueError, TypeError):
+                    last_version = 0
+                version = str(last_version + 1)
+            else:
+                version = "1"
 
-        content_to_save = req.content
-        if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"] and isinstance(content_to_save, list):
-            import uuid
-            for r in content_to_save:
-                if 'id' not in r:
-                    r['id'] = str(uuid.uuid4())
+            content_to_save = req.content
+            if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"] and isinstance(content_to_save, list):
+                import uuid
+                for r in content_to_save:
+                    if 'id' not in r:
+                        r['id'] = str(uuid.uuid4())
 
-        artifact_id = await db.save_artifact(
-            artifact_type=req.artifact_type,
-            content=content_to_save,
-            owner="user",
-            status="DRAFT",
-            project_id=req.project_id,
-            parent_id=req.parent_id,
-            content_hash=new_hash
-        )
+            artifact_id = await db.save_artifact(
+                artifact_type=req.artifact_type,
+                content=content_to_save,
+                owner="user",
+                status="DRAFT",
+                project_id=req.project_id,
+                parent_id=req.parent_id,
+                content_hash=new_hash,
+                tx=tx
+            )
         return JSONResponse(content={"id": artifact_id})
     except Exception as e:
         logger.error(f"Error saving package: {e}")
@@ -345,38 +360,9 @@ async def execute_next_step(project_id: str, model: Optional[str] = None):
         if step['next_stage'] == 'idea':
             return JSONResponse(content={"action": "input_idea", "description": step['description']})
 
-        existing = await db.get_last_version_by_parent_and_type(step['parent_id'], step['prompt_type'])
-        if existing and existing['status'] == 'VALIDATED':
-            return JSONResponse(content={
-                "artifact_id": existing['id'],
-                "artifact_type": step['prompt_type'],
-                "content": existing['content'],
-                "parent_id": step['parent_id'],
-                "next_stage": step['next_stage'],
-                "existing": True
-            })
-
-        parent = await db.get_artifact(step['parent_id']) if step.get('parent_id') else None
-        if not parent:
-            return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
-
-        new_id = await orch.generate_artifact(
-            artifact_type=step['prompt_type'],
-            user_input="",
-            parent_artifact=parent,
-            model_id=model,
-            project_id=project_id
-        )
-        artifact = await db.get_artifact(new_id)
-        return JSONResponse(content={
-            "artifact_id": new_id,
-            "artifact_type": step['prompt_type'],
-            "content": artifact['content'] if artifact else None,
-            "parent_id": step['parent_id'],
-            "next_stage": step['next_stage'],
-            "existing": False
-        })
-    except ValidationError as e:  # ADDED
+        result = await orch.execute_step(project_id, step, model)
+        return JSONResponse(content=result)
+    except ValidationError as e:
         logger.warning(f"Validation error in simple mode: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=422)
     except Exception as e:
@@ -475,9 +461,10 @@ async def analyze(request: Request):
 
 @app.post("/api/clarification/start", response_model=ClarificationSessionResponse)
 async def start_clarification(req: StartClarificationRequest):
-    project = await db.get_project(req.project_id)
-    if not project:
-        return JSONResponse(content={"error": "Project not found"}, status_code=404)
+    async with transaction() as tx:
+        project = await db.get_project(req.project_id, tx=tx)
+        if not project:
+            return JSONResponse(content={"error": "Project not found"}, status_code=404)
 
     mode = orch.type_to_mode.get(req.target_artifact_type)
     if not mode:
@@ -637,7 +624,8 @@ async def list_workflows():
 
 @app.post("/api/workflows", status_code=201)
 async def create_workflow(workflow: WorkflowCreate):
-    wf_id = await db.create_workflow(workflow.name, workflow.description, workflow.is_default)
+    async with transaction() as tx:
+        wf_id = await db.create_workflow(workflow.name, workflow.description, workflow.is_default, tx=tx)
     return JSONResponse(content={"id": wf_id})
 
 @app.get("/api/workflows/{workflow_id}")
@@ -660,7 +648,8 @@ async def update_workflow(workflow_id: str, wf_update: WorkflowUpdate):
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
     update_data = wf_update.dict(exclude_unset=True)
     if update_data:
-        await db.update_workflow(workflow_id, **update_data)
+        async with transaction() as tx:
+            await db.update_workflow(workflow_id, tx=tx, **update_data)
     return JSONResponse(content={"status": "updated"})
 
 @app.delete("/api/workflows/{workflow_id}")
@@ -668,7 +657,8 @@ async def delete_workflow(workflow_id: str):
     existing = await db.get_workflow(workflow_id)
     if not existing:
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
-    await db.delete_workflow(workflow_id)
+    async with transaction() as tx:
+        await db.delete_workflow(workflow_id, tx=tx)
     return JSONResponse(content={"status": "deleted"})
 
 # ----- Узлы -----
@@ -681,22 +671,25 @@ async def create_workflow_node(workflow_id: str, node: WorkflowNodeCreate):
     existing_nodes = await db.get_workflow_nodes(workflow_id)
     if any(n['node_id'] == node.node_id for n in existing_nodes):
         return JSONResponse(content={"error": f"Node with id '{node.node_id}' already exists in this workflow"}, status_code=400)
-    record_id = await db.create_workflow_node(
-        workflow_id, node.node_id, node.prompt_key, node.config,
-        node.position_x, node.position_y
-    )
+    async with transaction() as tx:
+        record_id = await db.create_workflow_node(
+            workflow_id, node.node_id, node.prompt_key, node.config,
+            node.position_x, node.position_y, tx=tx
+        )
     return JSONResponse(content={"id": record_id})
 
 @app.put("/api/workflows/nodes/{node_record_id}")
 async def update_workflow_node(node_record_id: str, node_update: WorkflowNodeUpdate):
     update_data = node_update.dict(exclude_unset=True)
     if update_data:
-        await db.update_workflow_node(node_record_id, **update_data)
+        async with transaction() as tx:
+            await db.update_workflow_node(node_record_id, tx=tx, **update_data)
     return JSONResponse(content={"status": "updated"})
 
 @app.delete("/api/workflows/nodes/{node_record_id}")
 async def delete_workflow_node(node_record_id: str):
-    await db.delete_workflow_node(node_record_id)
+    async with transaction() as tx:
+        await db.delete_workflow_node(node_record_id, tx=tx)
     return JSONResponse(content={"status": "deleted"})
 
 # ----- Рёбра -----
@@ -712,68 +705,66 @@ async def create_workflow_edge(workflow_id: str, edge: WorkflowEdgeCreate):
         return JSONResponse(content={"error": f"Source node '{edge.source_node}' not found in workflow"}, status_code=400)
     if edge.target_node not in node_ids:
         return JSONResponse(content={"error": f"Target node '{edge.target_node}' not found in workflow"}, status_code=400)
-    edge_id = await db.create_workflow_edge(
-        workflow_id, edge.source_node, edge.target_node,
-        edge.source_output, edge.target_input
-    )
+    async with transaction() as tx:
+        edge_id = await db.create_workflow_edge(
+            workflow_id, edge.source_node, edge.target_node,
+            edge.source_output, edge.target_input, tx=tx
+        )
     return JSONResponse(content={"id": edge_id})
 
 @app.delete("/api/workflows/edges/{edge_record_id}")
 async def delete_workflow_edge(edge_record_id: str):
-    await db.delete_workflow_edge(edge_record_id)
+    async with transaction() as tx:
+        await db.delete_workflow_edge(edge_record_id, tx=tx)
     return JSONResponse(content={"status": "deleted"})
 
 # ==================== ТИПЫ АРТЕФАКТОВ ==================== #
 
 @app.get("/api/artifact-types")
 async def list_artifact_types():
-    """Возвращает список всех типов артефактов с метаданными."""
     types = await db.get_artifact_types()
     return JSONResponse(content=types)
 
 @app.get("/api/artifact-types/{type}")
 async def get_artifact_type(type: str):
-    """Возвращает метаданные конкретного типа."""
     t = await db.get_artifact_type(type)
     if not t:
         return JSONResponse(content={"error": "Type not found"}, status_code=404)
     return JSONResponse(content=t)
 
-# Для административных операций (можно защитить позже)
 @app.post("/api/artifact-types", status_code=201)
 async def create_artifact_type_endpoint(req: dict):
-    """Создаёт новый тип артефакта."""
-    # req должен содержать type, schema, allowed_parents, requires_clarification, icon
     required = ["type", "schema"]
     for field in required:
         if field not in req:
             return JSONResponse(content={"error": f"Missing field {field}"}, status_code=400)
-    await db.create_artifact_type(
-        type=req["type"],
-        schema=req["schema"],
-        allowed_parents=req.get("allowed_parents", []),
-        requires_clarification=req.get("requires_clarification", False),
-        icon=req.get("icon")
-    )
+    async with transaction() as tx:
+        await db.create_artifact_type(
+            type=req["type"],
+            schema=req["schema"],
+            allowed_parents=req.get("allowed_parents", []),
+            requires_clarification=req.get("requires_clarification", False),
+            icon=req.get("icon"),
+            tx=tx
+        )
     return JSONResponse(content={"type": req["type"]})
 
 @app.put("/api/artifact-types/{type}")
 async def update_artifact_type_endpoint(type: str, req: dict):
-    """Обновляет метаданные типа."""
     existing = await db.get_artifact_type(type)
     if not existing:
         return JSONResponse(content={"error": "Type not found"}, status_code=404)
-    # передаём только те поля, которые есть в req
-    await db.update_artifact_type(type, **req)
+    async with transaction() as tx:
+        await db.update_artifact_type(type, tx=tx, **req)
     return JSONResponse(content={"status": "updated"})
 
 @app.delete("/api/artifact-types/{type}")
 async def delete_artifact_type_endpoint(type: str):
-    """Удаляет тип (осторожно, могут быть зависимости)."""
     existing = await db.get_artifact_type(type)
     if not existing:
         return JSONResponse(content={"error": "Type not found"}, status_code=404)
-    await db.delete_artifact_type(type)
+    async with transaction() as tx:
+        await db.delete_artifact_type(type, tx=tx)
     return JSONResponse(content={"status": "deleted"})
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

@@ -91,9 +91,42 @@ async function fetchMessages(projectId) {
     return apiFetch(`/api/projects/${projectId}/messages`);
 }
 
+// ADDED: сессии уточнения
+async function startClarification(projectId, targetArtifactType, model = null) {
+    return apiFetch('/api/clarification/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            project_id: projectId,
+            target_artifact_type: targetArtifactType,
+            model: model
+        })
+    });
+}
+
+async function sendClarificationMessage(sessionId, message) {
+    return apiFetch(`/api/clarification/${sessionId}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+    });
+}
+
+async function getClarificationSession(sessionId) {
+    return apiFetch(`/api/clarification/${sessionId}`);
+}
+
+async function completeClarificationSession(sessionId) {
+    return apiFetch(`/api/clarification/${sessionId}/complete`, { method: 'POST' });
+}
+
+async function fetchActiveClarificationSessions(projectId) {
+    return apiFetch(`/api/projects/${projectId}/clarification/active`);
+}
+
 // Экспортируем всё в глобальный объект api
 window.api = {
-    apiFetch,           // теперь apiFetch доступен как api.apiFetch
+    apiFetch,
     fetchProjects,
     createProject,
     fetchArtifacts,
@@ -103,5 +136,11 @@ window.api = {
     saveArtifactPackage,
     fetchModels,
     fetchModes,
-    fetchMessages       // ADDED
+    fetchMessages,
+    // ADDED
+    startClarification,
+    sendClarificationMessage,
+    getClarificationSession,
+    completeClarificationSession,
+    fetchActiveClarificationSessions
 };

@@ -8,6 +8,8 @@ const AppState = {
     currentArtifact: null, // текущий редактируемый артефакт (для модалки)
     currentParentId: null,
     models: [],
+    // ADDED: текущая сессия уточнения в расширенном режиме
+    currentClarificationSessionId: null,
 };
 
 const listeners = [];
@@ -28,6 +30,8 @@ function getParentData() { return AppState.parentData; }
 function getCurrentArtifact() { return AppState.currentArtifact; }
 function getCurrentParentId() { return AppState.currentParentId; }
 function getModels() { return AppState.models; }
+// ADDED
+function getCurrentClarificationSessionId() { return AppState.currentClarificationSessionId; }
 
 // Сеттеры
 function setProjects(projects) {
@@ -39,6 +43,8 @@ function setCurrentProjectId(id) {
     AppState.currentProjectId = id;
     if (id) localStorage.setItem('selectedProjectId', id);
     else localStorage.removeItem('selectedProjectId');
+    // ADDED: при смене проекта сбрасываем текущую сессию
+    AppState.currentClarificationSessionId = null;
     notify();
 }
 
@@ -64,6 +70,12 @@ function setModels(models) {
     notify();
 }
 
+// ADDED
+function setCurrentClarificationSessionId(id) {
+    AppState.currentClarificationSessionId = id;
+    notify();
+}
+
 // Конфигурация генерации: для каждого типа дочернего артефакта список допустимых родительских типов
 const generationRules = {
     "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
@@ -82,6 +94,17 @@ function canGenerate(childType, parentType) {
 
 function getAllowedParentTypes(childType) {
     return generationRules[childType] || [];
+}
+
+// ADDED: список типов артефактов, требующих уточнения (для расширенного режима)
+const CLARIFICATION_TYPES = [
+    "BusinessIdea",
+    "ProductCouncilAnalysis",
+    // при необходимости можно добавить другие
+];
+
+function requiresClarification(artifactType) {
+    return CLARIFICATION_TYPES.includes(artifactType);
 }
 
 // Кеш для артефактов (parentId -> { childType: { id, content } })
@@ -139,4 +162,8 @@ window.state = {
     clearArtifactCache,
     getLastArtifactByType,
     subscribe,
+    // ADDED
+    getCurrentClarificationSessionId,
+    setCurrentClarificationSessionId,
+    requiresClarification
 };

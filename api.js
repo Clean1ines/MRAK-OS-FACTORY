@@ -86,7 +86,14 @@ async function fetchModes() {
     return apiFetch('/api/modes');
 }
 
+// ADDED: получение истории сообщений
+async function fetchMessages(projectId) {
+    return apiFetch(`/api/projects/${projectId}/messages`);
+}
+
+// Экспортируем всё в глобальный объект api
 window.api = {
+    apiFetch,           // теперь apiFetch доступен как api.apiFetch
     fetchProjects,
     createProject,
     fetchArtifacts,
@@ -95,5 +102,6 @@ window.api = {
     generateArtifact,
     saveArtifactPackage,
     fetchModels,
-    fetchModes
+    fetchModes,
+    fetchMessages       // ADDED
 };

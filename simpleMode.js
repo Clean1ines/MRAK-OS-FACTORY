@@ -2,7 +2,6 @@
 
 let isSimpleMode = false;
 
-// Обновление прогресс-бара
 function renderProgressBar(currentStage) {
     const container = document.getElementById('progress-bar-container');
     if (!container) return;
@@ -20,7 +19,6 @@ function renderProgressBar(currentStage) {
     });
 }
 
-// Обновить прогресс на основе текущего проекта
 async function updateProgress() {
     const projectId = state.getCurrentProjectId();
     if (!projectId) return;
@@ -35,7 +33,6 @@ async function updateProgress() {
     }
 }
 
-// Обработчик кнопки "Далее"
 async function handleNext() {
     const projectId = state.getCurrentProjectId();
     if (!projectId) {
@@ -43,7 +40,6 @@ async function handleNext() {
         return;
     }
     try {
-        // Получаем следующий шаг с сервера
         const res = await fetch(`/api/workflow/next?project_id=${encodeURIComponent(projectId)}`);
         const data = await res.json();
         if (data.error) {
@@ -55,11 +51,9 @@ async function handleNext() {
             return;
         }
         if (data.next_stage === 'idea') {
-            // Просим пользователя ввести идею в поле ввода
             ui.showNotification('Введите идею в поле ввода и нажмите "Отправить"', 'info');
             return;
         }
-        // Выполняем следующий шаг
         const execRes = await fetch(`/api/workflow/execute_next?project_id=${encodeURIComponent(projectId)}`, {
             method: 'POST'
         });
@@ -69,10 +63,8 @@ async function handleNext() {
             return;
         }
         if (execData.existing) {
-            // Артефакт уже существует
             ui.showNotification('Этот этап уже пройден. Открываю существующий артефакт.', 'info');
         }
-        // Открываем модальное окно с содержимым (новым или существующим)
         ui.openRequirementsModal(
             execData.artifact_type,
             execData.content,
@@ -80,7 +72,8 @@ async function handleNext() {
                 try {
                     const saved = await api.saveArtifactPackage(projectId, execData.parent_id, execData.artifact_type, updatedContent);
                     if (validate) {
-                        await apiFetch('/api/validate_artifact', {
+                        // FIXED: use api.apiFetch
+                        await api.apiFetch('/api/validate_artifact', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ artifact_id: saved.id, status: 'VALIDATED' })
@@ -91,7 +84,6 @@ async function handleNext() {
                     }
                     ui.closeModal();
                     await updateProgress();
-                    // Обновляем список родителей для расширенного режима
                     if (!isSimpleMode && typeof window.loadParents === 'function') {
                         await window.loadParents();
                     }
@@ -109,7 +101,6 @@ async function handleNext() {
     }
 }
 
-// Переключение режимов
 function switchMode(mode) {
     isSimpleMode = (mode === 'simple');
     const simpleControls = document.getElementById('simple-controls');
@@ -125,7 +116,6 @@ function switchMode(mode) {
         simpleBtn.classList.add('bg-cyan-600/30');
         advancedBtn.classList.remove('bg-cyan-600/30');
         document.getElementById('progress-bar-container')?.classList.remove('hidden');
-        // Обновляем прогресс
         updateProgress();
     } else {
         simpleControls.classList.add('hidden');
@@ -133,18 +123,15 @@ function switchMode(mode) {
         advancedBtn.classList.add('bg-cyan-600/30');
         simpleBtn.classList.remove('bg-cyan-600/30');
         document.getElementById('progress-bar-container')?.classList.add('hidden');
-        // При переходе в расширенный режим обновляем список родителей
         if (typeof window.loadParents === 'function') {
             window.loadParents();
         }
     }
-    // Сохраняем выбор режима
     const savedState = JSON.parse(localStorage.getItem('mrak_ui_state') || '{}');
     savedState.isSimple = isSimpleMode;
     localStorage.setItem('mrak_ui_state', JSON.stringify(savedState));
 }
 
-// Инициализация
 function initSimpleMode() {
     const simpleBtn = document.getElementById('simple-mode-btn');
     const advancedBtn = document.getElementById('advanced-mode-btn');
@@ -159,7 +146,6 @@ function initSimpleMode() {
     if (nextBtn) {
         nextBtn.addEventListener('click', handleNext);
     }
-    // По умолчанию – расширенный режим, но может быть переопределён restoreState
     const saved = localStorage.getItem('mrak_ui_state');
     if (saved) {
         const st = JSON.parse(saved);

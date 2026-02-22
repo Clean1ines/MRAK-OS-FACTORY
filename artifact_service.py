@@ -3,8 +3,13 @@
 
 import json
 import re
+import asyncio
+import logging
 from typing import Optional, Dict, Any, List
 import db
+from validation import validate_json_output, ValidationError
+
+logger = logging.getLogger("artifact-service")
 
 class ArtifactService:
     def __init__(self, groq_client, prompt_loader, mode_map, type_to_mode):
@@ -12,6 +17,60 @@ class ArtifactService:
         self.prompt_loader = prompt_loader
         self.mode_map = mode_map
         self.type_to_mode = type_to_mode
+
+    async def _call_llm_with_retry(self, sys_prompt: str, user_prompt: str,
+                                    model_id: str, artifact_type: str,
+                                    retries: int = 3) -> Any:
+        """
+        Вызывает LLM, парсит JSON и валидирует результат.
+        При невалидном результате повторяет до retries раз с экспоненциальной задержкой.
+        Возвращает распарсенный и валидный JSON.
+        """
+        attempt = 0
+        last_error = None
+        while attempt <= retries:
+            try:
+                response = self.groq_client.create_completion(
+                    model=model_id or "llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.6,
+                )
+                result_text = response.choices[0].message.content
+
+                # Попытка распарсить JSON
+                try:
+                    result_data = json.loads(result_text)
+                except json.JSONDecodeError:
+                    # Если не JSON, возможно, это текст – для некоторых типов допустимо
+                    # Для структурированных типов это ошибка
+                    if artifact_type in validation.REQUIRED_FIELDS:
+                        raise ValueError("Response is not valid JSON")
+                    else:
+                        # Для неструктурированных (например, код) возвращаем как текст
+                        return {"text": result_text}
+
+                # Валидация для структурированных типов
+                valid, msg = validate_json_output(result_data, artifact_type)
+                if not valid:
+                    raise ValueError(f"Validation failed: {msg}")
+
+                return result_data
+
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Attempt {attempt+1}/{retries+1} failed for {artifact_type}: {e}")
+                attempt += 1
+                if attempt <= retries:
+                    wait = 2 ** attempt  # exponential backoff
+                    logger.info(f"Retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                else:
+                    break
+
+        raise ValidationError(f"Failed to generate valid {artifact_type} after {retries+1} attempts. Last error: {last_error}")
 
     async def generate_artifact(
         self,
@@ -30,28 +89,18 @@ class ArtifactService:
             raise Exception(f"Failed to get system prompt: {sys_prompt}")
 
         if parent_artifact:
-            prompt = f"Parent artifact ({parent_artifact['type']}):\n{json.dumps(parent_artifact['content'])}\n\nUser input:\n{user_input}"
+            user_prompt = f"Parent artifact ({parent_artifact['type']}):\n{json.dumps(parent_artifact['content'])}\n\nUser input:\n{user_input}"
         else:
-            prompt = user_input
+            user_prompt = user_input
 
         try:
-            response = self.groq_client.create_completion(
-                model=model_id or "llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.6,
-            )
-            result_text = response.choices[0].message.content
-        except Exception as e:
-            raise Exception(f"LLM call failed: {e}")
+            # Используем общий метод с валидацией (для структурированных типов)
+            result_data = await self._call_llm_with_retry(sys_prompt, user_prompt, model_id, artifact_type)
+        except ValidationError as e:
+            logger.error(f"Validation failed for {artifact_type}: {e}")
+            raise  # пробрасываем дальше
 
-        try:
-            result_data = json.loads(result_text)
-        except json.JSONDecodeError:
-            result_data = {"text": result_text}
-
+        # Сохраняем артефакт
         artifact_id = await db.save_artifact(
             artifact_type=artifact_type,
             content=result_data,
@@ -61,6 +110,8 @@ class ArtifactService:
             parent_id=parent_artifact['id'] if parent_artifact else None
         )
         return artifact_id
+
+    # Специализированные методы теперь используют _call_llm_with_retry
 
     async def generate_business_requirements(
         self,
@@ -103,31 +154,17 @@ class ArtifactService:
             raise Exception(f"Failed to get system prompt: {sys_prompt}")
 
         try:
-            response = self.groq_client.create_completion(
-                model=model_id or "llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": full_input},
-                ],
-                temperature=0.6,
+            result_data = await self._call_llm_with_retry(
+                sys_prompt, full_input, model_id, "BusinessRequirementPackage"
             )
-            result_text = response.choices[0].message.content
-        except Exception as e:
-            raise Exception(f"LLM call failed: {e}")
+        except ValidationError as e:
+            logger.error(f"Failed to generate business requirements: {e}")
+            raise
 
-        requirements = []
-        try:
-            requirements = json.loads(result_text)
-            if not isinstance(requirements, list):
-                requirements = [requirements]
-        except json.JSONDecodeError:
-            json_match = re.search(r'\[\s*\{.*\}\s*\]', result_text, re.DOTALL)
-            if json_match:
-                requirements = json.loads(json_match.group())
-            else:
-                raise ValueError(f"Failed to parse JSON from response: {result_text[:200]}")
-
-        return requirements
+        # Ожидаем список
+        if not isinstance(result_data, list):
+            result_data = [result_data] if result_data else []
+        return result_data
 
     async def generate_req_engineering_analysis(
         self,
@@ -156,7 +193,6 @@ class ArtifactService:
         if user_feedback:
             prompt_parts.append(f"USER_FEEDBACK:\n{user_feedback}")
         if existing_analysis:
-            # Передаём существующий анализ для дополнения
             prompt_parts.append(f"EXISTING_ANALYSIS:\n{json.dumps(existing_analysis)}")
 
         full_input = "\n\n".join(prompt_parts)
@@ -167,24 +203,14 @@ class ArtifactService:
             raise Exception(f"Failed to get system prompt: {sys_prompt}")
 
         try:
-            response = self.groq_client.create_completion(
-                model=model_id or "llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": full_input},
-                ],
-                temperature=0.6,
+            result_data = await self._call_llm_with_retry(
+                sys_prompt, full_input, model_id, "ReqEngineeringAnalysis"
             )
-            result_text = response.choices[0].message.content
-        except Exception as e:
-            raise Exception(f"LLM call failed: {e}")
+        except ValidationError as e:
+            logger.error(f"Failed to generate req engineering analysis: {e}")
+            raise
 
-        try:
-            analysis_result = json.loads(result_text)
-        except json.JSONDecodeError:
-            analysis_result = {"text": result_text}
-
-        return analysis_result
+        return result_data
 
     async def generate_functional_requirements(
         self,
@@ -194,9 +220,6 @@ class ArtifactService:
         project_id: Optional[str] = None,
         existing_requirements: Optional[List[Dict]] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Генерирует функциональные требования на основе анализа инженерии требований.
-        """
         analysis = await db.get_artifact(analysis_id)
         if not analysis:
             raise ValueError("Analysis not found")
@@ -219,28 +242,13 @@ class ArtifactService:
             raise Exception(f"Failed to get system prompt: {sys_prompt}")
 
         try:
-            response = self.groq_client.create_completion(
-                model=model_id or "llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": full_input},
-                ],
-                temperature=0.6,
+            result_data = await self._call_llm_with_retry(
+                sys_prompt, full_input, model_id, "FunctionalRequirementPackage"
             )
-            result_text = response.choices[0].message.content
-        except Exception as e:
-            raise Exception(f"LLM call failed: {e}")
+        except ValidationError as e:
+            logger.error(f"Failed to generate functional requirements: {e}")
+            raise
 
-        functional_reqs = []
-        try:
-            functional_reqs = json.loads(result_text)
-            if not isinstance(functional_reqs, list):
-                functional_reqs = [functional_reqs]
-        except json.JSONDecodeError:
-            json_match = re.search(r'\[\s*\{.*\}\s*\]', result_text, re.DOTALL)
-            if json_match:
-                functional_reqs = json.loads(json_match.group())
-            else:
-                raise ValueError(f"Failed to parse JSON from response: {result_text[:200]}")
-
-        return functional_reqs
+        if not isinstance(result_data, list):
+            result_data = [result_data] if result_data else []
+        return result_data

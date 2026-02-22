@@ -11,15 +11,14 @@ import os
 import hashlib
 import datetime
 
-# ADDED: Import SessionService
 from session_service import SessionService
+from validation import ValidationError  # ADDED
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
 
 app = FastAPI(title="MRAK-OS Factory API")
 orch = MrakOrchestrator()
-# ADDED: Create session service instance
 session_service = SessionService()
 
 class ProjectCreate(BaseModel):
@@ -187,6 +186,9 @@ async def create_artifact(artifact: ArtifactCreate):
                 parent_id=artifact.parent_id
             )
             return JSONResponse(content={"id": new_id, "generated": False})
+    except ValidationError as e:  # ADDED
+        logger.warning(f"Validation error: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=422)
     except Exception as e:
         logger.error(f"Error creating artifact: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -266,6 +268,9 @@ async def generate_artifact_endpoint(req: GenerateArtifactRequest):
                 return JSONResponse(content={"result": {"id": new_id}})
 
         return JSONResponse(content={"result": result})
+    except ValidationError as e:  # ADDED
+        logger.warning(f"Validation error in generation: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=422)
     except Exception as e:
         logger.error(f"Error generating artifact: {e}", exc_info=True)
         return JSONResponse(content={"error": f"Internal server error: {str(e)}"}, status_code=500)
@@ -371,6 +376,9 @@ async def execute_next_step(project_id: str, model: Optional[str] = None):
             "next_stage": step['next_stage'],
             "existing": False
         })
+    except ValidationError as e:  # ADDED
+        logger.warning(f"Validation error in simple mode: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=422)
     except Exception as e:
         logger.error(f"Error executing next step: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -463,7 +471,7 @@ async def analyze(request: Request):
         media_type="text/plain",
     )
 
-# ==================== СЕССИИ УТОЧНЕНИЯ (рефакторинг: через SessionService) ====================
+# ==================== СЕССИИ УТОЧНЕНИЯ ====================
 
 @app.post("/api/clarification/start", response_model=ClarificationSessionResponse)
 async def start_clarification(req: StartClarificationRequest):
@@ -479,7 +487,6 @@ async def start_clarification(req: StartClarificationRequest):
     if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
         return JSONResponse(content={"error": sys_prompt}, status_code=500)
 
-    # CHANGED: use session_service instead of db
     session_id = await session_service.create_clarification_session(req.project_id, req.target_artifact_type)
 
     model = req.model or "llama-3.3-70b-versatile"
@@ -493,13 +500,11 @@ async def start_clarification(req: StartClarificationRequest):
         logger.error(f"LLM call failed: {e}")
         return JSONResponse(content={"error": "Failed to generate first message"}, status_code=500)
 
-    # CHANGED: use session_service
     await session_service.add_message_to_session(session_id, "assistant", assistant_message)
 
     session = await session_service.get_clarification_session(session_id)
     if session:
         state = await orch.synthesize_conversation_state(session['history'])
-        # CHANGED: use session_service
         await session_service.update_clarification_session(session_id, context_summary=json.dumps(state))
 
     session = await session_service.get_clarification_session(session_id)
@@ -517,7 +522,6 @@ async def start_clarification(req: StartClarificationRequest):
 
 @app.post("/api/clarification/{session_id}/message", response_model=ClarificationSessionResponse)
 async def add_message(session_id: str, req: MessageRequest):
-    # CHANGED: use session_service
     session = await session_service.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
@@ -525,7 +529,6 @@ async def add_message(session_id: str, req: MessageRequest):
     if session['status'] != 'active':
         return JSONResponse(content={"error": "Session is not active"}, status_code=400)
 
-    # CHANGED: use session_service
     await session_service.add_message_to_session(session_id, "user", req.message)
 
     session = await session_service.get_clarification_session(session_id)
@@ -564,12 +567,10 @@ async def add_message(session_id: str, req: MessageRequest):
         logger.error(f"LLM call failed: {e}")
         return JSONResponse(content={"error": "Failed to generate assistant message"}, status_code=500)
 
-    # CHANGED: use session_service
     await session_service.add_message_to_session(session_id, "assistant", assistant_message)
 
     session = await session_service.get_clarification_session(session_id)
     state = await orch.synthesize_conversation_state(session['history'])
-    # CHANGED: use session_service
     await session_service.update_clarification_session(session_id, context_summary=json.dumps(state))
 
     session = await session_service.get_clarification_session(session_id)
@@ -588,7 +589,6 @@ async def add_message(session_id: str, req: MessageRequest):
 
 @app.get("/api/clarification/{session_id}", response_model=ClarificationSessionResponse)
 async def get_clarification_session_endpoint(session_id: str):
-    # CHANGED: use session_service
     session = await session_service.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
@@ -606,20 +606,17 @@ async def get_clarification_session_endpoint(session_id: str):
 
 @app.post("/api/clarification/{session_id}/complete")
 async def complete_clarification_session(session_id: str):
-    # CHANGED: use session_service
     session = await session_service.get_clarification_session(session_id)
     if not session:
         return JSONResponse(content={"error": "Session not found"}, status_code=404)
     if session['status'] != 'active':
         return JSONResponse(content={"error": "Session already completed"}, status_code=400)
 
-    # CHANGED: use session_service
     await session_service.update_clarification_session(session_id, status="completed")
     return JSONResponse(content={"status": "completed", "session_id": session_id})
 
 @app.get("/api/projects/{project_id}/clarification/active")
 async def get_active_sessions(project_id: str):
-    # CHANGED: use session_service
     sessions = await session_service.list_active_sessions_for_project(project_id)
     return JSONResponse(content=[
         {

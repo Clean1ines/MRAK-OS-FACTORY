@@ -1,0 +1,17 @@
+{
+  "name": "mrak-os",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \"uvicorn server:app --reload\" \"cd frontend && npm run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.0",
+    "@tanstack/react-query": "^5.90.21",
+    "axios": "^1.13.5",
+    "marked": "^17.0.3",
+    "zustand": "^5.0.11"
+  }
+}

@@ -1,12 +1,17 @@
-# CHANGED: transaction() now returns Transaction instance directly (not a coroutine)
+# CHANGED: Added SET search_path after connection
 import os
 import asyncpg
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mrak_user:mrak_pass@localhost:5432/mrak_db")
 
+print(f"🔍 BACKEND CONNECTING TO: {DATABASE_URL}") 
+
 async def get_connection():
-    """Return a new database connection."""
-    return await asyncpg.connect(DATABASE_URL)
+    """Return a new database connection with search_path set to public."""
+    conn = await asyncpg.connect(DATABASE_URL)
+    # Принудительно устанавливаем схему
+    await conn.execute("SET search_path TO public")
+    return conn
 
 class Transaction:
     """Async context manager for database transactions."""
@@ -27,7 +32,20 @@ class Transaction:
                     await self.conn.execute("ROLLBACK")
             finally:
                 await self.conn.close()
+    
+    # ADDED: Делегируем методы подключения
+    async def fetch(self, query, *args):
+        return await self.conn.fetch(query, *args)
+    
+    async def fetchrow(self, query, *args):
+        return await self.conn.fetchrow(query, *args)
+    
+    async def fetchval(self, query, *args):
+        return await self.conn.fetchval(query, *args)
+    
+    async def execute(self, query, *args):
+        return await self.conn.execute(query, *args)
 
 def transaction():
-    """Return a Transaction context manager (synchronous factory)."""
-    return Transaction()
+    """Return a Transaction context manager."""
+    return Transaction()  # НЕ async def!

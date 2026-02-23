@@ -127,7 +127,22 @@ async def get_project_messages(project_id: str):
 
 @router.get("/artifact-types")
 async def list_artifact_types():
-    types = await db.get_artifact_types()
+    async with transaction() as tx:
+        rows = await tx.fetch("SELECT * FROM artifact_types ORDER BY type")
+    
+    # Конвертируем datetime в ISO-строки
+    types = []
+    for row in rows:
+        types.append({
+            "type": row["type"],
+            "schema": row["schema"],
+            "allowed_parents": row["allowed_parents"],
+            "requires_clarification": row["requires_clarification"],
+            "icon": row["icon"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+        })
+    
     return JSONResponse(content=types)
 
 @router.get("/artifact-types/{type}")

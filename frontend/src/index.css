@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+body {
+  background-color: #010509;
+  color: #d9feff;
+  font-family: 'JetBrains Mono', monospace;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}

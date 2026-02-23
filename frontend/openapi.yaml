@@ -1,0 +1,1559 @@
+openapi: 3.0.0
+info:
+  title: MRAK-OS Factory API
+  description: API для AI-ассистента разработки, управляющего проектами, артефактами, сессиями уточнения и workflow.
+  version: 1.0.0
+servers:
+  - url: https://mrak-os-factory.onrender.com
+    description: Продакшн сервер
+  - url: http://localhost:8000
+    description: Локальный сервер разработки
+
+paths:
+  # ==================== Проекты ====================
+  /api/projects:
+    get:
+      operationId: getProjects
+      summary: Список всех проектов
+      tags:
+        - projects
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: createProject
+      summary: Создать новый проект
+      tags:
+        - projects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+      responses:
+        '200':
+          description: Проект создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/projects/{project_id}:
+    delete:
+      operationId: deleteProject
+      summary: Удалить проект (каскадно удаляет все артефакты)
+      tags:
+        - projects
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Проект удалён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/projects/{project_id}/unlock:
+    post:
+      operationId: unlockProject
+      summary: Разблокировать проект паролем (устанавливает cookie)
+      tags:
+        - projects
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Доступ разрешён, cookie установлена
+        '400':
+          description: Проект не защищён паролем
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Неверный пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/projects/{project_id}/set_password:
+    post:
+      operationId: setProjectPassword
+      summary: Установить или снять пароль проекта (только для администратора)
+      tags:
+        - projects
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  description: Если пустая строка – пароль удаляется
+      security:
+        - MasterKeyAuth: []
+      responses:
+        '200':
+          description: Пароль обновлён
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== Артефакты ====================
+  /api/projects/{project_id}/artifacts:
+    get:
+      operationId: getArtifacts
+      summary: Получить список артефактов проекта
+      tags:
+        - artifacts
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Фильтр по типу артефакта
+      responses:
+        '200':
+          description: Список артефактов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Artifact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/artifact:
+    post:
+      operationId: createArtifact
+      summary: Сохранить или сгенерировать артефакт
+      tags:
+        - artifacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactCreate'
+      responses:
+        '200':
+          description: Успешно сохранено/сгенерировано
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  generated:
+                    type: boolean
+        '404':
+          description: Родительский артефакт не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/latest_artifact:
+    get:
+      operationId: getLatestArtifact
+      summary: Получить последнюю версию артефакта по родителю и типу
+      tags:
+        - artifacts
+      parameters:
+        - name: parent_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Информация о существовании и содержимом
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+                  artifact_id:
+                    type: string
+                    format: uuid
+                  content:
+                    type: object
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/validate_artifact:
+    post:
+      operationId: validateArtifact
+      summary: Установить статус артефакта (VALIDATED / REJECTED)
+      tags:
+        - artifacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                artifact_id:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  enum: [VALIDATED, REJECTED]
+      responses:
+        '200':
+          description: Статус обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: updated
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/artifact/{artifact_id}:
+    delete:
+      operationId: deleteArtifact
+      summary: Удалить артефакт (каскадно)
+      tags:
+        - artifacts
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Артефакт удалён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/generate_artifact:
+    post:
+      operationId: generateArtifact
+      summary: Сгенерировать артефакт с учётом фидбека (специализированные методы)
+      tags:
+        - artifacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateArtifactRequest'
+      responses:
+        '200':
+          description: Результат генерации
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/save_artifact_package:
+    post:
+      operationId: saveArtifactPackage
+      summary: Сохранить пакет артефактов (с версионированием и проверкой дубликатов)
+      tags:
+        - artifacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavePackageRequest'
+      responses:
+        '200':
+          description: Сохранённый артефакт (или дубликат)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  duplicate:
+                    type: boolean
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/projects/{project_id}/messages:
+    get:
+      operationId: getProjectMessages
+      summary: Получить историю сообщений (LLMResponse) проекта
+      tags:
+        - artifacts
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список артефактов типа LLMResponse
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Artifact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== Типы артефактов ====================
+  /api/artifact-types:
+    get:
+      operationId: getArtifactTypes
+      summary: Список всех типов артефактов с метаданными
+      tags:
+        - artifact-types
+      responses:
+        '200':
+          description: Массив типов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArtifactType'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: createArtifactType
+      summary: Создать новый тип артефакта (админ)
+      tags:
+        - artifact-types
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactTypeCreate'
+      security:
+        - MasterKeyAuth: []
+      responses:
+        '201':
+          description: Тип создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/artifact-types/{type}:
+    get:
+      operationId: getArtifactType
+      summary: Получить метаданные конкретного типа
+      tags:
+        - artifact-types
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Метаданные типа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactType'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      operationId: updateArtifactType
+      summary: Обновить метаданные типа (админ)
+      tags:
+        - artifact-types
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Частичные обновляемые поля (schema, allowed_parents, requires_clarification, icon)
+      security:
+        - MasterKeyAuth: []
+      responses:
+        '200':
+          description: Обновлено
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteArtifactType
+      summary: Удалить тип артефакта (админ)
+      tags:
+        - artifact-types
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - MasterKeyAuth: []
+      responses:
+        '200':
+          description: Удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== Сессии уточнения ====================
+  /api/clarification/start:
+    post:
+      operationId: startClarification
+      summary: Начать новую сессию уточнения
+      tags:
+        - clarification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartClarificationRequest'
+      responses:
+        '200':
+          description: Сессия создана, возвращается первый вопрос ассистента
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClarificationSessionResponse'
+        '400':
+          description: Неверные параметры или режим не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/clarification/{session_id}/message:
+    post:
+      operationId: sendClarificationMessage
+      summary: Отправить сообщение в сессию и получить ответ
+      tags:
+        - clarification
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageRequest'
+      responses:
+        '200':
+          description: Обновлённая сессия
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClarificationSessionResponse'
+        '400':
+          description: Сессия не активна
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/clarification/{session_id}:
+    get:
+      operationId: getClarificationSession
+      summary: Получить текущее состояние сессии
+      tags:
+        - clarification
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Сессия
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClarificationSessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/clarification/{session_id}/complete:
+    post:
+      operationId: completeClarificationSession
+      summary: Завершить сессию (установить статус completed)
+      tags:
+        - clarification
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Сессия завершена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: completed
+                  session_id:
+                    type: string
+        '400':
+          description: Сессия уже завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/projects/{project_id}/clarification/active:
+    get:
+      operationId: getActiveClarificationSessions
+      summary: Список активных сессий проекта
+      tags:
+        - clarification
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Массив активных сессий
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    target_artifact_type:
+                      type: string
+                    created_at:
+                      type: string
+                      format: date-time
+                    updated_at:
+                      type: string
+                      format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== Workflow ====================
+  /api/workflows:
+    get:
+      operationId: getWorkflows
+      summary: Список всех workflow
+      tags:
+        - workflows
+      responses:
+        '200':
+          description: Массив workflow
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workflow'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: createWorkflow
+      summary: Создать новый workflow
+      tags:
+        - workflows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowCreate'
+      responses:
+        '201':
+          description: Workflow создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/{workflow_id}:
+    get:
+      operationId: getWorkflow
+      summary: Получить workflow с узлами и рёбрами
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Детальная информация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      operationId: updateWorkflow
+      summary: Обновить метаданные workflow
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowUpdate'
+      responses:
+        '200':
+          description: Обновлено
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteWorkflow
+      summary: Удалить workflow
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/{workflow_id}/nodes:
+    post:
+      operationId: createWorkflowNode
+      summary: Добавить узел в workflow
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNodeCreate'
+      responses:
+        '201':
+          description: Узел создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Узел с таким node_id уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/nodes/{node_record_id}:
+    put:
+      operationId: updateWorkflowNode
+      summary: Обновить узел
+      tags:
+        - workflows
+      parameters:
+        - name: node_record_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNodeUpdate'
+      responses:
+        '200':
+          description: Обновлено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteWorkflowNode
+      summary: Удалить узел
+      tags:
+        - workflows
+      parameters:
+        - name: node_record_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/{workflow_id}/edges:
+    post:
+      operationId: createWorkflowEdge
+      summary: Добавить ребро в workflow
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowEdgeCreate'
+      responses:
+        '201':
+          description: Ребро создано
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Некорректные узлы (не найдены)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/edges/{edge_record_id}:
+    delete:
+      operationId: deleteWorkflowEdge
+      summary: Удалить ребро
+      tags:
+        - workflows
+      parameters:
+        - name: edge_record_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflow/next:
+    get:
+      operationId: getNextWorkflowStep
+      summary: Получить следующий шаг для проекта (простой режим)
+      tags:
+        - workflows
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Информация о следующем шаге или завершении
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  next_stage:
+                    type: string
+                    description: Тип следующего артефакта или 'finished'
+                  prompt_type:
+                    type: string
+                  parent_id:
+                    type: string
+                    format: uuid
+                  description:
+                    type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflow/execute_next:
+    post:
+      operationId: executeNextWorkflowStep
+      summary: Выполнить следующий шаг (сгенерировать артефакт)
+      tags:
+        - workflows
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: model
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Результат выполнения шага (артефакт)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifact_id:
+                    type: string
+                  artifact_type:
+                    type: string
+                  content:
+                    type: object
+                  parent_id:
+                    type: string
+                  next_stage:
+                    type: string
+                  existing:
+                    type: boolean
+        '400':
+          description: Нет следующего шага или ошибка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== Модели и режимы ====================
+  /api/models:
+    get:
+      operationId: getModels
+      summary: Список доступных LLM-моделей
+      tags:
+        - modes
+      responses:
+        '200':
+          description: Массив моделей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/modes:
+    get:
+      operationId: getModes
+      summary: Список доступных режимов промптов
+      tags:
+        - modes
+      responses:
+        '200':
+          description: Массив режимов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    default:
+                      type: boolean
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/analyze:
+    post:
+      operationId: analyzeStream
+      summary: Отправить запрос к LLM в стриминговом режиме
+      tags:
+        - modes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+                mode:
+                  type: string
+                model:
+                  type: string
+                project_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Стриминг текстового ответа (text/plain)
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Неверный JSON или отсутствует prompt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Ошибка получения системного промпта
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "🔴 SYSTEM_CRITICAL_ERROR: ..."
+
+components:
+  securitySchemes:
+    MasterKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Master-Key
+      description: Ключ администратора для доступа к защищённым операциям.
+
+  schemas:
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        password_hash:
+          type: string
+          nullable: true
+
+    ProjectCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    Artifact:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        content:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, GENERATED, VALIDATED, REJECTED]
+        summary:
+          type: string
+
+    ArtifactCreate:
+      type: object
+      required:
+        - project_id
+        - artifact_type
+        - content
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        artifact_type:
+          type: string
+        content:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        generate:
+          type: boolean
+        model:
+          type: string
+
+    GenerateArtifactRequest:
+      type: object
+      required:
+        - artifact_type
+        - parent_id
+        - project_id
+      properties:
+        artifact_type:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+        feedback:
+          type: string
+        model:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        existing_content:
+          type: object
+          nullable: true
+
+    SavePackageRequest:
+      type: object
+      required:
+        - project_id
+        - parent_id
+        - artifact_type
+        - content
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+        artifact_type:
+          type: string
+        content:
+          type: object
+
+    ArtifactType:
+      type: object
+      properties:
+        type:
+          type: string
+        schema:
+          type: object
+        allowed_parents:
+          type: array
+          items:
+            type: string
+        requires_clarification:
+          type: boolean
+        icon:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ArtifactTypeCreate:
+      type: object
+      required:
+        - type
+        - schema
+      properties:
+        type:
+          type: string
+        schema:
+          type: object
+        allowed_parents:
+          type: array
+          items:
+            type: string
+        requires_clarification:
+          type: boolean
+        icon:
+          type: string
+
+    StartClarificationRequest:
+      type: object
+      required:
+        - project_id
+        - target_artifact_type
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        target_artifact_type:
+          type: string
+        model:
+          type: string
+
+    MessageRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+
+    ClarificationSessionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        target_artifact_type:
+          type: string
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+        status:
+          type: string
+          enum: [active, completed]
+        context_summary:
+          type: object
+          nullable: true
+        final_artifact_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Workflow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        is_default:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WorkflowCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        is_default:
+          type: boolean
+
+    WorkflowUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        is_default:
+          type: boolean
+
+    WorkflowNodeCreate:
+      type: object
+      required:
+        - node_id
+        - prompt_key
+        - position_x
+        - position_y
+      properties:
+        node_id:
+          type: string
+        prompt_key:
+          type: string
+        config:
+          type: object
+        position_x:
+          type: number
+          format: float
+        position_y:
+          type: number
+          format: float
+
+    WorkflowNodeUpdate:
+      type: object
+      properties:
+        prompt_key:
+          type: string
+        config:
+          type: object
+        position_x:
+          type: number
+          format: float
+        position_y:
+          type: number
+          format: float
+
+    WorkflowEdgeCreate:
+      type: object
+      required:
+        - source_node
+        - target_node
+      properties:
+        source_node:
+          type: string
+        target_node:
+          type: string
+        source_output:
+          type: string
+          default: output
+        target_input:
+          type: string
+          default: input
+
+    WorkflowDetail:
+      type: object
+      properties:
+        workflow:
+          $ref: '#/components/schemas/Workflow'
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              workflow_id:
+                type: string
+              node_id:
+                type: string
+              prompt_key:
+                type: string
+              config:
+                type: object
+              position_x:
+                type: number
+              position_y:
+                type: number
+              created_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
+        edges:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              workflow_id:
+                type: string
+              source_node:
+                type: string
+              target_node:
+                type: string
+              source_output:
+                type: string
+              target_input:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+    InternalServerError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

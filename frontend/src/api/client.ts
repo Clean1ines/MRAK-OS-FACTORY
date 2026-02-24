@@ -6,6 +6,12 @@ import { createTimeoutMiddleware } from './fetchWithTimeout';
 // Get token from sessionStorage
 const getSessionToken = () => sessionStorage.getItem('mrak_session_token');
 
+// Helper to get auth headers
+const getAuthHeaders = () => {
+  const token = getSessionToken();
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 // Create client
 export const client = createClient<paths>({
   baseUrl: '',
@@ -14,7 +20,7 @@ export const client = createClient<paths>({
   },
 });
 
-// #ADDED: Register middleware AFTER creating client
+// Register middleware for client.GET/POST/etc
 client.use({
   onRequest({ request }) {
     const token = getSessionToken();
@@ -73,8 +79,10 @@ export const api = {
       return res.json();
     },
     session: async () => {
+      // #FIX: Manually add Authorization header
       const res = await fetch('/api/auth/session', {
         method: 'GET',
+        headers: getAuthHeaders(),  // ← ADD TOKEN HERE
       });
       return res.json();
     },

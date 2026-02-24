@@ -14,7 +14,6 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 active_sessions = {}
 SESSION_DURATION = timedelta(hours=24)
-SESSION_COOKIE_NAME = "mrak_session"
 
 security = HTTPBearer(auto_error=False)
 
@@ -44,7 +43,7 @@ def get_current_session(credentials: HTTPAuthorizationCredentials = Security(sec
     return active_sessions[token]
 
 @router.post("/login")
-async def login(body: dict, response: Response):
+async def login(body: dict):
     """Login with master key, return session token in JSON"""
     logger.info(f"Login attempt")
     
@@ -74,7 +73,7 @@ async def login(body: dict, response: Response):
     # Return token in JSON (NOT in cookie)
     return JSONResponse(content={
         "status": "authenticated",
-        "session_token": session_token,  # ← Token in body
+        "session_token": session_token,
         "expires_in": SESSION_DURATION.total_seconds()
     })
 
@@ -85,10 +84,11 @@ async def logout():
 
 @router.get("/session")
 async def get_session(request: Request, credentials: HTTPAuthorizationCredentials = Security(security)):
-    """Check current session from Bearer token"""
-    # Try Authorization header first
+    """Check current session from Bearer token OR cookie"""
+    # Try Authorization header first (new method)
     if credentials:
         token = credentials.credentials
+        logger.info(f"Session check via Bearer token")
         if token in active_sessions and validate_session(token):
             session = active_sessions[token]
             return JSONResponse(content={
@@ -96,19 +96,15 @@ async def get_session(request: Request, credentials: HTTPAuthorizationCredential
                 "expires_at": session["expires_at"].isoformat(),
             })
     
-    # Fallback to cookie (for backwards compat)
-    session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    # Fallback to cookie (old method - for backwards compat)
+    session_token = request.cookies.get("mrak_session")
     if session_token and validate_session(session_token):
+        logger.info(f"Session check via cookie")
         session = active_sessions[session_token]
         return JSONResponse(content={
             "authenticated": True,
             "expires_at": session["expires_at"].isoformat(),
         })
     
+    logger.info(f"Session check: NOT authenticated")
     return JSONResponse(content={"authenticated": False})
-
-# Protected route example
-@router.get("/protected")
-async def protected_route(session: dict = Depends(get_current_session)):
-    """Example protected endpoint"""
-    return JSONResponse(content={"message": "You are authenticated", "session": session})

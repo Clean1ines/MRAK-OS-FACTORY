@@ -94,7 +94,7 @@ export const WorkspacePage: React.FC = () => {
       });
       if (res.error) throw new Error(res.error.error || 'Failed to load workflow');
       
-      const data: any = res.data;
+      const  any = res.data;
       setNodes((data?.nodes || []).map((n: any) => ({
         id: n.node_id || crypto.randomUUID(),
         node_id: n.node_id,
@@ -123,7 +123,6 @@ export const WorkspacePage: React.FC = () => {
     setWorkflowName('');
   };
 
-  // FIX #3: Create workflow with proper error handling
   const handleSave = async () => {
     if (!workflowName.trim()) {
       alert('⚠️ Введите название workflow');
@@ -209,11 +208,9 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
-  // FIX #4: Add custom node with prompt
   const handleAddCustomNode = (x: number, y: number) => {
     setNewNodePrompt('');
     setShowNodeModal(true);
-    // Store position for later
     (window as any)._newNodePosition = { x, y };
   };
 
@@ -225,7 +222,6 @@ export const WorkspacePage: React.FC = () => {
 
     const pos = (window as any)._newNodePosition;
     if (pos) {
-      // Add node with custom prompt in config
       const newNode: NodeData = {
         id: crypto.randomUUID(),
         node_id: crypto.randomUUID(),
@@ -365,7 +361,6 @@ export const WorkspacePage: React.FC = () => {
             onAddCustomNode={handleAddCustomNode}
           />
 
-          {/* FIX #4: Custom Node Modal */}
           {showNodeModal && (
             <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
               <div className="bg-[var(--ios-glass)] border border-[var(--ios-border)] rounded-lg p-6 w-[500px] shadow-[var(--shadow-heavy)]">
@@ -393,11 +388,6 @@ export const WorkspacePage: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* FIX #7: Debug info with bronze color */}
-          <div className="absolute top-4 right-4 text-[10px] text-[var(--bronze-dim)] bg-black/80 px-2 py-1 rounded font-mono border border-[var(--bronze-dim)]">
-            Scale: {scale.toFixed(2)} | Pan: {Math.round(pan.x)}, {Math.round(pan.y)}
-          </div>
         </div>
       </div>
     </IOSShell>

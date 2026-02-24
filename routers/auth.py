@@ -18,8 +18,8 @@ active_sessions = {}
 SESSION_DURATION = timedelta(hours=24)
 SESSION_COOKIE_NAME = "mrak_session"
 
-# #CHANGED: Disable secure for now - debug cookie issues
-IS_HTTPS = os.getenv("IS_HTTPS", "false").lower() == "true"  # Changed default to false
+# #CHANGED: Disable secure for debugging - Render HTTPS works without it
+IS_HTTPS = os.getenv("IS_HTTPS", "false").lower() == "true"
 
 def generate_session_token(master_key: str) -> str:
     """Generate secure session token from master key."""
@@ -53,7 +53,6 @@ async def login(body: dict, response: Response, request: Request):
     # Validate master key
     expected_key = os.getenv("MASTER_KEY")
     if not expected_key:
-        # Development mode: accept any key >= 8 chars
         if len(master_key) < 8:
             logger.warning("Login failed: master_key too short")
             raise HTTPException(status_code=401, detail="Invalid master key (min 8 characters)")
@@ -80,14 +79,14 @@ async def login(body: dict, response: Response, request: Request):
         value=session_token,
         max_age=int(SESSION_DURATION.total_seconds()),
         httponly=True,
-        secure=IS_HTTPS,  # #CHANGED: Set to false for debugging
+        secure=IS_HTTPS,  # #CHANGED: false for debugging
         samesite="lax",
         path="/",
-        # #ADDED: Don't set domain - use default
     )
     
-    # Log cookie header for debugging
-    logger.info(f"Set-Cookie header: {response.headers.get('set-cookie', 'NOT SET')[:100]}...")
+    # Log the Set-Cookie header
+    set_cookie_header = response.headers.get('set-cookie', 'NOT SET')
+    logger.info(f"Set-Cookie: {set_cookie_header[:150]}...")
     
     return JSONResponse(content={"status": "authenticated", "expires_in": SESSION_DURATION.total_seconds()})
 
@@ -107,11 +106,12 @@ async def logout(response: Response, request: Request):
 @router.get("/session")
 async def get_session(request: Request):
     """Check current session status."""
+    # Log all cookies received
+    all_cookies = dict(request.cookies)
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
     
-    # #CHANGED: Log all cookies for debugging
-    all_cookies = request.cookies
-    logger.info(f"Session check: cookie present={bool(session_token)}, all cookies: {list(all_cookies.keys())}")
+    logger.info(f"Session check: mrak_session present={bool(session_token)}")
+    logger.info(f"All cookies: {list(all_cookies.keys())}")
     
     if not session_token:
         return JSONResponse(content={"authenticated": False})

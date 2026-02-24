@@ -39,13 +39,29 @@ export const api = {
     list: (projectId: string) =>
       client.GET('/api/projects/{project_id}/messages', { params: { path: { project_id: projectId } } }),
   },
-  // //ADDED: Auth endpoints
+  // //ADDED: Auth endpoints (using raw fetch - not in OpenAPI schema yet)
   auth: {
-    login: (body: { master_key: string }) =>
-      client.POST('/api/auth/login', { body }),
-    logout: () =>
-      client.POST('/api/auth/logout'),
-    session: () =>
-      client.GET('/api/auth/session'),
+    login: async (body: { master_key: string }) => {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      return res.json();
+    },
+    logout: async () => {
+      const res = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      return res.json();
+    },
+    session: async () => {
+      const res = await fetch('/api/auth/session', {
+        credentials: 'include',
+      });
+      return res.json();
+    },
   },
 };

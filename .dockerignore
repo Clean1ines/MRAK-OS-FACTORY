@@ -62,3 +62,8 @@ LICENSE
 *.log
 *.deb
 tree_output.txt
+
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.md

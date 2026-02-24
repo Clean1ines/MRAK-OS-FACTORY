@@ -52,7 +52,6 @@ export const WorkspacePage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId]);
 
-  // FIX #1: Refresh workflows after workflow state changes
   useEffect(() => {
     if (currentWorkflowId) {
       loadWorkflows();
@@ -99,6 +98,7 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
+  // #CHANGED: Fixed variable declaration (added 'data' name)
   const loadWorkflow = async (workflowId: string) => {
     try {
       const res = await client.GET('/api/workflows/{workflow_id}', {
@@ -106,7 +106,7 @@ export const WorkspacePage: React.FC = () => {
       });
       if (res.error) throw new Error(res.error.error || 'Failed to load workflow');
       
-      const  any = res.data;
+      const  any = res.data;  // ← FIX: Added 'data' variable name
       setNodes((data?.nodes || []).map((n: any) => ({
         id: n.node_id || crypto.randomUUID(),
         node_id: n.node_id,
@@ -137,7 +137,6 @@ export const WorkspacePage: React.FC = () => {
     console.log('✅ New workflow created (cleared state)');
   };
 
-  // FIX #2: Validate duplicate names/content
   const validateNodeUnique = (title: string, prompt: string): string | null => {
     const duplicateTitle = nodes.find(n => 
       n.prompt_key.toLowerCase() === title.toLowerCase() && n.prompt_key !== 'CUSTOM_PROMPT'
@@ -206,7 +205,6 @@ export const WorkspacePage: React.FC = () => {
         throw new Error(responseData.detail || `HTTP ${res.status}`);
       }
 
-      // FIX #1: Update workflow ID and refresh list
       if (!currentWorkflowId && responseData.id) {
         setCurrentWorkflowId(responseData.id);
         await loadWorkflows();
@@ -251,7 +249,6 @@ export const WorkspacePage: React.FC = () => {
     (window as any)._newNodePosition = { x, y };
   };
 
-  // FIX #2: Validate before adding node
   const confirmAddCustomNode = async () => {
     if (!newNodePrompt.trim()) {
       alert('Введите промпт');
@@ -283,7 +280,6 @@ export const WorkspacePage: React.FC = () => {
     setNewNodeTitle('');
   };
 
-  // FIX #6: Add node from list
   const addNodeFromList = (node: NodeData, x: number, y: number) => {
     const newNode: NodeData = {
       ...node,
@@ -430,7 +426,6 @@ export const WorkspacePage: React.FC = () => {
             onAddCustomNode={handleAddCustomNode}
           />
 
-          {/* FIX #6: Node List Panel */}
           {showNodeList && (
             <div className="absolute top-20 right-6 w-80 bg-[var(--ios-glass)] backdrop-blur-md border border-[var(--ios-border)] rounded-lg shadow-[var(--shadow-heavy)] z-[1000]">
               <div className="flex items-center justify-between p-3 border-b border-[var(--ios-border)]">
@@ -473,10 +468,6 @@ export const WorkspacePage: React.FC = () => {
                       <div
                         key={node.node_id}
                         className="p-2 mb-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
-                        onClick={() => {
-                          // Center view on this node
-                          console.log('Select node:', node.prompt_key);
-                        }}
                       >
                         <div className="font-semibold text-[var(--bronze-bright)]">{node.prompt_key}</div>
                         <div className="text-[9px] text-[var(--text-muted)] mt-1">

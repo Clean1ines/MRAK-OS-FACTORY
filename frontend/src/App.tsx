@@ -8,7 +8,6 @@ import { ChatCanvas } from './components/ChatCanvas';
 import { client } from './api/client';
 
 function App() {
-  // Используем селекторы вместо прямого доступа к store
   const projects = useAppStore((s) => s.projects);
   const models = useAppStore((s) => s.models);
   const currentProjectId = useAppStore((s) => s.currentProjectId);
@@ -17,7 +16,6 @@ function App() {
   const qReq = useAppStore((s) => s.qReq);
   const isSimpleMode = useAppStore((s) => s.isSimpleMode);
   
-  // Экшены
   const setProjects = useAppStore((s) => s.setProjects);
   const setCurrentProjectId = useAppStore((s) => s.setCurrentProjectId);
   const setSelectedModel = useAppStore((s) => s.setSelectedModel);
@@ -35,10 +33,8 @@ function App() {
         body: { name, description: '' },
       });
       if (res.error) throw new Error(res.error.error || 'Ошибка создания');
-      // @ts-ignore - API возвращает id, даже если тип опциональный
       const newProject = { id: res.data.id, name, description: '' };
       setProjects([...projects, newProject]);
-      // @ts-ignore
       setCurrentProjectId(res.data.id);
       showNotification('Проект создан', 'success');
     } catch (e: any) {

@@ -2,7 +2,7 @@ import createClient from 'openapi-fetch';
 import type { paths, components } from './generated/schema';
 
 export const client = createClient<paths>({
-  baseUrl: '/api',
+  baseUrl: '',  // БЫЛО: '/api' → СТАЛО: ''
   headers: {
     'Content-Type': 'application/json',
   },

@@ -7,6 +7,9 @@ __pycache__/
 venv/
 .pytest_cache/
 project_dump.txt
+generate_tree.py
+
+
 dump_project.py
 # Служебные директории и скрипты
 .mypy_cache/
@@ -46,10 +49,4 @@ docs/
 tree_output.txt
 smee.log
 epic_detailer.py
-# Логи и бинарные файлы установки
-*.log
-*.deb
-
-# Временные выводы
-tree_output.txt
-backup_*.sql
+node_modules

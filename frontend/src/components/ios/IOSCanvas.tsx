@@ -9,6 +9,7 @@ interface IOSCanvasProps {
   edges: EdgeData[];
   onNodesChange: (nodes: NodeData[]) => void;
   onEdgesChange: (edges: EdgeData[]) => void;
+  onAddCustomNode?: (x: number, y: number) => void;
 }
 
 export const IOSCanvas: React.FC<IOSCanvasProps> = ({
@@ -16,6 +17,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   edges,
   onNodesChange,
   onEdgesChange,
+  onAddCustomNode,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
@@ -34,7 +36,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     onEdgesChange(edges);
   }, [edges, onEdgesChange]);
 
-  // Get canvas coordinates from mouse event
   const getCanvasCoords = useCallback((e: React.MouseEvent) => {
     if (!containerRef.current) return { x: 0, y: 0 };
     const rect = containerRef.current.getBoundingClientRect();
@@ -44,18 +45,24 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     };
   }, [pan, scale]);
 
-  // Double-click to add node
+  // FIX #2: Double-click with proper event handling
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
     const { x, y } = getCanvasCoords(e);
-    addNode('IDEA_CLARIFIER', x, y);
+    
+    // Check if custom node creation is enabled
+    if (onAddCustomNode) {
+      onAddCustomNode(x, y);
+    } else {
+      addNode('IDEA_CLARIFIER', x, y);
+    }
+    
     setContextMenu(null);
-    console.log('Double-click at:', x, y);
-  }, [getCanvasCoords, addNode]);
+    console.log('Double-click at:', x, y, 'Nodes count:', nodes.length + 1);
+  }, [getCanvasCoords, addNode, onAddCustomNode, nodes.length]);
 
-  // Right-click for context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -64,14 +71,12 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     setContextMenu({ x: e.clientX, y: e.clientY, canvasX: x, canvasY: y });
   }, [getCanvasCoords]);
 
-  // Add node from context menu
   const addNodeFromMenu = useCallback((prompt_key: string) => {
     if (!contextMenu) return;
     addNode(prompt_key, contextMenu.canvasX, contextMenu.canvasY);
     setContextMenu(null);
   }, [contextMenu, addNode]);
 
-  // Close context menu on left click
   const handleCloseMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
@@ -97,12 +102,10 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
     >
-      {/* Watermark */}
       <div className="absolute top-[15%] left-1/2 -translate-x-1/2 text-6xl font-bold text-[var(--bronze-base)] opacity-[0.03] select-none" style={{ pointerEvents: 'none' }}>
         CRAFT IN SILENCE
       </div>
 
-      {/* Viewport - ВАЖНО: pointer-events-none чтобы клики проходили сквозь */}
       <div
         className="absolute w-full h-full origin-top-left"
         style={{
@@ -110,7 +113,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
           pointerEvents: 'none',
         }}
       >
-        {/* SVG Connections */}
         <svg 
           className="absolute top-0 left-0 w-[20000px] h-[20000px] z-10"
           style={{ pointerEvents: 'none' }}
@@ -155,7 +157,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
           })}
         </svg>
 
-        {/* Nodes - ВАЖНО: pointer-events-auto чтобы можно было драгать */}
         <div style={{ pointerEvents: 'auto' }}>
           {nodes.map(node => (
             <IOSNode
@@ -169,7 +170,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
         </div>
       </div>
 
-      {/* Context Menu */}
       {contextMenu && (
         <div
           className="absolute z-[1000] bg-[var(--ios-glass)] backdrop-blur-md border border-[var(--ios-border)] rounded-lg p-2 shadow-[var(--shadow-heavy)]"
@@ -198,21 +198,20 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
         </div>
       )}
 
-      {/* Scale indicator */}
       <div className="absolute bottom-4 right-4 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-2 py-1 rounded border border-[var(--ios-border)]" style={{ pointerEvents: 'none' }}>
         {Math.round(scale * 100)}%
       </div>
 
-      {/* Instructions */}
-      <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)]" style={{ pointerEvents: 'none' }}>
-        <div>🖱️ Double-click / Right-click: Add node</div>
+      <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)] pointer-events-none">
+        <div>🖱️ Double-click: Custom node</div>
+        <div>🖱️ Right-click: Quick add</div>
         <div>✋ Alt+Drag: Pan canvas</div>
         <div>🎯 Drag node: Move</div>
         <div>🔍 Scroll: Zoom</div>
       </div>
 
-      {/* Debug info (удали после проверки) */}
-      <div className="absolute top-4 right-4 text-[10px] text-[var(--accent-info)] bg-black/80 px-2 py-1 rounded font-mono">
+      {/* FIX #7: Debug info with bronze color instead of blue */}
+      <div className="absolute top-4 right-4 text-[10px] text-[var(--bronze-dim)] bg-black/80 px-2 py-1 rounded font-mono border border-[var(--bronze-dim)]" style={{ pointerEvents: 'none' }}>
         Scale: {scale.toFixed(2)} | Pan: {Math.round(pan.x)}, {Math.round(pan.y)}
       </div>
     </div>

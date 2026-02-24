@@ -29,13 +29,22 @@ export const WorkspacePage: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [showNodeModal, setShowNodeModal] = useState(false);
+  const [newNodePrompt, setNewNodePrompt] = useState('');
 
+  // FIX #1: Load selected project from localStorage on mount
   useEffect(() => {
+    const saved = localStorage.getItem('workspace_selected_project');
+    if (saved) {
+      setSelectedProjectId(saved);
+    }
     loadProjects();
   }, []);
 
+  // FIX #1: Save selected project to localStorage when changed
   useEffect(() => {
     if (selectedProjectId) {
+      localStorage.setItem('workspace_selected_project', selectedProjectId);
       loadWorkflows();
     }
   }, [selectedProjectId]);
@@ -44,7 +53,6 @@ export const WorkspacePage: React.FC = () => {
     try {
       const res = await client.GET('/api/projects');
       if (res.error) throw new Error(res.error.error || 'Failed to load projects');
-      // FIX: type guard + map to required fields
       const projectsData: Project[] = (res.data || []).map((p: any) => ({
         id: p.id!,
         name: p.name!,
@@ -65,7 +73,6 @@ export const WorkspacePage: React.FC = () => {
     try {
       const res = await client.GET('/api/workflows');
       if (res.error) throw new Error(res.error.error || 'Failed to load workflows');
-      // FIX: type guard + map to required fields
       const workflowsData: Workflow[] = (res.data || []).map((w: any) => ({
         id: w.id!,
         name: w.name!,
@@ -116,6 +123,7 @@ export const WorkspacePage: React.FC = () => {
     setWorkflowName('');
   };
 
+  // FIX #3: Create workflow with proper error handling
   const handleSave = async () => {
     if (!workflowName.trim()) {
       alert('⚠️ Введите название workflow');
@@ -199,6 +207,38 @@ export const WorkspacePage: React.FC = () => {
       console.error('❌ Delete error:', e);
       alert('❌ Ошибка удаления: ' + e.message);
     }
+  };
+
+  // FIX #4: Add custom node with prompt
+  const handleAddCustomNode = (x: number, y: number) => {
+    setNewNodePrompt('');
+    setShowNodeModal(true);
+    // Store position for later
+    (window as any)._newNodePosition = { x, y };
+  };
+
+  const confirmAddCustomNode = async () => {
+    if (!newNodePrompt.trim()) {
+      alert('Введите промпт');
+      return;
+    }
+
+    const pos = (window as any)._newNodePosition;
+    if (pos) {
+      // Add node with custom prompt in config
+      const newNode: NodeData = {
+        id: crypto.randomUUID(),
+        node_id: crypto.randomUUID(),
+        prompt_key: 'CUSTOM_PROMPT',
+        position_x: pos.x,
+        position_y: pos.y,
+        config: { custom_prompt: newNodePrompt },
+      };
+      setNodes(prev => [...prev, newNode]);
+    }
+
+    setShowNodeModal(false);
+    setNewNodePrompt('');
   };
 
   return (
@@ -317,13 +357,46 @@ export const WorkspacePage: React.FC = () => {
             </div>
           </header>
 
-          <IOSCanvas nodes={nodes} edges={edges} onNodesChange={setNodes} onEdgesChange={setEdges} />
+          <IOSCanvas 
+            nodes={nodes} 
+            edges={edges} 
+            onNodesChange={setNodes} 
+            onEdgesChange={setEdges}
+            onAddCustomNode={handleAddCustomNode}
+          />
 
-          <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)] pointer-events-none">
-            <div>🖱️ Double-click / Right-click: Add node</div>
-            <div>✋ Alt+Drag: Pan canvas</div>
-            <div>🎯 Drag node: Move</div>
-            <div>🔍 Scroll: Zoom</div>
+          {/* FIX #4: Custom Node Modal */}
+          {showNodeModal && (
+            <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className="bg-[var(--ios-glass)] border border-[var(--ios-border)] rounded-lg p-6 w-[500px] shadow-[var(--shadow-heavy)]">
+                <h3 className="text-lg font-bold text-[var(--bronze-base)] mb-4">Custom Prompt Node</h3>
+                <textarea
+                  value={newNodePrompt}
+                  onChange={(e) => setNewNodePrompt(e.target.value)}
+                  placeholder="Enter your system prompt..."
+                  className="w-full h-40 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded p-3 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)] font-mono"
+                />
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={confirmAddCustomNode}
+                    className="flex-1 px-4 py-2 text-xs font-semibold rounded bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)] transition-colors"
+                  >
+                    Add Node
+                  </button>
+                  <button
+                    onClick={() => setShowNodeModal(false)}
+                    className="flex-1 px-4 py-2 text-xs font-semibold rounded border border-[var(--ios-border)] text-[var(--text-muted)] hover:bg-[var(--ios-glass-bright)] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* FIX #7: Debug info with bronze color */}
+          <div className="absolute top-4 right-4 text-[10px] text-[var(--bronze-dim)] bg-black/80 px-2 py-1 rounded font-mono border border-[var(--bronze-dim)]">
+            Scale: {scale.toFixed(2)} | Pan: {Math.round(pan.x)}, {Math.round(pan.y)}
           </div>
         </div>
       </div>

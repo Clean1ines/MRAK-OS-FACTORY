@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ChatInterface } from './components/ChatInterface';
 import { WorkspacePage } from './components/ios/WorkspacePage';
 import { AuthGuard } from './components/auth/AuthGuard';
+import { LoginPage } from './components/auth/LoginPage';  // //ADDED: Import LoginPage
 
 function App() {
   return (

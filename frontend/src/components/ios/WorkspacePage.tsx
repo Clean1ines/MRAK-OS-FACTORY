@@ -1,8 +1,8 @@
 // frontend/src/components/ios/WorkspacePage.tsx
 import React, { useState } from 'react';
+import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
-import { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 
 export const WorkspacePage: React.FC = () => {
   const [nodes, setNodes] = useState<NodeData[]>([]);
@@ -50,7 +50,6 @@ export const WorkspacePage: React.FC = () => {
 
   return (
     <IOSShell>
-      {/* Header */}
       <header className="h-14 flex items-center justify-between px-6 border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)] backdrop-blur-md z-100">
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-bold text-[var(--bronze-base)]">MRAK-OS Workspace</h1>
@@ -70,7 +69,6 @@ export const WorkspacePage: React.FC = () => {
         </button>
       </header>
 
-      {/* Canvas */}
       <IOSCanvas
         nodes={nodes}
         edges={edges}
@@ -78,12 +76,11 @@ export const WorkspacePage: React.FC = () => {
         onEdgesChange={setEdges}
       />
 
-      {/* Instructions */}
       <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)] pointer-events-none">
-        <div>🖱️ Double-click: Add node</div>
-        <div>✋ Alt+Drag: Pan canvas</div>
-        <div>🎯 Drag node: Move</div>
-        <div>🔍 Scroll: Zoom</div>
+        <div> Double-click: Add node</div>
+        <div> Alt+Drag: Pan canvas</div>
+        <div> Drag node: Move</div>
+        <div> Scroll: Zoom</div>
       </div>
     </IOSShell>
   );

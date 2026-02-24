@@ -11,6 +11,8 @@ export const LoginPage: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('🔐 Login attempt...');
+    
     if (masterKey.length < 8) {
       showNotification('⚠️ Мастер-ключ должен быть не менее 8 символов', 'error');
       return;
@@ -19,16 +21,22 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
+      console.log('📡 Calling api.auth.login...');
       const res = await api.auth.login({ master_key: masterKey });
+      console.log('📥 Login response:', res);
       
       if (res.authenticated || res.status === 'authenticated') {
+        console.log('✅ Login successful, redirecting...');
         showNotification('✅ Успешный вход!', 'success');
-        // Redirect to workspace or home
+        
+        // Force hard reload to ensure cookies are sent
         window.location.href = '/workspace';
       } else {
+        console.error('❌ Login failed:', res);
         showNotification('❌ Ошибка аутентификации', 'error');
       }
     } catch (error) {
+      console.error('❌ Login error:', error);
       showApiError(error, 'Ошибка входа');
     } finally {
       setLoading(false);
@@ -38,7 +46,6 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="min-h-screen w-screen flex items-center justify-center bg-[#000000] bg-[radial-gradient(circle_at_50%_50%,_#1a1a1e_0%,_#000000_100%)]">
       <div className="w-full max-w-md p-8 bg-[rgba(28,28,30,0.65)] backdrop-blur-[40px] border border-[rgba(255,255,255,0.08)] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
-        {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-[#b8956a] tracking-[2px] uppercase mb-2">
             MRAK-OS
@@ -48,7 +55,6 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
             <label className="block text-[10px] text-[#86868b] uppercase tracking-wider mb-2">
@@ -73,7 +79,6 @@ export const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        {/* Security Info */}
         <div className="mt-8 pt-6 border-t border-[rgba(255,255,255,0.08)]">
           <div className="flex items-center gap-2 text-[10px] text-[#86868b]">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

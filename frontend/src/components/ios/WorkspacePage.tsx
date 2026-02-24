@@ -32,7 +32,6 @@ export const WorkspacePage: React.FC = () => {
   const [showNodeModal, setShowNodeModal] = useState(false);
   const [newNodePrompt, setNewNodePrompt] = useState('');
 
-  // FIX #1: Load selected project from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('workspace_selected_project');
     if (saved) {
@@ -41,7 +40,6 @@ export const WorkspacePage: React.FC = () => {
     loadProjects();
   }, []);
 
-  // FIX #1: Save selected project to localStorage when changed
   useEffect(() => {
     if (selectedProjectId) {
       localStorage.setItem('workspace_selected_project', selectedProjectId);
@@ -87,6 +85,7 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
+  // FIX: Properly define data variable with colon
   const loadWorkflow = async (workflowId: string) => {
     try {
       const res = await client.GET('/api/workflows/{workflow_id}', {
@@ -94,7 +93,7 @@ export const WorkspacePage: React.FC = () => {
       });
       if (res.error) throw new Error(res.error.error || 'Failed to load workflow');
       
-      const  any = res.data;
+      const data: any = res.data;  // ← FIX: Added colon
       setNodes((data?.nodes || []).map((n: any) => ({
         id: n.node_id || crypto.randomUUID(),
         node_id: n.node_id,

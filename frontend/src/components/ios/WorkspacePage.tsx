@@ -4,7 +4,7 @@ import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
 import { client } from '../../api/client';
-
+import { api } from '../../api/client';  // //ADDED: Import api for logout
 interface Workflow {
   id: string;
   name: string;

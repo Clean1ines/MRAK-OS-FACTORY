@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ThemeEffects from './styles/ThemeEffects';
 import { useAppStore } from './store/useAppStore';
 import { useProjectData } from './hooks/useProjectData';
@@ -6,8 +7,10 @@ import { useNotification } from './hooks/useNotifications';
 import { Notification } from './components/Notification';
 import { ChatCanvas } from './components/ChatCanvas';
 import { client } from './api/client';
+import { IOSShell } from './components/ios/IOSShell';
 
-function App() {
+// ==================== КОМПОНЕНТ ЧАТА (Старый интерфейс) ====================
+function ChatInterface() {
   const projects = useAppStore((s) => s.projects);
   const models = useAppStore((s) => s.models);
   const currentProjectId = useAppStore((s) => s.currentProjectId);
@@ -62,7 +65,6 @@ function App() {
   return (
     <div className="relative h-screen w-screen bg-[#010509] text-mrak-text font-mono overflow-hidden flex flex-col">
       <ThemeEffects />
-
       {/* NAV */}
       <nav className="h-14 flex items-center justify-between px-6 shrink-0 bg-mrak-nav backdrop-blur-md border-b border-white/5 z-10">
         <div className="flex gap-6">
@@ -104,7 +106,6 @@ function App() {
         </select>
         <button onClick={handleCreateProject} className="text-xs border border-cyan-600/50 px-2 py-1 rounded hover:bg-cyan-900/50">Новый</button>
         <button onClick={handleDeleteProject} className="text-xs border border-red-600/50 px-2 py-1 rounded hover:bg-red-900/50">Удалить</button>
-
         <div className="flex-1" />
         <div className="flex border border-cyan-600/30 rounded overflow-hidden">
           <button
@@ -136,9 +137,43 @@ function App() {
           </div>
         )}
       </main>
-
       <Notification />
     </div>
+  );
+}
+
+// ==================== КОМПОНЕНТ WORKSPACE (Новый iOS) ====================
+function WorkspacePage() {
+  return (
+    <IOSShell>
+      <div className="flex-1 flex items-center justify-center text-bronze-base">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">Workspace Editor</h1>
+          <p className="text-sm opacity-60">iOS Prototype — Coming Soon</p>
+          <a href="/workspace.html" className="mt-4 inline-block text-xs underline opacity-50">
+            Open static HTML version
+          </a>
+        </div>
+      </div>
+    </IOSShell>
+  );
+}
+
+// ==================== ГЛАВНЫЙ APP ====================
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Старый чат интерфейс */}
+        <Route path="/" element={<ChatInterface />} />
+        
+        {/* Новый iOS Workspace (React) */}
+        <Route path="/workspace" element={<WorkspacePage />} />
+        
+        {/* Старый HTML прототип (редирект на React) */}
+        <Route path="/workspace.html" element={<Navigate to="/workspace" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

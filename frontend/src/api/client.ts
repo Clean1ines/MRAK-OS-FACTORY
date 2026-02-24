@@ -9,17 +9,15 @@ export const client = createClient<paths>({
   headers: {
     'Content-Type': 'application/json',
   },
+  // #CHANGED: credentials for cookie sending
   credentials: 'include',
 });
 
 // #ADDED: Register timeout middleware (30s for all requests)
 client.use(createTimeoutMiddleware(30000));
 
-// Authentication now handled via httpOnly cookies set by backend
-
 export const api = {
   projects: {
-    // #CHANGED: All endpoints now have 30s timeout via middleware
     list: () => client.GET('/api/projects'),
     create: (body: components['schemas']['ProjectCreate']) =>
       client.POST('/api/projects', { body }),
@@ -43,33 +41,28 @@ export const api = {
     list: (projectId: string) =>
       client.GET('/api/projects/{project_id}/messages', { params: { path: { project_id: projectId } } }),
   },
-  // Auth endpoints (using raw fetch with timeout)
+  // Auth endpoints (using raw fetch for better cookie control)
   auth: {
     login: async (body: { master_key: string }) => {
-      const { fetchWithTimeout } = await import('./fetchWithTimeout');
-      const res = await fetchWithTimeout('/api/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        credentials: 'include',
-        timeout: 30000,
+        credentials: 'include',  // #CHANGED: Ensure cookies are included
       });
       return res.json();
     },
     logout: async () => {
-      const { fetchWithTimeout } = await import('./fetchWithTimeout');
-      const res = await fetchWithTimeout('/api/auth/logout', {
+      const res = await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include',
-        timeout: 30000,
       });
       return res.json();
     },
     session: async () => {
-      const { fetchWithTimeout } = await import('./fetchWithTimeout');
-      const res = await fetchWithTimeout('/api/auth/session', {
-        credentials: 'include',
-        timeout: 30000,
+      const res = await fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'include',  // #CHANGED: Ensure cookies are included
       });
       return res.json();
     },

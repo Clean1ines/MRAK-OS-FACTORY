@@ -17,12 +17,9 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
 
   const checkAuth = async () => {
     try {
-      console.log('🔍 AuthGuard: Checking session, cookies:', document.cookie);
       const res = await api.auth.session();
-      console.log('🔍 AuthGuard: Session response:', res);
       setIsAuthenticated(res.authenticated === true);
     } catch (error) {
-      console.error('🔍 AuthGuard: Session check failed:', error);
       setIsAuthenticated(false);
     } finally {
       setChecking(false);
@@ -41,10 +38,8 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   }
 
   if (!isAuthenticated) {
-    console.log('🚫 AuthGuard: Not authenticated, showing LoginPage');
     return <LoginPage />;
   }
 
-  console.log('✅ AuthGuard: Authenticated, rendering children');
   return <>{children}</>;
 };

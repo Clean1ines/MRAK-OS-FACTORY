@@ -1,4 +1,4 @@
-# CHANGED: Added tx fixture for repository tests
+# tests/conftest.py
 import os
 import pytest
 import pytest_asyncio
@@ -7,10 +7,11 @@ from fastapi.testclient import TestClient
 from typing import Dict, AsyncGenerator
 import uuid
 from dotenv import load_dotenv
-from types import SimpleNamespace  # ADDED
+from types import SimpleNamespace
 
 load_dotenv()
 
+# Используем отдельную тестовую БД если есть, иначе основную
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", os.getenv("DATABASE_URL"))
 if not TEST_DATABASE_URL:
     raise RuntimeError("TEST_DATABASE_URL or DATABASE_URL must be set")
@@ -38,10 +39,9 @@ async def db_connection():
     try:
         yield conn
     finally:
-        await conn.execute("ROLLBACK")
+        await conn.execute("ROLLBACK")  # ← ОТКАТ всех изменений
         await conn.close()
 
-# ADDED: Fixture that wraps db_connection into an object compatible with repository 'tx' parameter
 @pytest_asyncio.fixture
 async def tx(db_connection):
     """Provides a transaction object with .conn attribute for repository functions."""
@@ -54,7 +54,11 @@ async def test_project(db_connection) -> Dict[str, str]:
         "INSERT INTO projects (id, name, description) VALUES ($1, $2, $3)",
         project_id, "Test Project", "Project for testing"
     )
-    return {"id": project_id, "name": "Test Project"}
+    try:
+        return {"id": project_id, "name": "Test Project"}
+    finally:
+        # Очистка после теста
+        await db_connection.execute("DELETE FROM projects WHERE id = $1", project_id)
 
 @pytest_asyncio.fixture
 async def test_workflow(db_connection, test_project) -> Dict[str, str]:
@@ -63,4 +67,7 @@ async def test_workflow(db_connection, test_project) -> Dict[str, str]:
         "INSERT INTO workflows (id, name, description, is_default) VALUES ($1, $2, $3, $4)",
         workflow_id, "Test Workflow", "WF for testing", False
     )
-    return {"id": workflow_id, "name": "Test Workflow"}
+    try:
+        return {"id": workflow_id, "name": "Test Workflow"}
+    finally:
+        await db_connection.execute("DELETE FROM workflows WHERE id = $1", workflow_id)

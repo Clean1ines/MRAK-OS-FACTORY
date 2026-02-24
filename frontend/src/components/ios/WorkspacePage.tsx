@@ -44,7 +44,12 @@ export const WorkspacePage: React.FC = () => {
     try {
       const res = await client.GET('/api/projects');
       if (res.error) throw new Error(res.error.error || 'Failed to load projects');
-      const projectsData = (res.data || []).filter((p): p is Project => !!p.id);
+      // FIX: type guard + map to required fields
+      const projectsData: Project[] = (res.data || []).map((p: any) => ({
+        id: p.id!,
+        name: p.name!,
+        description: p.description || '',
+      }));
       setProjects(projectsData);
       if (projectsData.length > 0 && !selectedProjectId) {
         setSelectedProjectId(projectsData[0].id);
@@ -60,7 +65,14 @@ export const WorkspacePage: React.FC = () => {
     try {
       const res = await client.GET('/api/workflows');
       if (res.error) throw new Error(res.error.error || 'Failed to load workflows');
-      const workflowsData = (res.data || []).filter((w): w is Workflow => !!w.id);
+      // FIX: type guard + map to required fields
+      const workflowsData: Workflow[] = (res.data || []).map((w: any) => ({
+        id: w.id!,
+        name: w.name!,
+        description: w.description || '',
+        is_default: w.is_default || false,
+        created_at: w.created_at,
+      }));
       setWorkflows(workflowsData);
     } catch (e: any) {
       console.error('❌ Load workflows error:', e);

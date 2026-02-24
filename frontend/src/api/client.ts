@@ -6,25 +6,26 @@ import { createTimeoutMiddleware } from './fetchWithTimeout';
 // Get token from sessionStorage
 const getSessionToken = () => sessionStorage.getItem('mrak_session_token');
 
+// Create client
 export const client = createClient<paths>({
   baseUrl: '',
   headers: {
     'Content-Type': 'application/json',
   },
-  // #ADDED: Middleware to add Authorization header
-  use: [
-    {
-      onRequest({ request }) {
-        const token = getSessionToken();
-        if (token) {
-          request.headers.set('Authorization', `Bearer ${token}`);
-        }
-        return request;
-      },
-    },
-    createTimeoutMiddleware(30000),
-  ],
 });
+
+// #ADDED: Register middleware AFTER creating client
+client.use({
+  onRequest({ request }) {
+    const token = getSessionToken();
+    if (token) {
+      request.headers.set('Authorization', `Bearer ${token}`);
+    }
+    return request;
+  },
+});
+
+client.use(createTimeoutMiddleware(30000));
 
 export const api = {
   projects: {
@@ -59,7 +60,6 @@ export const api = {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      // Save token to sessionStorage
       if (data.session_token) {
         sessionStorage.setItem('mrak_session_token', data.session_token);
       }

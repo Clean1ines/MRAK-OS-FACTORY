@@ -43,3 +43,24 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
+
+/* Мобильная оптимизация */
+@media (max-width: 768px) {
+  .h-screen {
+    height: 100dvh; /* Dynamic viewport height для iOS Safari */
+  }
+  
+  .text-xs {
+    font-size: 0.7rem; /* Чуть крупнее на мобильных */
+  }
+  
+  .px-6 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Запрет зума на iOS */
+* {
+  touch-action: manipulation;
+}

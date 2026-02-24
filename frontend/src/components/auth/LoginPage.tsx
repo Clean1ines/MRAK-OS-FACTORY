@@ -8,45 +8,31 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { showNotification, showApiError } = useNotification();
 
-const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  console.log('🔐 Login attempt...');
-  
-  if (masterKey.length < 8) {
-    showNotification('⚠️ Мастер-ключ должен быть не менее 8 символов', 'error');
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    console.log('📡 Calling api.auth.login...');
-    const res = await api.auth.login({ master_key: masterKey });
-    console.log('📥 Login response:', res);
-    console.log('🍪 Checking cookies after login...', document.cookie);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-    if (res.authenticated || res.status === 'authenticated') {
-      console.log('✅ Login successful, waiting 500ms before redirect...');
-      showNotification('✅ Успешный вход!', 'success');
-      
-      // #CHANGED: Add delay to ensure cookie is set
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      console.log('🔄 Redirecting to /workspace...');
-      // Force hard reload
-      window.location.href = '/workspace';
-    } else {
-      console.error('❌ Login failed:', res);
-      showNotification('❌ Ошибка аутентификации', 'error');
+    if (masterKey.length < 8) {
+      showNotification('⚠️ Мастер-ключ должен быть не менее 8 символов', 'error');
+      return;
     }
-  } catch (error) {
-    console.error('❌ Login error:', error);
-    showApiError(error, 'Ошибка входа');
-  } finally {
-    setLoading(false);
-  }
-};
+
+    setLoading(true);
+
+    try {
+      const res = await api.auth.login({ master_key: masterKey });
+      
+      if (res.authenticated || res.status === 'authenticated') {
+        showNotification('✅ Успешный вход!', 'success');
+        window.location.href = '/workspace';
+      } else {
+        showNotification('❌ Ошибка аутентификации', 'error');
+      }
+    } catch (error) {
+      showApiError(error, 'Ошибка входа');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen w-screen flex items-center justify-center bg-[#000000] bg-[radial-gradient(circle_at_50%_50%,_#1a1a1e_0%,_#000000_100%)]">
@@ -90,7 +76,7 @@ const handleLogin = async (e: React.FormEvent) => {
               <rect x="3" y="11" width="18" height="11" rx="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
-            <span>Session secured with httpOnly cookies</span>
+            <span>Session secured with Bearer token</span>
           </div>
           <div className="flex items-center gap-2 text-[10px] text-[#86868b] mt-2">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

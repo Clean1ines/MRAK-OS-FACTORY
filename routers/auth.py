@@ -1,6 +1,7 @@
 # routers/auth.py
-from fastapi import APIRouter, Response, Request, HTTPException
+from fastapi import APIRouter, Response, Request, HTTPException, Depends, Security
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta
 import os
 import hashlib
@@ -14,6 +15,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 active_sessions = {}
 SESSION_DURATION = timedelta(hours=24)
 SESSION_COOKIE_NAME = "mrak_session"
+
+security = HTTPBearer(auto_error=False)
 
 def generate_session_token(master_key: str) -> str:
     key_hash = hashlib.sha256(master_key.encode()).hexdigest()
@@ -29,9 +32,21 @@ def validate_session(session_token: str) -> bool:
         return False
     return True
 
+def get_current_session(credentials: HTTPAuthorizationCredentials = Security(security)):
+    """Dependency to get current session from Bearer token"""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = credentials.credentials
+    if token not in active_sessions or not validate_session(token):
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    return active_sessions[token]
+
 @router.post("/login")
-async def login(body: dict, response: Response, request: Request):
-    logger.info(f"Login attempt from {request.client.host if request.client else 'unknown'}")
+async def login(body: dict, response: Response):
+    """Login with master key, return session token in JSON"""
+    logger.info(f"Login attempt")
     
     master_key = body.get("master_key")
     
@@ -41,7 +56,7 @@ async def login(body: dict, response: Response, request: Request):
     expected_key = os.getenv("MASTER_KEY")
     if not expected_key:
         if len(master_key) < 8:
-            raise HTTPException(status_code=401, detail="Invalid master key (min 8 characters)")
+            raise HTTPException(status_code=401, detail="Invalid master key")
     else:
         if master_key != expected_key:
             raise HTTPException(status_code=401, detail="Invalid master key")
@@ -56,46 +71,44 @@ async def login(body: dict, response: Response, request: Request):
     
     logger.info(f"Login successful")
     
-    # #CHANGED: secure=True + samesite=none for Firefox compatibility
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=session_token,
-        max_age=int(SESSION_DURATION.total_seconds()),
-        httponly=True,
-        secure=True,      # REQUIRED for HTTPS
-        samesite="lax",   # Changed from "none" - lax works for same-site
-        path="/",
-    )
-    
-    set_cookie_header = response.headers.get('set-cookie', 'NOT SET')
-    logger.info(f"Set-Cookie: {set_cookie_header[:150]}...")
-    
-    return JSONResponse(content={"status": "authenticated", "expires_in": SESSION_DURATION.total_seconds()})
+    # Return token in JSON (NOT in cookie)
+    return JSONResponse(content={
+        "status": "authenticated",
+        "session_token": session_token,  # ← Token in body
+        "expires_in": SESSION_DURATION.total_seconds()
+    })
 
 @router.post("/logout")
-async def logout(response: Response, request: Request):
-    session_token = request.cookies.get(SESSION_COOKIE_NAME)
-    if session_token and session_token in active_sessions:
-        del active_sessions[session_token]
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+async def logout():
+    """Logout - client should clear sessionStorage"""
     return JSONResponse(content={"status": "logged_out"})
 
 @router.get("/session")
-async def get_session(request: Request):
-    all_cookies = dict(request.cookies)
+async def get_session(request: Request, credentials: HTTPAuthorizationCredentials = Security(security)):
+    """Check current session from Bearer token"""
+    # Try Authorization header first
+    if credentials:
+        token = credentials.credentials
+        if token in active_sessions and validate_session(token):
+            session = active_sessions[token]
+            return JSONResponse(content={
+                "authenticated": True,
+                "expires_at": session["expires_at"].isoformat(),
+            })
+    
+    # Fallback to cookie (for backwards compat)
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
-    
-    logger.info(f"Session check: mrak_session present={bool(session_token)}")
-    logger.info(f"All cookies: {list(all_cookies.keys())}")
-    
-    if not session_token:
-        return JSONResponse(content={"authenticated": False})
-    
-    if validate_session(session_token):
+    if session_token and validate_session(session_token):
         session = active_sessions[session_token]
         return JSONResponse(content={
             "authenticated": True,
             "expires_at": session["expires_at"].isoformat(),
         })
-    else:
-        return JSONResponse(content={"authenticated": False})
+    
+    return JSONResponse(content={"authenticated": False})
+
+# Protected route example
+@router.get("/protected")
+async def protected_route(session: dict = Depends(get_current_session)):
+    """Example protected endpoint"""
+    return JSONResponse(content={"message": "You are authenticated", "session": session})

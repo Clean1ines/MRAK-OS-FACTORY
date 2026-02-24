@@ -3,18 +3,28 @@ import createClient from 'openapi-fetch';
 import type { paths, components } from './generated/schema';
 import { createTimeoutMiddleware } from './fetchWithTimeout';
 
-// #CHANGED: Add timeout middleware to client
+// Get token from sessionStorage
+const getSessionToken = () => sessionStorage.getItem('mrak_session_token');
+
 export const client = createClient<paths>({
   baseUrl: '',
   headers: {
     'Content-Type': 'application/json',
   },
-  // #CHANGED: credentials for cookie sending
-  credentials: 'include',
+  // #ADDED: Middleware to add Authorization header
+  use: [
+    {
+      onRequest({ request }) {
+        const token = getSessionToken();
+        if (token) {
+          request.headers.set('Authorization', `Bearer ${token}`);
+        }
+        return request;
+      },
+    },
+    createTimeoutMiddleware(30000),
+  ],
 });
-
-// #ADDED: Register timeout middleware (30s for all requests)
-client.use(createTimeoutMiddleware(30000));
 
 export const api = {
   projects: {
@@ -41,28 +51,30 @@ export const api = {
     list: (projectId: string) =>
       client.GET('/api/projects/{project_id}/messages', { params: { path: { project_id: projectId } } }),
   },
-  // Auth endpoints (using raw fetch for better cookie control)
   auth: {
     login: async (body: { master_key: string }) => {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        credentials: 'include',  // #CHANGED: Ensure cookies are included
       });
-      return res.json();
+      const data = await res.json();
+      // Save token to sessionStorage
+      if (data.session_token) {
+        sessionStorage.setItem('mrak_session_token', data.session_token);
+      }
+      return data;
     },
     logout: async () => {
+      sessionStorage.removeItem('mrak_session_token');
       const res = await fetch('/api/auth/logout', {
         method: 'POST',
-        credentials: 'include',
       });
       return res.json();
     },
     session: async () => {
       const res = await fetch('/api/auth/session', {
         method: 'GET',
-        credentials: 'include',  // #CHANGED: Ensure cookies are included
       });
       return res.json();
     },

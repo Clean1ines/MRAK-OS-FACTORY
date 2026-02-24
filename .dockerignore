@@ -1,69 +1,59 @@
-# Системные и временные файлы
-.git/
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 .mypy_cache/
 .pytest_cache/
-__pycache__/
 venv/
+.venv/
 .env
-*.pyc
-*.log
-*.sql
 
-# Локальные скрипты и конфиги
-.pre-commit-config.yaml
-.streamlit/
-app.log
+# Tests
+tests/
+pytest.ini
+.conftest.py
+
+# Node (локальный, не нужен в Docker)
+node_modules/
+frontend/node_modules/
+
+# Build artifacts (собираются внутри Docker)
+frontend/dist/
+
+# Documentation
+*.md
+LICENSE
+README.md
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local scripts (не нужны в рантайме)
 check_db.py
 generate_tree.py
 index_project.py
 init_db.sql
 keep_alive.py
+generate_tree.py
 project_dump.txt
-pytest.ini
-tests/
+tree_output.txt
 
-# Артефакты сборки и документация
-*.md
-LICENSE
-requirements-dev.txt
-pytest.ini
-tests/
-__pycache__/
-*.pyc
-.mypy_cache/
-.pytest_cache/
-.env
-.git
-.gitignore
-README.md
-
-# Сгенерированные артефакты
+# Dumps
 MRAK_*.json
 epic_details/
 docs/
-
-# Скрипты и файлы, не нужные в рантайме
-epic_detailer.py
-check_db.py
-generate_tree.py
-index_project.py
-init_db.sql
-keep_alive.py
-
-# Тесты и конфиги тестов
-tests/
-pytest.ini
-
-# Документация и прочее
-*.md
-LICENSE
-
-# Логи и установочные файлы
-*.log
-*.deb
-tree_output.txt
-
-node_modules/
-frontend/node_modules/
-frontend/dist/
-*.md

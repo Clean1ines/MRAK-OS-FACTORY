@@ -1,33 +1,31 @@
+# ==================== STAGE 1: Build Frontend ====================
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Копируем только package файлы (кэш зависимостей)
+COPY frontend/package*.json ./
+RUN npm ci
+
+# Копируем исходники и собираем
+COPY frontend/ ./
+RUN npm run build
+
+# ==================== STAGE 2: Python Runtime ====================
 FROM python:3.10-slim
 
 WORKDIR /app
-
-# Установить Node.js для сборки фронтенда
-RUN apt-get update && apt-get install -y \
-    curl \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
 
 # Python зависимости
 COPY requirements-prod.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копировать весь проект
+# Копируем бэкенд
 COPY . .
 
-# Собрать фронтенд
-WORKDIR /app/frontend
-RUN npm ci
-RUN npm run build
-
-# Настроить статику
-WORKDIR /app
-RUN mkdir -p static
-RUN cp -r frontend/dist/* static/
+# Копируем собранный фронтенд из Stage 1
+COPY --from=frontend-builder /app/frontend/dist /app/static
 
 EXPOSE 8000
 
-# Запустить сервер
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

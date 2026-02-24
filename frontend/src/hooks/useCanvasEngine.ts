@@ -1,5 +1,6 @@
 // frontend/src/hooks/useCanvasEngine.ts
 import { useState, useCallback, useRef } from 'react';
+import type { NodeData, EdgeData } from './useCanvasEngine';
 
 export interface NodeData {
   id: string;
@@ -16,11 +17,26 @@ export interface EdgeData {
   target_node: string;
 }
 
-export const useCanvasEngine = () => {
+interface UseCanvasEngineReturn {
+  pan: { x: number; y: number };
+  scale: number;
+  selectedNode: string | null;
+  handleWheel: (e: React.WheelEvent, containerRect: DOMRect) => void;
+  handlePanStart: (e: React.MouseEvent) => void;
+  handleMouseMove: (e: React.MouseEvent) => void;
+  handleMouseUp: () => void;
+  handleNodeDragStart: (nodeId: string, e: React.MouseEvent) => void;
+  setSelectedNode: (id: string | null) => void;
+}
+
+export const useCanvasEngine = (
+  nodes: NodeData[],
+  edges: EdgeData[],
+  setNodes: (nodes: NodeData[]) => void,
+  setEdges: (edges: EdgeData[]) => void
+): UseCanvasEngineReturn => {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
-  const [nodes, setNodes] = useState<NodeData[]>([]);
-  const [edges, setEdges] = useState<EdgeData[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
@@ -59,7 +75,8 @@ export const useCanvasEngine = () => {
         y: e.clientY - mouseStart.current.y,
       });
     } else if (draggedNode) {
-      setNodes(prev => prev.map(node => {
+      // FIX: Update parent state directly
+      setNodes(nodes.map(node => {
         if (node.node_id === draggedNode) {
           return {
             ...node,
@@ -70,7 +87,7 @@ export const useCanvasEngine = () => {
         return node;
       }));
     }
-  }, [isPanning, draggedNode, pan, scale]);
+  }, [isPanning, draggedNode, pan, scale, nodes, setNodes]);
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);
@@ -83,26 +100,15 @@ export const useCanvasEngine = () => {
     setSelectedNode(nodeId);
   }, []);
 
-  const addNode = useCallback((prompt_key: string, x: number, y: number) => {
-    const newNode: NodeData = {
-      id: crypto.randomUUID(),
-      node_id: crypto.randomUUID(),
-      prompt_key,
-      position_x: x,
-      position_y: y,
-      config: {},
-    };
-    setNodes(prev => [...prev, newNode]);
-  }, []);
-
-  const removeNode = useCallback((nodeId: string) => {
-    setNodes(prev => prev.filter(n => n.node_id !== nodeId));
-    setEdges(prev => prev.filter(e => e.source_node !== nodeId && e.target_node !== nodeId));
-  }, []);
-
   return {
-    pan, scale, nodes, edges, selectedNode,
-    handleWheel, handlePanStart, handleMouseMove, handleMouseUp,
-    handleNodeDragStart, addNode, removeNode, setNodes, setEdges,
+    pan,
+    scale,
+    selectedNode,
+    handleWheel,
+    handlePanStart,
+    handleMouseMove,
+    handleMouseUp,
+    handleNodeDragStart,
+    setSelectedNode,
   };
 };

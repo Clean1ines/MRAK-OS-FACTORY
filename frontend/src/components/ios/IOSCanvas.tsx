@@ -22,19 +22,18 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
   
+  // FIX: Pass nodes/edges/setNodes/setEdges to hook
   const {
-    pan, scale, selectedNode,
-    handleWheel, handlePanStart, handleMouseMove, handleMouseUp,
-    handleNodeDragStart, addNode, removeNode,
-  } = useCanvasEngine();
-
-  React.useEffect(() => {
-    onNodesChange(nodes);
-  }, [nodes, onNodesChange]);
-
-  React.useEffect(() => {
-    onEdgesChange(edges);
-  }, [edges, onEdgesChange]);
+    pan,
+    scale,
+    selectedNode,
+    handleWheel,
+    handlePanStart,
+    handleMouseMove,
+    handleMouseUp,
+    handleNodeDragStart,
+    setSelectedNode,
+  } = useCanvasEngine(nodes, edges, onNodesChange, onEdgesChange);
 
   const getCanvasCoords = useCallback((e: React.MouseEvent) => {
     if (!containerRef.current) return { x: 0, y: 0 };
@@ -45,23 +44,18 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     };
   }, [pan, scale]);
 
-  // FIX #2: Double-click with proper event handling
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
     const { x, y } = getCanvasCoords(e);
     
-    // Check if custom node creation is enabled
     if (onAddCustomNode) {
       onAddCustomNode(x, y);
-    } else {
-      addNode('IDEA_CLARIFIER', x, y);
     }
     
     setContextMenu(null);
-    console.log('Double-click at:', x, y, 'Nodes count:', nodes.length + 1);
-  }, [getCanvasCoords, addNode, onAddCustomNode, nodes.length]);
+  }, [getCanvasCoords, onAddCustomNode]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -71,11 +65,29 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     setContextMenu({ x: e.clientX, y: e.clientY, canvasX: x, canvasY: y });
   }, [getCanvasCoords]);
 
+  // FIX: Add node from menu with proper state update
   const addNodeFromMenu = useCallback((prompt_key: string) => {
     if (!contextMenu) return;
-    addNode(prompt_key, contextMenu.canvasX, contextMenu.canvasY);
+    
+    const newNode: NodeData = {
+      id: crypto.randomUUID(),
+      node_id: crypto.randomUUID(),
+      prompt_key,
+      position_x: contextMenu.canvasX,
+      position_y: contextMenu.canvasY,
+      config: {},
+    };
+    
+    onNodesChange([...nodes, newNode]);
     setContextMenu(null);
-  }, [contextMenu, addNode]);
+  }, [contextMenu, nodes, onNodesChange]);
+
+  // FIX: Delete node with proper state update
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    onNodesChange(nodes.filter(n => n.node_id !== nodeId));
+    onEdgesChange(edges.filter(e => e.source_node !== nodeId && e.target_node !== nodeId));
+    setSelectedNode(null);
+  }, [nodes, edges, onNodesChange, onEdgesChange, setSelectedNode]);
 
   const handleCloseMenu = useCallback(() => {
     setContextMenu(null);
@@ -164,7 +176,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
               node={node}
               isSelected={selectedNode === node.node_id}
               onDragStart={handleNodeDragStart}
-              onDelete={removeNode}
+              onDelete={handleDeleteNode}
             />
           ))}
         </div>
@@ -210,7 +222,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
         <div>🔍 Scroll: Zoom</div>
       </div>
 
-      {/* FIX #7: Debug info with bronze color instead of blue */}
       <div className="absolute top-4 right-4 text-[10px] text-[var(--bronze-dim)] bg-black/80 px-2 py-1 rounded font-mono border border-[var(--bronze-dim)]" style={{ pointerEvents: 'none' }}>
         Scale: {scale.toFixed(2)} | Pan: {Math.round(pan.x)}, {Math.round(pan.y)}
       </div>

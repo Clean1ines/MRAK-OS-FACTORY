@@ -5,7 +5,11 @@
     "dev": "concurrently \"uvicorn server:app --reload\" \"cd frontend && npm run dev\""
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@vitest/ui": "^4.0.18",
+    "concurrently": "^9.1.2",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.2.0",

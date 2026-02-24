@@ -1,6 +1,6 @@
 // frontend/src/hooks/useCanvasEngine.ts
 import { useState, useCallback, useRef } from 'react';
-import type { NodeData, EdgeData } from './useCanvasEngine';
+// #CHANGED: Removed self-import (NodeData/EdgeData defined below)
 
 export interface NodeData {
   id: string;
@@ -75,7 +75,6 @@ export const useCanvasEngine = (
         y: e.clientY - mouseStart.current.y,
       });
     } else if (draggedNode) {
-      // FIX: Update parent state directly
       setNodes(nodes.map(node => {
         if (node.node_id === draggedNode) {
           return {

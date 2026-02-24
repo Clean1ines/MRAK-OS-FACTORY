@@ -89,7 +89,7 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
-  // #CHANGED: Fixed type annotation (added colon)
+  // #CHANGED: Fixed variable declaration (added 'data:' before 'any')
   const loadWorkflow = async (workflowId: string) => {
     try {
       const res = await client.GET('/api/workflows/{workflow_id}', {
@@ -97,7 +97,7 @@ export const WorkspacePage: React.FC = () => {
       });
       if (res.error) throw new Error(res.error.error || 'Failed to load workflow');
       
-      const  any = res.data;  // ← FIX: Added colon
+      const data: any = res.data;  // ← FIX: Added 'data:' variable name
       setNodes((data?.nodes || []).map((n: any) => ({
         id: n.node_id || crypto.randomUUID(),
         node_id: n.node_id,

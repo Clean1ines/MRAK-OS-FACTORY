@@ -415,6 +415,19 @@ export const WorkspacePage: React.FC = () => {
               >
                 {loading ? 'Saving...' : (currentWorkflowId ? 'Update' : 'Save')} Workflow
               </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await api.auth.logout();
+                    window.location.href = '/login';
+                  } catch (error) {
+                    console.error('Logout error:', error);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded border border-[var(--ios-border)] text-[var(--text-muted)] hover:bg-[var(--ios-glass-bright)] transition-colors"
+              >
+                🚪 Logout
+              </button>
             </div>
           </header>
 

@@ -30,12 +30,10 @@ export const WorkspacePage: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  // Загрузка проектов
   useEffect(() => {
     loadProjects();
   }, []);
 
-  // Загрузка workflow при выборе проекта
   useEffect(() => {
     if (selectedProjectId) {
       loadWorkflows();
@@ -45,11 +43,11 @@ export const WorkspacePage: React.FC = () => {
   const loadProjects = async () => {
     try {
       const res = await client.GET('/api/projects');
-      if (res.error) throw new Error(res.error.message || 'Failed to load projects');
-      setProjects(res.data || []);
-      // Авто-выбор первого проекта
-      if (res.data && res.data.length > 0 && !selectedProjectId) {
-        setSelectedProjectId(res.data[0].id);
+      if (res.error) throw new Error(res.error.error || 'Failed to load projects');
+      const projectsData = (res.data || []).filter((p): p is Project => !!p.id);
+      setProjects(projectsData);
+      if (projectsData.length > 0 && !selectedProjectId) {
+        setSelectedProjectId(projectsData[0].id);
       }
     } catch (e: any) {
       console.error('❌ Load projects error:', e);
@@ -61,8 +59,9 @@ export const WorkspacePage: React.FC = () => {
     if (!selectedProjectId) return;
     try {
       const res = await client.GET('/api/workflows');
-      if (res.error) throw new Error(res.error.message || 'Failed to load workflows');
-      setWorkflows(res.data || []);
+      if (res.error) throw new Error(res.error.error || 'Failed to load workflows');
+      const workflowsData = (res.data || []).filter((w): w is Workflow => !!w.id);
+      setWorkflows(workflowsData);
     } catch (e: any) {
       console.error('❌ Load workflows error:', e);
       alert('Ошибка загрузки workflow: ' + e.message);
@@ -74,13 +73,24 @@ export const WorkspacePage: React.FC = () => {
       const res = await client.GET('/api/workflows/{workflow_id}', {
         params: { path: { workflow_id: workflowId } }
       });
-      if (res.error) throw new Error(res.error.message || 'Failed to load workflow');
+      if (res.error) throw new Error(res.error.error || 'Failed to load workflow');
       
       const data: any = res.data;
-      setNodes(data.nodes || []);
-      setEdges(data.edges || []);
+      setNodes((data?.nodes || []).map((n: any) => ({
+        id: n.node_id || crypto.randomUUID(),
+        node_id: n.node_id,
+        prompt_key: n.prompt_key || 'UNKNOWN',
+        position_x: n.position_x || 0,
+        position_y: n.position_y || 0,
+        config: n.config || {},
+      })));
+      setEdges((data?.edges || []).map((e: any) => ({
+        id: e.id || crypto.randomUUID(),
+        source_node: e.source_node,
+        target_node: e.target_node,
+      })));
       setCurrentWorkflowId(workflowId);
-      setWorkflowName(data.workflow?.name || '');
+      setWorkflowName(data?.workflow?.name || '');
     } catch (e: any) {
       console.error('❌ Load workflow error:', e);
       alert('Ошибка загрузки workflow: ' + e.message);
@@ -114,13 +124,7 @@ export const WorkspacePage: React.FC = () => {
       
       const method = currentWorkflowId ? 'PUT' : 'POST';
 
-      console.log('💾 Saving workflow:', {
-        url,
-        method,
-        name: workflowName,
-        nodes: nodes.length,
-        edges: edges.length
-      });
+      console.log('💾 Saving workflow:', { url, method, name: workflowName, nodes: nodes.length, edges: edges.length });
 
       const res = await fetch(url, {
         method,
@@ -174,7 +178,7 @@ export const WorkspacePage: React.FC = () => {
         params: { path: { workflow_id: currentWorkflowId } }
       });
 
-      if (res.error) throw new Error(res.error.message || 'Failed to delete');
+      if (res.error) throw new Error(res.error.error || 'Failed to delete');
 
       createNewWorkflow();
       loadWorkflows();
@@ -188,10 +192,8 @@ export const WorkspacePage: React.FC = () => {
   return (
     <IOSShell>
       <div className="flex h-full">
-        {/* Sidebar */}
         {sidebarOpen && (
           <aside className="w-64 bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col z-50">
-            {/* Project Selector */}
             <div className="p-3 border-b border-[var(--ios-border)]">
               <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">
                 Project
@@ -208,15 +210,11 @@ export const WorkspacePage: React.FC = () => {
               </select>
             </div>
 
-            {/* Header */}
             <div className="h-12 flex items-center justify-between px-4 border-b border-[var(--ios-border)]">
               <span className="text-xs font-bold text-[var(--bronze-base)] uppercase tracking-wider">
                 Workflows
               </span>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              >
+              <button onClick={() => setSidebarOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -224,7 +222,6 @@ export const WorkspacePage: React.FC = () => {
               </button>
             </div>
 
-            {/* New Workflow Button */}
             <div className="p-3 border-b border-[var(--ios-border)]">
               <button
                 onClick={createNewWorkflow}
@@ -239,16 +236,11 @@ export const WorkspacePage: React.FC = () => {
               </button>
             </div>
 
-            {/* Workflow List */}
             <div className="flex-1 overflow-y-auto p-2">
               {!selectedProjectId ? (
-                <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">
-                  ⚠️ Select a project first
-                </div>
+                <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">⚠️ Select a project first</div>
               ) : workflows.length === 0 ? (
-                <div className="text-[10px] text-[var(--text-muted)] text-center py-4">
-                  No workflows yet
-                </div>
+                <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No workflows yet</div>
               ) : (
                 workflows.map(wf => (
                   <button
@@ -261,31 +253,23 @@ export const WorkspacePage: React.FC = () => {
                     }`}
                   >
                     <div className="font-semibold truncate">{wf.name}</div>
-                    <div className="text-[9px] opacity-60 truncate">
-                      {wf.description || 'No description'}
-                    </div>
+                    <div className="text-[9px] opacity-60 truncate">{wf.description || 'No description'}</div>
                   </button>
                 ))
               )}
             </div>
 
-            {/* Footer */}
             <div className="p-3 border-t border-[var(--ios-border)] text-[9px] text-[var(--text-muted)] text-center">
               {workflows.length} workflow{workflows.length !== 1 ? 's' : ''}
             </div>
           </aside>
         )}
 
-        {/* Main Content */}
         <div className="flex-1 flex flex-col">
-          {/* Header */}
           <header className="h-14 flex items-center justify-between px-6 border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)] backdrop-blur-md z-100">
             <div className="flex items-center gap-4">
               {!sidebarOpen && (
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
-                >
+                <button onClick={() => setSidebarOpen(true)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="3" y1="12" x2="21" y2="12" />
                     <line x1="3" y1="6" x2="21" y2="6" />
@@ -297,14 +281,10 @@ export const WorkspacePage: React.FC = () => {
                 {currentWorkflowId ? workflowName : 'New Workflow'}
               </h1>
               {currentWorkflowId && (
-                <span className="text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-2 py-0.5 rounded border border-[var(--ios-border)]">
-                  Editing
-                </span>
+                <span className="text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-2 py-0.5 rounded border border-[var(--ios-border)]">Editing</span>
               )}
               {loading && (
-                <span className="text-[10px] text-[var(--accent-info)] animate-pulse">
-                  Saving...
-                </span>
+                <span className="text-[10px] text-[var(--accent-info)] animate-pulse">Saving...</span>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -325,15 +305,8 @@ export const WorkspacePage: React.FC = () => {
             </div>
           </header>
 
-          {/* Canvas */}
-          <IOSCanvas
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={setNodes}
-            onEdgesChange={setEdges}
-          />
+          <IOSCanvas nodes={nodes} edges={edges} onNodesChange={setNodes} onEdgesChange={setEdges} />
 
-          {/* Instructions */}
           <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)] pointer-events-none">
             <div>🖱️ Double-click / Right-click: Add node</div>
             <div>✋ Alt+Drag: Pan canvas</div>

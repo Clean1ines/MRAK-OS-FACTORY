@@ -1,6 +1,6 @@
 // frontend/src/components/ChatInterface.tsx
 import { useState } from 'react';
-import ThemeEffects from './styles/ThemeEffects';
+import ThemeEffects from '../styles/ThemeEffects';
 import { useAppStore } from '../store/useAppStore';
 import { useProjectData } from '../hooks/useProjectData';
 import { useNotification } from '../hooks/useNotifications';

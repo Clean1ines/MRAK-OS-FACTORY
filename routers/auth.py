@@ -11,80 +11,62 @@ logger = logging.getLogger("MRAK-SERVER")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Session storage (in production: use Redis)
 active_sessions = {}
-
-# Session configuration
 SESSION_DURATION = timedelta(hours=24)
 SESSION_COOKIE_NAME = "mrak_session"
 
-# #CHANGED: Disable secure for debugging - Render HTTPS works without it
-IS_HTTPS = os.getenv("IS_HTTPS", "false").lower() == "true"
-
 def generate_session_token(master_key: str) -> str:
-    """Generate secure session token from master key."""
     key_hash = hashlib.sha256(master_key.encode()).hexdigest()
     session_salt = secrets.token_hex(16)
     return f"{key_hash[:32]}:{session_salt}"
 
 def validate_session(session_token: str) -> bool:
-    """Validate session token."""
     if session_token not in active_sessions:
         return False
-    
     session = active_sessions[session_token]
     if datetime.now() > session["expires_at"]:
         del active_sessions[session_token]
         return False
-    
     return True
 
 @router.post("/login")
 async def login(body: dict, response: Response, request: Request):
-    """Login with master key, set httpOnly cookie."""
     logger.info(f"Login attempt from {request.client.host if request.client else 'unknown'}")
     
     master_key = body.get("master_key")
     
     if not master_key:
-        logger.warning("Login failed: no master_key provided")
         raise HTTPException(status_code=400, detail="Master key required")
     
-    # Validate master key
     expected_key = os.getenv("MASTER_KEY")
     if not expected_key:
         if len(master_key) < 8:
-            logger.warning("Login failed: master_key too short")
             raise HTTPException(status_code=401, detail="Invalid master key (min 8 characters)")
     else:
         if master_key != expected_key:
-            logger.warning("Login failed: master_key mismatch")
             raise HTTPException(status_code=401, detail="Invalid master key")
     
-    # Generate session token
     session_token = generate_session_token(master_key)
     
-    # Store session
     active_sessions[session_token] = {
         "created_at": datetime.now(),
         "expires_at": datetime.now() + SESSION_DURATION,
         "master_key_hash": hashlib.sha256(master_key.encode()).hexdigest(),
     }
     
-    logger.info(f"Login successful, setting cookie (secure={IS_HTTPS}, samesite=lax)")
+    logger.info(f"Login successful")
     
-    # Set httpOnly cookie
+    # #CHANGED: secure=True + samesite=none for Firefox compatibility
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_token,
         max_age=int(SESSION_DURATION.total_seconds()),
         httponly=True,
-        secure=IS_HTTPS,  # #CHANGED: false for debugging
-        samesite="lax",
+        secure=True,      # REQUIRED for HTTPS
+        samesite="lax",   # Changed from "none" - lax works for same-site
         path="/",
     )
     
-    # Log the Set-Cookie header
     set_cookie_header = response.headers.get('set-cookie', 'NOT SET')
     logger.info(f"Set-Cookie: {set_cookie_header[:150]}...")
     
@@ -92,21 +74,14 @@ async def login(body: dict, response: Response, request: Request):
 
 @router.post("/logout")
 async def logout(response: Response, request: Request):
-    """Logout and clear session cookie."""
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
-    
     if session_token and session_token in active_sessions:
         del active_sessions[session_token]
-        logger.info(f"Logout: session {session_token[:16]}... deleted")
-    
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
-    
     return JSONResponse(content={"status": "logged_out"})
 
 @router.get("/session")
 async def get_session(request: Request):
-    """Check current session status."""
-    # Log all cookies received
     all_cookies = dict(request.cookies)
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
     
@@ -118,11 +93,9 @@ async def get_session(request: Request):
     
     if validate_session(session_token):
         session = active_sessions[session_token]
-        logger.info(f"Session valid, expires: {session['expires_at']}")
         return JSONResponse(content={
             "authenticated": True,
             "expires_at": session["expires_at"].isoformat(),
         })
     else:
-        logger.info("Session invalid or expired")
         return JSONResponse(content={"authenticated": False})

@@ -24,6 +24,9 @@ if not TEST_DATABASE_URL:
 # Override DATABASE_URL for the app during tests
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
+# #ADDED: Enable test mode to bypass authentication middleware
+os.environ["TEST_MODE"] = "true"
+
 from server import app
 import db
 

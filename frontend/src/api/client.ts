@@ -1,23 +1,18 @@
+// frontend/src/api/client.ts
 import createClient from 'openapi-fetch';
 import type { paths, components } from './generated/schema';
 
 export const client = createClient<paths>({
-  baseUrl: '',  // БЫЛО: '/api' → СТАЛО: ''
+  baseUrl: '',
   headers: {
     'Content-Type': 'application/json',
   },
+  // #CHANGED: Removed setAuthToken - cookies handled automatically by browser
+  credentials: 'include', // //ADDED: Include cookies in requests
 });
 
-export const setAuthToken = (token: string | null) => {
-  if (token) {
-    client.use({
-      onRequest({ request }) {
-        request.headers.set('X-Master-Key', token);
-        return request;
-      },
-    });
-  }
-};
+// #CHANGED: Removed setAuthToken function - security risk (localStorage XSS)
+// Authentication now handled via httpOnly cookies set by backend
 
 export const api = {
   projects: {
@@ -43,5 +38,14 @@ export const api = {
   messages: {
     list: (projectId: string) =>
       client.GET('/api/projects/{project_id}/messages', { params: { path: { project_id: projectId } } }),
+  },
+  // //ADDED: Auth endpoints
+  auth: {
+    login: (body: { master_key: string }) =>
+      client.POST('/api/auth/login', { body }),
+    logout: () =>
+      client.POST('/api/auth/logout'),
+    session: () =>
+      client.GET('/api/auth/session'),
   },
 };

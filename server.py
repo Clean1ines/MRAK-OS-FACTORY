@@ -1,12 +1,12 @@
+# server.py
 # CHANGED: Removed compute_content_hash, imported from utils if needed (currently not used)
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import logging
-from routers import projects, artifacts, clarification, workflows, modes
+from routers import projects, artifacts, clarification, workflows, modes, auth
 import db
 import os
-# from utils.hash import compute_content_hash  # не используется сейчас
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MRAK-SERVER")
@@ -19,6 +19,7 @@ app.include_router(artifacts.router)
 app.include_router(clarification.router)
 app.include_router(workflows.router)
 app.include_router(modes.router)
+app.include_router(auth.router)
 
 # ==================== STARTUP ====================
 @app.on_event("startup")
@@ -31,6 +32,43 @@ async def startup_event():
         logger.info("Database connection OK.")
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
+
+# ==================== MIDDLEWARE ====================
+@app.middleware("http")
+async def validate_session_middleware(request: Request, call_next):
+    # #CHANGED: Skip auth for test mode
+    if os.getenv("TEST_MODE") == "true":
+        return await call_next(request)
+    
+    # Skip auth endpoints
+    if request.url.path.startswith("/api/auth"):
+        return await call_next(request)
+    
+    # Skip static files
+    if request.url.path.startswith("/assets"):
+        return await call_next(request)
+    
+    # Check session for API requests
+    if request.url.path.startswith("/api"):
+        session_token = request.cookies.get("mrak_session")
+        
+        if not session_token:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required"}
+            )
+        
+        # Validate session (import from auth router)
+        from routers.auth import validate_session
+        if not validate_session(session_token):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Session expired or invalid"}
+            )
+    
+    return await call_next(request)
 
 # ==================== STATIC FILES ====================
 from pathlib import Path

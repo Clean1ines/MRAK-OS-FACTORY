@@ -922,6 +922,30 @@ document.addEventListener('DOMContentLoaded', () => {
     initStars();
     console.log("MRAK-OS iOS Kernel Loaded.");
 });
+
+// Загрузка проектов из API
+async function loadProjects() {
+  const res = await fetch('/api/projects');
+  const projects = await res.json();
+  console.log('Projects:', projects);
+  // Дальше используй данные для рендеринга в sidebar
+}
+
+// Загрузка workflow
+async function loadWorkflows() {
+  const res = await fetch('/api/workflows');
+  const workflows = await res.json();
+  console.log('Workflows:', workflows);
+}
+
+// Запуск при загрузке
+document.addEventListener('DOMContentLoaded', () => {
+  loadProjects();
+  loadWorkflows();
+  window.Engine = new MrakCanvas();
+  initStars();
+});
+
 </script>
 </body>
 </html>

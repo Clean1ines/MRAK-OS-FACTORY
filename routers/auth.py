@@ -18,8 +18,8 @@ active_sessions = {}
 SESSION_DURATION = timedelta(hours=24)
 SESSION_COOKIE_NAME = "mrak_session"
 
-# #CHANGED: Make secure configurable for HTTP/HTTPS
-IS_HTTPS = os.getenv("IS_HTTPS", "true").lower() == "true"
+# #CHANGED: Disable secure for now - debug cookie issues
+IS_HTTPS = os.getenv("IS_HTTPS", "false").lower() == "true"  # Changed default to false
 
 def generate_session_token(master_key: str) -> str:
     """Generate secure session token from master key."""
@@ -72,7 +72,7 @@ async def login(body: dict, response: Response, request: Request):
         "master_key_hash": hashlib.sha256(master_key.encode()).hexdigest(),
     }
     
-    logger.info(f"Login successful, setting cookie (secure={IS_HTTPS})")
+    logger.info(f"Login successful, setting cookie (secure={IS_HTTPS}, samesite=lax)")
     
     # Set httpOnly cookie
     response.set_cookie(
@@ -80,10 +80,14 @@ async def login(body: dict, response: Response, request: Request):
         value=session_token,
         max_age=int(SESSION_DURATION.total_seconds()),
         httponly=True,
-        secure=IS_HTTPS,  # #CHANGED: Configurable
+        secure=IS_HTTPS,  # #CHANGED: Set to false for debugging
         samesite="lax",
         path="/",
+        # #ADDED: Don't set domain - use default
     )
+    
+    # Log cookie header for debugging
+    logger.info(f"Set-Cookie header: {response.headers.get('set-cookie', 'NOT SET')[:100]}...")
     
     return JSONResponse(content={"status": "authenticated", "expires_in": SESSION_DURATION.total_seconds()})
 
@@ -105,7 +109,9 @@ async def get_session(request: Request):
     """Check current session status."""
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
     
-    logger.info(f"Session check: cookie present={bool(session_token)}")
+    # #CHANGED: Log all cookies for debugging
+    all_cookies = request.cookies
+    logger.info(f"Session check: cookie present={bool(session_token)}, all cookies: {list(all_cookies.keys())}")
     
     if not session_token:
         return JSONResponse(content={"authenticated": False})

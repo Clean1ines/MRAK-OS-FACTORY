@@ -8,40 +8,45 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { showNotification, showApiError } = useNotification();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    console.log('🔐 Login attempt...');
-    
-    if (masterKey.length < 8) {
-      showNotification('⚠️ Мастер-ключ должен быть не менее 8 символов', 'error');
-      return;
-    }
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  console.log('🔐 Login attempt...');
+  
+  if (masterKey.length < 8) {
+    showNotification('⚠️ Мастер-ключ должен быть не менее 8 символов', 'error');
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    try {
-      console.log('📡 Calling api.auth.login...');
-      const res = await api.auth.login({ master_key: masterKey });
-      console.log('📥 Login response:', res);
+  try {
+    console.log('📡 Calling api.auth.login...');
+    const res = await api.auth.login({ master_key: masterKey });
+    console.log('📥 Login response:', res);
+    console.log('🍪 Checking cookies after login...', document.cookie);
+    
+    if (res.authenticated || res.status === 'authenticated') {
+      console.log('✅ Login successful, waiting 500ms before redirect...');
+      showNotification('✅ Успешный вход!', 'success');
       
-      if (res.authenticated || res.status === 'authenticated') {
-        console.log('✅ Login successful, redirecting...');
-        showNotification('✅ Успешный вход!', 'success');
-        
-        // Force hard reload to ensure cookies are sent
-        window.location.href = '/workspace';
-      } else {
-        console.error('❌ Login failed:', res);
-        showNotification('❌ Ошибка аутентификации', 'error');
-      }
-    } catch (error) {
-      console.error('❌ Login error:', error);
-      showApiError(error, 'Ошибка входа');
-    } finally {
-      setLoading(false);
+      // #CHANGED: Add delay to ensure cookie is set
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('🔄 Redirecting to /workspace...');
+      // Force hard reload
+      window.location.href = '/workspace';
+    } else {
+      console.error('❌ Login failed:', res);
+      showNotification('❌ Ошибка аутентификации', 'error');
     }
-  };
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    showApiError(error, 'Ошибка входа');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen w-screen flex items-center justify-center bg-[#000000] bg-[radial-gradient(circle_at_50%_50%,_#1a1a1e_0%,_#000000_100%)]">

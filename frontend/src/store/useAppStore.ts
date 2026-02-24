@@ -33,7 +33,6 @@ export interface ArtifactType {
   type: string;
   allowed_parents: string[];
   requires_clarification: boolean;
-  // другие поля
 }
 
 export interface Message {
@@ -46,10 +45,11 @@ interface AppState {
   projects: Project[];
   currentProjectId: string | null;
   artifacts: Artifact[];
-  parentData: Record<string, string>; // id -> type
+  parentData: Record<string, string>;
   currentArtifact: { content: any } | null;
   currentParentId: string | null;
   models: Model[];
+  modes: Mode[];
   currentClarificationSessionId: string | null;
   artifactTypes: ArtifactType[];
   messages: Message[];
@@ -65,6 +65,7 @@ interface AppState {
   setCurrentArtifact: (artifact: { content: any } | null) => void;
   setCurrentParentId: (id: string | null) => void;
   setModels: (models: Model[]) => void;
+  setModes: (modes: Mode[]) => void;
   setCurrentClarificationSessionId: (id: string | null) => void;
   setArtifactTypes: (types: ArtifactType[]) => void;
   addMessage: (msg: Message) => void;
@@ -77,7 +78,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       projects: [],
       currentProjectId: null,
       artifacts: [],
@@ -85,6 +86,7 @@ export const useAppStore = create<AppState>()(
       currentArtifact: null,
       currentParentId: null,
       models: [],
+      modes: [],
       currentClarificationSessionId: null,
       artifactTypes: [],
       messages: [],
@@ -94,10 +96,7 @@ export const useAppStore = create<AppState>()(
       selectedModel: null,
       selectedArtifactType: 'BusinessIdea',
 
-      setProjects: (projects) => {
-        set({ projects });
-        // parentData не обновляем, так как она зависит от артефактов
-      },
+      setProjects: (projects) => set({ projects }),
       setCurrentProjectId: (id) => {
         set({ currentProjectId: id, currentClarificationSessionId: null });
         if (id) localStorage.setItem('selectedProjectId', id);
@@ -105,12 +104,15 @@ export const useAppStore = create<AppState>()(
       },
       setArtifacts: (artifacts) => {
         const parentData: Record<string, string> = {};
-        artifacts.forEach(a => { parentData[a.id] = a.type; });
+        artifacts.forEach((a) => {
+          parentData[a.id] = a.type;
+        });
         set({ artifacts, parentData });
       },
       setCurrentArtifact: (artifact) => set({ currentArtifact: artifact }),
       setCurrentParentId: (id) => set({ currentParentId: id }),
       setModels: (models) => set({ models }),
+      setModes: (modes) => set({ modes }),
       setCurrentClarificationSessionId: (id) => set({ currentClarificationSessionId: id }),
       setArtifactTypes: (types) => set({ artifactTypes: types }),
       addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),

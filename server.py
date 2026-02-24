@@ -1,6 +1,7 @@
 # CHANGED: Removed compute_content_hash, imported from utils if needed (currently not used)
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import logging
 from routers import projects, artifacts, clarification, workflows, modes
 import db
@@ -32,4 +33,39 @@ async def startup_event():
         logger.error(f"Database connection failed: {e}")
 
 # ==================== STATIC FILES ====================
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+from pathlib import Path
+
+BASE_DIR = Path(__file__).parent
+static_dir = BASE_DIR / "static"
+assets_dir = static_dir / "assets"
+
+# Монтируем только если директория существует (для Docker-продакшена)
+if assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+@app.get("/")
+async def serve_frontend():
+    index_path = static_dir / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    return {"error": "Frontend not built. Use Docker for production or run 'npm run dev' for development."}
+
+@app.get("/{path:path}")
+async def serve_spa(path: str):
+    # Игнорируем API пути
+    if path.startswith("api/") or path.startswith("docs") or path.startswith("openapi"):
+        return {"detail": "Not Found"}
+    
+    # Игнорируем favicon
+    if path == "favicon.ico":
+        return {"detail": "Not Found"}
+    
+    file_path = static_dir / path
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    
+    index_path = static_dir / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    
+    return {"detail": "Not Found"}

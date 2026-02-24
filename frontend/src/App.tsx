@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState } from 'react';
 import ThemeEffects from './styles/ThemeEffects';
 import { useAppStore } from './store/useAppStore';
 import { useProjectData } from './hooks/useProjectData';
@@ -8,9 +8,24 @@ import { ChatCanvas } from './components/ChatCanvas';
 import { client } from './api/client';
 
 function App() {
-  const store = useAppStore();
+  // Используем селекторы вместо прямого доступа к store
+  const projects = useAppStore((s) => s.projects);
+  const models = useAppStore((s) => s.models);
+  const currentProjectId = useAppStore((s) => s.currentProjectId);
+  const selectedModel = useAppStore((s) => s.selectedModel);
+  const qTokens = useAppStore((s) => s.qTokens);
+  const qReq = useAppStore((s) => s.qReq);
+  const isSimpleMode = useAppStore((s) => s.isSimpleMode);
+  
+  // Экшены
+  const setProjects = useAppStore((s) => s.setProjects);
+  const setCurrentProjectId = useAppStore((s) => s.setCurrentProjectId);
+  const setSelectedModel = useAppStore((s) => s.setSelectedModel);
+  const setMessages = useAppStore((s) => s.setMessages);
+  const setSimpleMode = useAppStore((s) => s.setSimpleMode);
+  
   const { showNotification } = useNotification();
-  useProjectData(); // загружает проекты, модели, типы и артефакты
+  useProjectData();
 
   const handleCreateProject = async () => {
     const name = prompt('Введите название проекта:');
@@ -20,10 +35,11 @@ function App() {
         body: { name, description: '' },
       });
       if (res.error) throw new Error(res.error.error || 'Ошибка создания');
-      // обновим список проектов через refetch или добавим вручную
-      // можно просто перезагрузить страницу или добавить через store
-      store.setProjects([...store.projects, { id: res.data.id!, name, description: '' }]);
-      store.setCurrentProjectId(res.data.id!);
+      // @ts-ignore - API возвращает id, даже если тип опциональный
+      const newProject = { id: res.data.id, name, description: '' };
+      setProjects([...projects, newProject]);
+      // @ts-ignore
+      setCurrentProjectId(res.data.id);
       showNotification('Проект создан', 'success');
     } catch (e: any) {
       showNotification(e.message, 'error');
@@ -31,16 +47,16 @@ function App() {
   };
 
   const handleDeleteProject = async () => {
-    if (!store.currentProjectId) return;
+    if (!currentProjectId) return;
     if (!confirm('Удалить проект? Все артефакты будут безвозвратно удалены.')) return;
     try {
       const res = await client.DELETE('/api/projects/{project_id}', {
-        params: { path: { project_id: store.currentProjectId } },
+        params: { path: { project_id: currentProjectId } },
       });
       if (res.error) throw new Error(res.error.error || 'Ошибка удаления');
-      store.setProjects(store.projects.filter(p => p.id !== store.currentProjectId));
-      store.setCurrentProjectId(null);
-      store.setMessages([]);
+      setProjects(projects.filter((p) => p.id !== currentProjectId));
+      setCurrentProjectId(null);
+      setMessages([]);
       showNotification('Проект удалён', 'success');
     } catch (e: any) {
       showNotification(e.message, 'error');
@@ -62,18 +78,18 @@ function App() {
             <span className="text-[8px] tracking-widest text-mrak-cyan uppercase">Neural_Model</span>
             <select
               className="bg-transparent border border-cyan-800/30 rounded px-2 py-1 text-xs outline-none focus:border-cyan-500"
-              value={store.selectedModel || ''}
-              onChange={(e) => store.setSelectedModel(e.target.value)}
+              value={selectedModel || ''}
+              onChange={(e) => setSelectedModel(e.target.value)}
             >
               <option value="">-- Выберите модель --</option>
-              {store.models.map((m) => (
+              {models.map((m) => (
                 <option key={m.id} value={m.id}>{m.id}</option>
               ))}
             </select>
           </div>
         </div>
         <div className="text-xs text-mrak-cyan/60">
-          TOKENS: <b className="text-mrak-cyan">{store.qTokens}</b> | REQ: <b>{store.qReq}</b>
+          TOKENS: <b className="text-mrak-cyan">{qTokens}</b> | REQ: <b>{qReq}</b>
         </div>
       </nav>
 
@@ -82,11 +98,11 @@ function App() {
         <span className="text-sm text-cyan-400">Проект:</span>
         <select
           className="bg-black/50 border border-cyan-800/30 rounded px-2 py-1 text-xs outline-none focus:border-cyan-500"
-          value={store.currentProjectId || ''}
-          onChange={(e) => store.setCurrentProjectId(e.target.value || null)}
+          value={currentProjectId || ''}
+          onChange={(e) => setCurrentProjectId(e.target.value || null)}
         >
           <option value="">-- Выберите --</option>
-          {store.projects.map((p) => (
+          {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
@@ -96,14 +112,14 @@ function App() {
         <div className="flex-1" />
         <div className="flex border border-cyan-600/30 rounded overflow-hidden">
           <button
-            className={`px-3 py-1 text-xs ${store.isSimpleMode ? 'bg-cyan-600/30 text-cyan-300' : 'text-zinc-500'}`}
-            onClick={() => store.setSimpleMode(true)}
+            className={`px-3 py-1 text-xs ${isSimpleMode ? 'bg-cyan-600/30 text-cyan-300' : 'text-zinc-500'}`}
+            onClick={() => setSimpleMode(true)}
           >
             Простой
           </button>
           <button
-            className={`px-3 py-1 text-xs ${!store.isSimpleMode ? 'bg-cyan-600/30 text-cyan-300' : 'text-zinc-500'}`}
-            onClick={() => store.setSimpleMode(false)}
+            className={`px-3 py-1 text-xs ${!isSimpleMode ? 'bg-cyan-600/30 text-cyan-300' : 'text-zinc-500'}`}
+            onClick={() => setSimpleMode(false)}
           >
             Расширенный
           </button>
@@ -112,7 +128,7 @@ function App() {
 
       {/* MAIN CONTENT */}
       <main className="flex-1 overflow-hidden z-10">
-        {store.isSimpleMode ? (
+        {isSimpleMode ? (
           <div className="h-full p-4">
             <ChatCanvas />
           </div>

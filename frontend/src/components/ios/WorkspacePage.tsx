@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
+import { client } from '../../api/client';
 
 interface Workflow {
   id: string;
@@ -12,10 +13,10 @@ interface Workflow {
   created_at?: string;
 }
 
-interface WorkflowDetail {
-  workflow: Workflow;
-  nodes: NodeData[];
-  edges: EdgeData[];
+interface Project {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 export const WorkspacePage: React.FC = () => {
@@ -24,43 +25,68 @@ export const WorkspacePage: React.FC = () => {
   const [workflowName, setWorkflowName] = useState('');
   const [currentWorkflowId, setCurrentWorkflowId] = useState<string | null>(null);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // Загрузка списка workflow
+  // Загрузка проектов
   useEffect(() => {
-    loadWorkflows();
+    loadProjects();
   }, []);
 
-  const loadWorkflows = async () => {
+  // Загрузка workflow при выборе проекта
+  useEffect(() => {
+    if (selectedProjectId) {
+      loadWorkflows();
+    }
+  }, [selectedProjectId]);
+
+  const loadProjects = async () => {
     try {
-      const res = await fetch('/api/workflows');
-      if (res.ok) {
-        const data = await res.json();
-        setWorkflows(data);
+      const res = await client.GET('/api/projects');
+      if (res.error) throw new Error(res.error.message || 'Failed to load projects');
+      setProjects(res.data || []);
+      // Авто-выбор первого проекта
+      if (res.data && res.data.length > 0 && !selectedProjectId) {
+        setSelectedProjectId(res.data[0].id);
       }
-    } catch (e) {
-      console.error('Failed to load workflows', e);
+    } catch (e: any) {
+      console.error('❌ Load projects error:', e);
+      alert('Ошибка загрузки проектов: ' + e.message);
     }
   };
 
-  // Загрузка конкретного workflow
+  const loadWorkflows = async () => {
+    if (!selectedProjectId) return;
+    try {
+      const res = await client.GET('/api/workflows');
+      if (res.error) throw new Error(res.error.message || 'Failed to load workflows');
+      setWorkflows(res.data || []);
+    } catch (e: any) {
+      console.error('❌ Load workflows error:', e);
+      alert('Ошибка загрузки workflow: ' + e.message);
+    }
+  };
+
   const loadWorkflow = async (workflowId: string) => {
     try {
-      const res = await fetch(`/api/workflows/${workflowId}`);
-      if (res.ok) {
-        const data: WorkflowDetail = await res.json();
-        setNodes(data.nodes || []);
-        setEdges(data.edges || []);
-        setCurrentWorkflowId(workflowId);
-        setWorkflowName(data.workflow?.name || '');
-      }
-    } catch (e) {
-      console.error('Failed to load workflow', e);
-      alert('Ошибка загрузки workflow');
+      const res = await client.GET('/api/workflows/{workflow_id}', {
+        params: { path: { workflow_id: workflowId } }
+      });
+      if (res.error) throw new Error(res.error.message || 'Failed to load workflow');
+      
+      const data: any = res.data;
+      setNodes(data.nodes || []);
+      setEdges(data.edges || []);
+      setCurrentWorkflowId(workflowId);
+      setWorkflowName(data.workflow?.name || '');
+    } catch (e: any) {
+      console.error('❌ Load workflow error:', e);
+      alert('Ошибка загрузки workflow: ' + e.message);
     }
   };
 
-  // Создание нового workflow
   const createNewWorkflow = () => {
     setNodes([]);
     setEdges([]);
@@ -68,12 +94,18 @@ export const WorkspacePage: React.FC = () => {
     setWorkflowName('');
   };
 
-  // Сохранение workflow
   const handleSave = async () => {
-    if (!workflowName) {
-      alert('Введите название workflow');
+    if (!workflowName.trim()) {
+      alert('⚠️ Введите название workflow');
       return;
     }
+
+    if (!selectedProjectId) {
+      alert('⚠️ Выберите проект');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const url = currentWorkflowId 
@@ -82,12 +114,21 @@ export const WorkspacePage: React.FC = () => {
       
       const method = currentWorkflowId ? 'PUT' : 'POST';
 
+      console.log('💾 Saving workflow:', {
+        url,
+        method,
+        name: workflowName,
+        nodes: nodes.length,
+        edges: edges.length
+      });
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: workflowName,
           description: 'Created in workspace editor',
+          project_id: selectedProjectId,
           nodes: nodes.map(n => ({
             node_id: n.node_id,
             prompt_key: n.prompt_key,
@@ -102,42 +143,45 @@ export const WorkspacePage: React.FC = () => {
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (!currentWorkflowId) {
-          setCurrentWorkflowId(data.id);
-          loadWorkflows();
-        }
-        alert(`Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
-      } else {
-        alert('Ошибка сохранения');
+      const responseData = await res.json();
+      console.log('💾 Save response:', res.status, responseData);
+
+      if (!res.ok) {
+        throw new Error(responseData.detail || `HTTP ${res.status}`);
       }
-    } catch (e) {
-      console.error(e);
-      alert('Ошибка сети');
+
+      if (!currentWorkflowId && responseData.id) {
+        setCurrentWorkflowId(responseData.id);
+        loadWorkflows();
+      }
+
+      alert(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
+
+    } catch (e: any) {
+      console.error('❌ Save error:', e);
+      alert('❌ Ошибка сохранения: ' + e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Удаление workflow
   const handleDelete = async () => {
     if (!currentWorkflowId) return;
     if (!confirm(`Удалить workflow "${workflowName}"?`)) return;
 
     try {
-      const res = await fetch(`/api/workflows/${currentWorkflowId}`, {
-        method: 'DELETE',
+      const res = await client.DELETE('/api/workflows/{workflow_id}', {
+        params: { path: { workflow_id: currentWorkflowId } }
       });
 
-      if (res.ok) {
-        createNewWorkflow();
-        loadWorkflows();
-        alert('Workflow удалён');
-      } else {
-        alert('Ошибка удаления');
-      }
-    } catch (e) {
-      console.error(e);
-      alert('Ошибка сети');
+      if (res.error) throw new Error(res.error.message || 'Failed to delete');
+
+      createNewWorkflow();
+      loadWorkflows();
+      alert('✅ Workflow удалён');
+    } catch (e: any) {
+      console.error('❌ Delete error:', e);
+      alert('❌ Ошибка удаления: ' + e.message);
     }
   };
 
@@ -147,8 +191,25 @@ export const WorkspacePage: React.FC = () => {
         {/* Sidebar */}
         {sidebarOpen && (
           <aside className="w-64 bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col z-50">
+            {/* Project Selector */}
+            <div className="p-3 border-b border-[var(--ios-border)]">
+              <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">
+                Project
+              </label>
+              <select
+                value={selectedProjectId || ''}
+                onChange={(e) => setSelectedProjectId(e.target.value || null)}
+                className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
+              >
+                <option value="">-- Select Project --</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Header */}
-            <div className="h-14 flex items-center justify-between px-4 border-b border-[var(--ios-border)]">
+            <div className="h-12 flex items-center justify-between px-4 border-b border-[var(--ios-border)]">
               <span className="text-xs font-bold text-[var(--bronze-base)] uppercase tracking-wider">
                 Workflows
               </span>
@@ -167,7 +228,8 @@ export const WorkspacePage: React.FC = () => {
             <div className="p-3 border-b border-[var(--ios-border)]">
               <button
                 onClick={createNewWorkflow}
-                className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2"
+                disabled={!selectedProjectId}
+                className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="5" x2="12" y2="19" />
@@ -179,7 +241,11 @@ export const WorkspacePage: React.FC = () => {
 
             {/* Workflow List */}
             <div className="flex-1 overflow-y-auto p-2">
-              {workflows.length === 0 ? (
+              {!selectedProjectId ? (
+                <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">
+                  ⚠️ Select a project first
+                </div>
+              ) : workflows.length === 0 ? (
                 <div className="text-[10px] text-[var(--text-muted)] text-center py-4">
                   No workflows yet
                 </div>
@@ -235,6 +301,11 @@ export const WorkspacePage: React.FC = () => {
                   Editing
                 </span>
               )}
+              {loading && (
+                <span className="text-[10px] text-[var(--accent-info)] animate-pulse">
+                  Saving...
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -246,9 +317,10 @@ export const WorkspacePage: React.FC = () => {
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-1.5 text-xs font-semibold rounded bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)] transition-colors"
+                disabled={!selectedProjectId || !workflowName.trim() || loading}
+                className="px-4 py-1.5 text-xs font-semibold rounded bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                {currentWorkflowId ? 'Update' : 'Save'} Workflow
+                {loading ? 'Saving...' : (currentWorkflowId ? 'Update' : 'Save')} Workflow
               </button>
             </div>
           </header>
@@ -263,10 +335,10 @@ export const WorkspacePage: React.FC = () => {
 
           {/* Instructions */}
           <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)] pointer-events-none">
-            <div>Double-click / Right-click: Add node</div>
-            <div>Alt+Drag: Pan canvas</div>
-            <div>Drag node: Move</div>
-            <div>Scroll: Zoom</div>
+            <div>🖱️ Double-click / Right-click: Add node</div>
+            <div>✋ Alt+Drag: Pan canvas</div>
+            <div>🎯 Drag node: Move</div>
+            <div>🔍 Scroll: Zoom</div>
           </div>
         </div>
       </div>

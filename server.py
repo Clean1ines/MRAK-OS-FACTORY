@@ -1,5 +1,4 @@
 # server.py
-# CHANGED: Removed compute_content_hash, imported from utils if needed (currently not used)
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -36,12 +35,13 @@ async def startup_event():
 # ==================== MIDDLEWARE ====================
 @app.middleware("http")
 async def validate_session_middleware(request: Request, call_next):
-    # #CHANGED: Skip auth for test mode
+    # Skip auth for test mode
     if os.getenv("TEST_MODE") == "true":
         return await call_next(request)
     
-    # Skip auth endpoints
+    # Skip auth endpoints (don't require auth for login)
     if request.url.path.startswith("/api/auth"):
+        logger.debug(f"Skipping auth for: {request.url.path}")
         return await call_next(request)
     
     # Skip static files
@@ -53,20 +53,24 @@ async def validate_session_middleware(request: Request, call_next):
         session_token = request.cookies.get("mrak_session")
         
         if not session_token:
+            logger.warning(f"401: No session cookie for {request.url.path}")
             from fastapi.responses import JSONResponse
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Authentication required"}
             )
         
-        # Validate session (import from auth router)
+        # Validate session
         from routers.auth import validate_session
         if not validate_session(session_token):
+            logger.warning(f"401: Invalid session for {request.url.path}")
             from fastapi.responses import JSONResponse
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Session expired or invalid"}
             )
+        
+        logger.debug(f"200: Valid session for {request.url.path}")
     
     return await call_next(request)
 
@@ -77,7 +81,6 @@ BASE_DIR = Path(__file__).parent
 static_dir = BASE_DIR / "static"
 assets_dir = static_dir / "assets"
 
-# Монтируем только если директория существует (для Docker-продакшена)
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
@@ -90,11 +93,9 @@ async def serve_frontend():
 
 @app.get("/{path:path}")
 async def serve_spa(path: str):
-    # Игнорируем API пути
     if path.startswith("api/") or path.startswith("docs") or path.startswith("openapi"):
         return {"detail": "Not Found"}
     
-    # Игнорируем favicon
     if path == "favicon.ico":
         return {"detail": "Not Found"}
     

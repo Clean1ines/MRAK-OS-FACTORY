@@ -21,8 +21,8 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
+  const [connectingNode, setConnectingNode] = useState<string | null>(null);
   
-  // FIX: Pass nodes/edges/setNodes/setEdges to hook
   const {
     pan,
     scale,
@@ -65,7 +65,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     setContextMenu({ x: e.clientX, y: e.clientY, canvasX: x, canvasY: y });
   }, [getCanvasCoords]);
 
-  // FIX: Add node from menu with proper state update
+  // FIX #5: Add node from context menu
   const addNodeFromMenu = useCallback((prompt_key: string) => {
     if (!contextMenu) return;
     
@@ -82,12 +82,32 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     setContextMenu(null);
   }, [contextMenu, nodes, onNodesChange]);
 
-  // FIX: Delete node with proper state update
-  const handleDeleteNode = useCallback((nodeId: string) => {
-    onNodesChange(nodes.filter(n => n.node_id !== nodeId));
-    onEdgesChange(edges.filter(e => e.source_node !== nodeId && e.target_node !== nodeId));
-    setSelectedNode(null);
-  }, [nodes, edges, onNodesChange, onEdgesChange, setSelectedNode]);
+  // FIX #7: Start edge connection
+  const handleStartConnection = useCallback((nodeId: string) => {
+    setConnectingNode(nodeId);
+  }, []);
+
+  // FIX #7: Complete edge connection
+  const handleCompleteConnection = useCallback((targetNodeId: string) => {
+    if (connectingNode && connectingNode !== targetNodeId) {
+      // Check if edge already exists
+      const edgeExists = edges.some(
+        e => e.source_node === connectingNode && e.target_node === targetNodeId
+      );
+      
+      if (!edgeExists) {
+        const newEdge: EdgeData = {
+          id: crypto.randomUUID(),
+          source_node: connectingNode,
+          target_node: targetNodeId,
+        };
+        onEdgesChange([...edges, newEdge]);
+      } else {
+        console.log('Edge already exists');
+      }
+    }
+    setConnectingNode(null);
+  }, [connectingNode, edges, onEdgesChange]);
 
   const handleCloseMenu = useCallback(() => {
     setContextMenu(null);
@@ -167,6 +187,20 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
               />
             );
           })}
+
+          {/* Connection line in progress */}
+          {connectingNode && (
+            <line
+              x1={nodes.find(n => n.node_id === connectingNode)?.position_x! + 140}
+              y1={nodes.find(n => n.node_id === connectingNode)?.position_y! + 50}
+              x2={(pan.x + 0) / scale}
+              y2={(pan.y + 0) / scale}
+              stroke="var(--bronze-base)"
+              strokeWidth="1.5"
+              strokeDasharray="5,5"
+              opacity="0.6"
+            />
+          )}
         </svg>
 
         <div style={{ pointerEvents: 'auto' }}>
@@ -175,8 +209,14 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
               key={node.node_id}
               node={node}
               isSelected={selectedNode === node.node_id}
+              isConnecting={connectingNode === node.node_id}
               onDragStart={handleNodeDragStart}
-              onDelete={handleDeleteNode}
+              onDelete={(nodeId) => {
+                onNodesChange(nodes.filter(n => n.node_id !== nodeId));
+                onEdgesChange(edges.filter(e => e.source_node !== nodeId && e.target_node !== nodeId));
+              }}
+              onStartConnection={handleStartConnection}
+              onCompleteConnection={handleCompleteConnection}
             />
           ))}
         </div>
@@ -217,6 +257,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
       <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)] pointer-events-none">
         <div>🖱️ Double-click: Custom node</div>
         <div>🖱️ Right-click: Quick add</div>
+        <div>🔗 Click node port: Start connection</div>
         <div>✋ Alt+Drag: Pan canvas</div>
         <div>🎯 Drag node: Move</div>
         <div>🔍 Scroll: Zoom</div>

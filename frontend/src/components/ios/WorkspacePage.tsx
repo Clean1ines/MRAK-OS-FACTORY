@@ -30,8 +30,10 @@ export const WorkspacePage: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [showNodeModal, setShowNodeModal] = useState(false);
+  const [showNodeList, setShowNodeList] = useState(false);
   const [newNodePrompt, setNewNodePrompt] = useState('');
   const [newNodeTitle, setNewNodeTitle] = useState('');
+  const [nodeListTab, setNodeListTab] = useState<'available' | 'created'>('created');
 
   useEffect(() => {
     const saved = localStorage.getItem('workspace_selected_project');
@@ -49,6 +51,14 @@ export const WorkspacePage: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId]);
+
+  // FIX #1: Refresh workflows after workflow state changes
+  useEffect(() => {
+    if (currentWorkflowId) {
+      loadWorkflows();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkflowId]);
 
   const loadProjects = async () => {
     try {
@@ -89,7 +99,6 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
-  // #CHANGED: Fixed variable declaration (added 'data:' before 'any')
   const loadWorkflow = async (workflowId: string) => {
     try {
       const res = await client.GET('/api/workflows/{workflow_id}', {
@@ -97,13 +106,13 @@ export const WorkspacePage: React.FC = () => {
       });
       if (res.error) throw new Error(res.error.error || 'Failed to load workflow');
       
-      const data: any = res.data;  // ← FIX: Added 'data:' variable name
+      const  any = res.data;
       setNodes((data?.nodes || []).map((n: any) => ({
         id: n.node_id || crypto.randomUUID(),
         node_id: n.node_id,
         prompt_key: n.prompt_key || 'UNKNOWN',
-        position_x: n.position_x || 0,
-        position_y: n.position_y || 0,
+        position_x: n.position_x || 100,
+        position_y: n.position_y || 100,
         config: n.config || {},
       })));
       setEdges((data?.edges || []).map((e: any) => ({
@@ -123,8 +132,28 @@ export const WorkspacePage: React.FC = () => {
     setNodes([]);
     setEdges([]);
     setCurrentWorkflowId(null);
-    setWorkflowName('');
+    setWorkflowName('New Workflow');
+    setShowNodeModal(true);
     console.log('✅ New workflow created (cleared state)');
+  };
+
+  // FIX #2: Validate duplicate names/content
+  const validateNodeUnique = (title: string, prompt: string): string | null => {
+    const duplicateTitle = nodes.find(n => 
+      n.prompt_key.toLowerCase() === title.toLowerCase() && n.prompt_key !== 'CUSTOM_PROMPT'
+    );
+    if (duplicateTitle) {
+      return `Node with name "${title}" already exists`;
+    }
+
+    const duplicateContent = nodes.find(n => 
+      n.config?.custom_prompt === prompt
+    );
+    if (duplicateContent) {
+      return `Node with identical prompt already exists`;
+    }
+
+    return null;
   };
 
   const handleSave = async () => {
@@ -177,9 +206,12 @@ export const WorkspacePage: React.FC = () => {
         throw new Error(responseData.detail || `HTTP ${res.status}`);
       }
 
+      // FIX #1: Update workflow ID and refresh list
       if (!currentWorkflowId && responseData.id) {
         setCurrentWorkflowId(responseData.id);
-        loadWorkflows();
+        await loadWorkflows();
+      } else if (currentWorkflowId) {
+        await loadWorkflows();
       }
 
       alert(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
@@ -219,9 +251,17 @@ export const WorkspacePage: React.FC = () => {
     (window as any)._newNodePosition = { x, y };
   };
 
+  // FIX #2: Validate before adding node
   const confirmAddCustomNode = async () => {
     if (!newNodePrompt.trim()) {
       alert('Введите промпт');
+      return;
+    }
+
+    const title = newNodeTitle.trim() || 'CUSTOM_PROMPT';
+    const validationError = validateNodeUnique(title, newNodePrompt);
+    if (validationError) {
+      alert(`⚠️ ${validationError}`);
       return;
     }
 
@@ -230,7 +270,7 @@ export const WorkspacePage: React.FC = () => {
       const newNode: NodeData = {
         id: crypto.randomUUID(),
         node_id: crypto.randomUUID(),
-        prompt_key: newNodeTitle || 'CUSTOM_PROMPT',
+        prompt_key: title,
         position_x: pos.x,
         position_y: pos.y,
         config: { custom_prompt: newNodePrompt },
@@ -241,6 +281,19 @@ export const WorkspacePage: React.FC = () => {
     setShowNodeModal(false);
     setNewNodePrompt('');
     setNewNodeTitle('');
+  };
+
+  // FIX #6: Add node from list
+  const addNodeFromList = (node: NodeData, x: number, y: number) => {
+    const newNode: NodeData = {
+      ...node,
+      id: crypto.randomUUID(),
+      node_id: crypto.randomUUID(),
+      position_x: x,
+      position_y: y,
+    };
+    setNodes(prev => [...prev, newNode]);
+    setShowNodeList(false);
   };
 
   return (
@@ -331,9 +384,13 @@ export const WorkspacePage: React.FC = () => {
                   </svg>
                 </button>
               )}
-              <h1 className="text-lg font-bold text-[var(--bronze-base)]">
-                {currentWorkflowId ? workflowName : 'New Workflow'}
-              </h1>
+              <input
+                type="text"
+                value={workflowName}
+                onChange={(e) => setWorkflowName(e.target.value)}
+                placeholder="Workflow Name"
+                className="bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-1.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)] w-64"
+              />
               {currentWorkflowId && (
                 <span className="text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-2 py-0.5 rounded border border-[var(--ios-border)]">Editing</span>
               )}
@@ -342,6 +399,12 @@ export const WorkspacePage: React.FC = () => {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowNodeList(!showNodeList)}
+                className="px-3 py-1.5 text-xs font-semibold rounded border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)] transition-colors"
+              >
+                📋 Nodes
+              </button>
               <button
                 onClick={handleDelete}
                 disabled={!currentWorkflowId}
@@ -366,6 +429,89 @@ export const WorkspacePage: React.FC = () => {
             onEdgesChange={setEdges}
             onAddCustomNode={handleAddCustomNode}
           />
+
+          {/* FIX #6: Node List Panel */}
+          {showNodeList && (
+            <div className="absolute top-20 right-6 w-80 bg-[var(--ios-glass)] backdrop-blur-md border border-[var(--ios-border)] rounded-lg shadow-[var(--shadow-heavy)] z-[1000]">
+              <div className="flex items-center justify-between p-3 border-b border-[var(--ios-border)]">
+                <h3 className="text-sm font-bold text-[var(--bronze-base)]">Nodes</h3>
+                <button onClick={() => setShowNodeList(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex border-b border-[var(--ios-border)]">
+                <button
+                  onClick={() => setNodeListTab('created')}
+                  className={`flex-1 px-3 py-2 text-xs font-semibold ${
+                    nodeListTab === 'created' 
+                      ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]' 
+                      : 'text-[var(--text-muted)] hover:bg-[var(--ios-glass-bright)]'
+                  }`}
+                >
+                  Created ({nodes.length})
+                </button>
+                <button
+                  onClick={() => setNodeListTab('available')}
+                  className={`flex-1 px-3 py-2 text-xs font-semibold ${
+                    nodeListTab === 'available' 
+                      ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]' 
+                      : 'text-[var(--text-muted)] hover:bg-[var(--ios-glass-bright)]'
+                  }`}
+                >
+                  Available
+                </button>
+              </div>
+              <div className="p-3 max-h-96 overflow-y-auto">
+                {nodeListTab === 'created' ? (
+                  nodes.length === 0 ? (
+                    <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No nodes yet</div>
+                  ) : (
+                    nodes.map(node => (
+                      <div
+                        key={node.node_id}
+                        className="p-2 mb-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
+                        onClick={() => {
+                          // Center view on this node
+                          console.log('Select node:', node.prompt_key);
+                        }}
+                      >
+                        <div className="font-semibold text-[var(--bronze-bright)]">{node.prompt_key}</div>
+                        <div className="text-[9px] text-[var(--text-muted)] mt-1">
+                          Pos: {Math.round(node.position_x)}, {Math.round(node.position_y)}
+                        </div>
+                      </div>
+                    ))
+                  )
+                ) : (
+                  <div className="space-y-2">
+                    {['IDEA_CLARIFIER', 'BUSINESS_REQ_GEN', 'CODE_GEN'].map(type => (
+                      <div
+                        key={type}
+                        className="p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
+                        onClick={() => {
+                          const pos = { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 };
+                          addNodeFromList({
+                            id: crypto.randomUUID(),
+                            node_id: crypto.randomUUID(),
+                            prompt_key: type,
+                            position_x: pos.x,
+                            position_y: pos.y,
+                            config: {},
+                          }, pos.x, pos.y);
+                        }}
+                      >
+                        <div className="font-semibold text-[var(--bronze-bright)]">{type.replace(/_/g, ' ')}</div>
+                        <div className="text-[9px] text-[var(--text-muted)] mt-1">Click to add</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {showNodeModal && (
             <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">

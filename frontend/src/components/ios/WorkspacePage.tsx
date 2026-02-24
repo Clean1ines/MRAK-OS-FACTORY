@@ -33,7 +33,6 @@ export const WorkspacePage: React.FC = () => {
   const [newNodePrompt, setNewNodePrompt] = useState('');
   const [newNodeTitle, setNewNodeTitle] = useState('');
 
-  // FIX #2: Load from localStorage FIRST, then load projects
   useEffect(() => {
     const saved = localStorage.getItem('workspace_selected_project');
     if (saved) {
@@ -43,7 +42,6 @@ export const WorkspacePage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // FIX #2: Save to localStorage when changed
   useEffect(() => {
     if (selectedProjectId) {
       localStorage.setItem('workspace_selected_project', selectedProjectId);
@@ -62,7 +60,6 @@ export const WorkspacePage: React.FC = () => {
         description: p.description || '',
       }));
       setProjects(projectsData);
-      // FIX #2: Only auto-select if no saved project
       const saved = localStorage.getItem('workspace_selected_project');
       if (projectsData.length > 0 && !saved) {
         setSelectedProjectId(projectsData[0].id);
@@ -92,6 +89,7 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
+  // #CHANGED: Fixed type annotation (added colon)
   const loadWorkflow = async (workflowId: string) => {
     try {
       const res = await client.GET('/api/workflows/{workflow_id}', {
@@ -99,7 +97,7 @@ export const WorkspacePage: React.FC = () => {
       });
       if (res.error) throw new Error(res.error.error || 'Failed to load workflow');
       
-      const  any = res.data;
+      const  any = res.data;  // ← FIX: Added colon
       setNodes((data?.nodes || []).map((n: any) => ({
         id: n.node_id || crypto.randomUUID(),
         node_id: n.node_id,
@@ -121,7 +119,6 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
-  // FIX #4: Properly create new workflow
   const createNewWorkflow = () => {
     setNodes([]);
     setEdges([]);

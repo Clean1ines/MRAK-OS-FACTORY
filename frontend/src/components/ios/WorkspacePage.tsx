@@ -6,6 +6,7 @@ import { IOSCanvas } from './IOSCanvas';
 import { client } from '../../api/client';
 import { api } from '../../api/client';
 import { validateWorkflowAcyclic } from '../../utils/graphUtils';
+import { hashPosition, avoidCollisions } from '../../utils/deterministicRandom';
 
 interface Workflow {
   id: string;
@@ -285,13 +286,21 @@ export const WorkspacePage: React.FC = () => {
     setNewNodeTitle('');
   };
 
+  // #CHANGED: Use deterministic positioning instead of Math.random()
   const addNodeFromList = (node: NodeData, x: number, y: number) => {
+    // Generate deterministic position based on node_id
+    const basePos = hashPosition(node.node_id, 0, 1200, 800);
+    
+    // Avoid collisions with existing nodes
+    const existingPositions = nodes.map(n => ({ x: n.position_x, y: n.position_y }));
+    const finalPos = avoidCollisions(basePos, existingPositions);
+    
     const newNode: NodeData = {
       ...node,
       id: crypto.randomUUID(),
       node_id: crypto.randomUUID(),
-      position_x: x,
-      position_y: y,
+      position_x: finalPos.x,
+      position_y: finalPos.y,
     };
     setNodes(prev => [...prev, newNode]);
     setShowNodeList(false);
@@ -501,15 +510,19 @@ export const WorkspacePage: React.FC = () => {
                         key={type}
                         className="p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
                         onClick={() => {
-                          const pos = { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 };
+                          // Use deterministic position instead of random
+                          const basePos = hashPosition(type, 0, 1200, 800);
+                          const existingPositions = nodes.map(n => ({ x: n.position_x, y: n.position_y }));
+                          const finalPos = avoidCollisions(basePos, existingPositions);
+                          
                           addNodeFromList({
                             id: crypto.randomUUID(),
                             node_id: crypto.randomUUID(),
                             prompt_key: type,
-                            position_x: pos.x,
-                            position_y: pos.y,
+                            position_x: finalPos.x,
+                            position_y: finalPos.y,
                             config: {},
-                          }, pos.x, pos.y);
+                          }, finalPos.x, finalPos.y);
                         }}
                       >
                         <div className="font-semibold text-[var(--bronze-bright)]">{type.replace(/_/g, ' ')}</div>

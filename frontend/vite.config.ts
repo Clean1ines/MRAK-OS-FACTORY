@@ -9,8 +9,14 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path,  // ДОБАВИТЬ — не удалять префикс
+        rewrite: (path) => path,
       },
     },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    setupFiles: ['./src/test/setup.ts'],
   },
 })

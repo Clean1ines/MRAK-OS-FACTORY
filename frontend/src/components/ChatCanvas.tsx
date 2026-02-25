@@ -50,7 +50,9 @@ export const ChatCanvas: React.FC = () => {
           setStreamingContent(null);
         },
         onError: (err) => {
-          showNotification('Ошибка: ' + err.message, 'error');
+          // #CHANGED: handle unknown error
+          const message = err instanceof Error ? err.message : String(err);
+          showNotification('Ошибка: ' + message, 'error');
           setStreamingContent(null);
         },
       }

@@ -4,7 +4,9 @@ import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
 import { client } from '../../api/client';
-import { api } from '../../api/client';  // //ADDED: Import api for logout
+import { api } from '../../api/client';
+import { validateWorkflowAcyclic } from '../../utils/graphUtils';
+
 interface Workflow {
   id: string;
   name: string;
@@ -41,7 +43,6 @@ export const WorkspacePage: React.FC = () => {
       setSelectedProjectId(saved);
     }
     loadProjects();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -49,14 +50,12 @@ export const WorkspacePage: React.FC = () => {
       localStorage.setItem('workspace_selected_project', selectedProjectId);
       loadWorkflows();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId]);
 
   useEffect(() => {
     if (currentWorkflowId) {
       loadWorkflows();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkflowId]);
 
   const loadProjects = async () => {
@@ -98,7 +97,6 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
-  // #CHANGED: Fixed variable declaration (added 'data' variable name)
   const loadWorkflow = async (workflowId: string) => {
     try {
       const res = await client.GET('/api/workflows/{workflow_id}', {
@@ -106,7 +104,7 @@ export const WorkspacePage: React.FC = () => {
       });
       if (res.error) throw new Error(res.error.error || 'Failed to load workflow');
       
-      const data: any = res.data;  // ← FIX: Added 'data' variable name (was 'const  any')
+      const data: any = res.data;
       setNodes((data?.nodes || []).map((n: any) => ({
         id: n.node_id || crypto.randomUUID(),
         node_id: n.node_id,
@@ -166,6 +164,13 @@ export const WorkspacePage: React.FC = () => {
       return;
     }
 
+    // Check for cycles before saving
+    const validation = validateWorkflowAcyclic(nodes, edges);
+    if (!validation.valid) {
+      alert(`⚠️ Cannot save workflow:\n\n${validation.error}\n\nRemove connections that create a cycle.`);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -212,11 +217,11 @@ export const WorkspacePage: React.FC = () => {
         await loadWorkflows();
       }
 
-      alert(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
+      alert(`✅ Workflow ${currentWorkflowId ? 'updated' : 'saved'}!`);
 
     } catch (e: any) {
       console.error('❌ Save error:', e);
-      alert('❌ Ошибка сохранения: ' + e.message);
+      alert('❌ Save error: ' + e.message);
     } finally {
       setLoading(false);
     }
@@ -224,7 +229,7 @@ export const WorkspacePage: React.FC = () => {
 
   const handleDelete = async () => {
     if (!currentWorkflowId) return;
-    if (!confirm(`Удалить workflow "${workflowName}"?`)) return;
+    if (!confirm(`Delete workflow "${workflowName}"?`)) return;
 
     try {
       const res = await client.DELETE('/api/workflows/{workflow_id}', {
@@ -235,10 +240,10 @@ export const WorkspacePage: React.FC = () => {
 
       createNewWorkflow();
       loadWorkflows();
-      alert('✅ Workflow удалён');
+      alert('✅ Workflow deleted');
     } catch (e: any) {
       console.error('❌ Delete error:', e);
-      alert('❌ Ошибка удаления: ' + e.message);
+      alert('❌ Delete error: ' + e.message);
     }
   };
 
@@ -251,7 +256,7 @@ export const WorkspacePage: React.FC = () => {
 
   const confirmAddCustomNode = async () => {
     if (!newNodePrompt.trim()) {
-      alert('Введите промпт');
+      alert('Enter a prompt');
       return;
     }
 

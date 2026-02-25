@@ -1,7 +1,7 @@
 // frontend/src/components/ios/IOSShell.tsx
-// #CHANGED: Added mobile optimization and React.memo for Three.js background
+// #CHANGED: Fixed TypeScript errors - removed unused useMemo, fixed env access
 
-import { useEffect, useRef, memo, useMemo } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import * as THREE from 'three';
 
 interface IOSShellProps {
@@ -15,17 +15,18 @@ const isMobileDevice = (): boolean => {
   const ua = navigator.userAgent || navigator.vendor;
   const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
   
-  // Also check for touch support and small screen as fallback
   const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   const smallScreen = window.innerWidth < 768;
   
   return mobileRegex.test(ua) || (hasTouch && smallScreen);
 };
 
-// #ADDED: Get particle count from env or defaults
+// #ADDED: Get particle count with safe env access
 const getParticleCount = (): number => {
-  // Allow override via env variable
-  const envCount = import.meta.env?.VITE_THREE_PARTICLES_COUNT;
+  // Safe access to Vite env variables with TypeScript
+  // @ts-ignore - Vite injects import.meta.env at build time
+  const envCount = (import.meta as any).env?.VITE_THREE_PARTICLES_COUNT;
+  
   if (envCount && !isNaN(Number(envCount))) {
     return Number(envCount);
   }
@@ -68,14 +69,14 @@ export const IOSShell: React.FC<IOSShellProps> = memo(({ children }) => {
     );
     
     const renderer = new THREE.WebGLRenderer({ 
-      antialias: false,  // #CHANGED: Disable for mobile performance
+      antialias: false,
       alpha: true,
-      powerPreference: isMobileDevice() ? 'low-power' : 'high-performance'  // #ADDED
+      powerPreference: isMobileDevice() ? 'low-power' : 'high-performance'
     });
     
     rendererRef.current = renderer;
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));  // #ADDED: Cap pixel ratio
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     containerRef.current.appendChild(renderer.domElement);
 
     // #CHANGED: Use dynamic particle count
@@ -94,7 +95,7 @@ export const IOSShell: React.FC<IOSShellProps> = memo(({ children }) => {
 
     const mat = new THREE.PointsMaterial({
       color: 0xb8956a,
-      size: isMobileDevice() ? 1.0 : 1.5,  // #CHANGED: Smaller particles on mobile
+      size: isMobileDevice() ? 1.0 : 1.5,
       transparent: true,
       opacity: 0.35,
       sizeAttenuation: true,
@@ -148,5 +149,4 @@ export const IOSShell: React.FC<IOSShellProps> = memo(({ children }) => {
   );
 });
 
-// #ADDED: Display name for React DevTools
 IOSShell.displayName = 'IOSShell';

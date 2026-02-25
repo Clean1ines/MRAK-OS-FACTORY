@@ -32,7 +32,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     handleMouseMove,
     handleMouseUp,
     handleNodeDragStart,
-    setSelectedNode,
+    
   } = useCanvasEngine(nodes, edges, onNodesChange, onEdgesChange);
 
   const getCanvasCoords = useCallback((e: React.MouseEvent) => {

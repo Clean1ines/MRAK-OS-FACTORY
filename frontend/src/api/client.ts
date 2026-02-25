@@ -4,12 +4,17 @@ import type { paths, components } from './generated/schema';
 import { createTimeoutMiddleware } from './fetchWithTimeout';
 
 // Get token from sessionStorage
-const getSessionToken = () => sessionStorage.getItem('mrak_session_token');
+const getSessionToken = (): string | null => {
+  return sessionStorage.getItem('mrak_session_token');
+};
 
-// Helper to get auth headers
-const getAuthHeaders = () => {
+// Helper to get auth headers - returns proper HeadersInit type
+const getAuthHeaders = (): HeadersInit | undefined => {
   const token = getSessionToken();
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` };
+  }
+  return undefined;
 };
 
 // Create client
@@ -79,10 +84,10 @@ export const api = {
       return res.json();
     },
     session: async () => {
-      // #FIX: Manually add Authorization header
+      const headers = getAuthHeaders();
       const res = await fetch('/api/auth/session', {
         method: 'GET',
-        headers: getAuthHeaders(),  // ← ADD TOKEN HERE
+        headers: headers || {},
       });
       return res.json();
     },

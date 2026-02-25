@@ -1,6 +1,5 @@
 // frontend/src/hooks/useCanvasEngine.ts
 import { useState, useCallback, useRef } from 'react';
-// #ADDED: Import named constants
 import {
   NODE_HALF_WIDTH,
   NODE_HALF_HEIGHT,
@@ -40,10 +39,10 @@ interface UseCanvasEngineReturn {
 }
 
 export const useCanvasEngine = (
-  nodes: NodeData[],
-  edges: EdgeData[],
+  _nodes: NodeData[],
+  _edges: EdgeData[],
   setNodes: (nodes: NodeData[]) => void,
-  setEdges: (edges: EdgeData[]) => void
+  _setEdges: (edges: EdgeData[]) => void
 ): UseCanvasEngineReturn => {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(VIEWPORT_SCALE_DEFAULT);
@@ -85,7 +84,7 @@ export const useCanvasEngine = (
         y: e.clientY - mouseStart.current.y,
       });
     } else if (draggedNode) {
-      setNodes(nodes.map(node => {
+      setNodes(_nodes.map(node => {
         if (node.node_id === draggedNode) {
           return {
             ...node,
@@ -96,7 +95,7 @@ export const useCanvasEngine = (
         return node;
       }));
     }
-  }, [isPanning, draggedNode, pan, scale, nodes, setNodes]);
+  }, [isPanning, draggedNode, pan, scale, _nodes, setNodes]);
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);

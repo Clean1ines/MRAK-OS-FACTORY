@@ -1,4 +1,6 @@
 // frontend/src/components/ios/IOSNode.tsx
+// #CHANGED: Wrapped in React.memo with custom comparison for performance
+
 import React from 'react';
 
 interface IOSNodeProps {
@@ -17,7 +19,21 @@ interface IOSNodeProps {
   onCompleteConnection?: (targetNodeId: string) => void;
 }
 
-export const IOSNode: React.FC<IOSNodeProps> = ({
+// #ADDED: Custom comparison function for React.memo
+const arePropsEqual = (prev: IOSNodeProps, next: IOSNodeProps): boolean => {
+  return (
+    prev.node.node_id === next.node.node_id &&
+    prev.node.prompt_key === next.node.prompt_key &&
+    prev.node.position_x === next.node.position_x &&
+    prev.node.position_y === next.node.position_y &&
+    JSON.stringify(prev.node.config) === JSON.stringify(next.node.config) &&
+    prev.isSelected === next.isSelected &&
+    prev.isConnecting === next.isConnecting
+    // Note: callbacks are not compared - they should be memoized in parent
+  );
+};
+
+export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
   node,
   isSelected,
   isConnecting = false,
@@ -50,7 +66,7 @@ export const IOSNode: React.FC<IOSNodeProps> = ({
           {node.prompt_key}
         </span>
         <div className="flex items-center gap-1">
-          {/* Connection port - FIX #7 */}
+          {/* Connection port */}
           {onStartConnection && onCompleteConnection && (
             <button
               onClick={(e) => {
@@ -87,7 +103,7 @@ export const IOSNode: React.FC<IOSNodeProps> = ({
         {node.prompt_key.replace(/_/g, ' ')}
       </div>
 
-      {/* Connection target zone - FIX #7 */}
+      {/* Connection target zone */}
       {onCompleteConnection && (
         <div
           onClick={(e) => {
@@ -114,4 +130,7 @@ export const IOSNode: React.FC<IOSNodeProps> = ({
       )}
     </div>
   );
-};
+}, arePropsEqual);
+
+// #ADDED: Display name for React DevTools
+IOSNode.displayName = 'IOSNode';

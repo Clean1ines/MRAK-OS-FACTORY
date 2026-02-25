@@ -1,5 +1,7 @@
 // frontend/src/components/ios/IOSCanvas.tsx
-import React, { useRef, useCallback, useState } from 'react';
+// #CHANGED: Added useMemo for edges rendering and memoized callbacks
+
+import React, { useRef, useCallback, useState, useMemo } from 'react';
 import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { useCanvasEngine } from '../../hooks/useCanvasEngine';
 import { IOSNode } from './IOSNode';
@@ -32,7 +34,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     handleMouseMove,
     handleMouseUp,
     handleNodeDragStart,
-    
   } = useCanvasEngine(nodes, edges, onNodesChange, onEdgesChange);
 
   const getCanvasCoords = useCallback((e: React.MouseEvent) => {
@@ -65,7 +66,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     setContextMenu({ x: e.clientX, y: e.clientY, canvasX: x, canvasY: y });
   }, [getCanvasCoords]);
 
-  // FIX #5: Add node from context menu
+  // #CHANGED: Memoized node addition from context menu
   const addNodeFromMenu = useCallback((prompt_key: string) => {
     if (!contextMenu) return;
     
@@ -82,15 +83,13 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     setContextMenu(null);
   }, [contextMenu, nodes, onNodesChange]);
 
-  // FIX #7: Start edge connection
+  // #CHANGED: Memoized connection handlers
   const handleStartConnection = useCallback((nodeId: string) => {
     setConnectingNode(nodeId);
   }, []);
 
-  // FIX #7: Complete edge connection
   const handleCompleteConnection = useCallback((targetNodeId: string) => {
     if (connectingNode && connectingNode !== targetNodeId) {
-      // Check if edge already exists
       const edgeExists = edges.some(
         e => e.source_node === connectingNode && e.target_node === targetNodeId
       );
@@ -102,8 +101,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
           target_node: targetNodeId,
         };
         onEdgesChange([...edges, newEdge]);
-      } else {
-        console.log('Edge already exists');
       }
     }
     setConnectingNode(null);
@@ -118,6 +115,63 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
       handleWheel(e, containerRef.current.getBoundingClientRect());
     }
   }, [handleWheel]);
+
+  // #ADDED: Memoized edge rendering to prevent re-calc on every render
+  const edgeElements = useMemo(() => {
+    return edges.map(edge => {
+      const from = nodes.find(n => n.node_id === edge.source_node);
+      const to = nodes.find(n => n.node_id === edge.target_node);
+      if (!from || !to) return null;
+
+      const x1 = from.position_x + 140;
+      const y1 = from.position_y + 50;
+      const x2 = to.position_x;
+      const y2 = to.position_y + 50;
+      const cp1x = x1 + (x2 - x1) * 0.5;
+
+      return (
+        <path
+          key={edge.id}
+          d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp1x} ${y2}, ${x2} ${y2}`}
+          stroke="var(--bronze-base)"
+          strokeWidth="1.5"
+          fill="none"
+          filter="url(#glow-line)"
+          markerEnd="url(#arrowhead)"
+          opacity="0.6"
+          style={{ pointerEvents: 'none' }}
+        />
+      );
+    });
+  }, [edges, nodes]);
+
+  // #ADDED: Memoized connection line
+  const connectionLine = useMemo(() => {
+    if (!connectingNode) return null;
+    const from = nodes.find(n => n.node_id === connectingNode);
+    if (!from) return null;
+    
+    return (
+      <line
+        x1={from.position_x + 140}
+        y1={from.position_y + 50}
+        x2={(pan.x + 0) / scale}
+        y2={(pan.y + 0) / scale}
+        stroke="var(--bronze-base)"
+        strokeWidth="1.5"
+        strokeDasharray="5,5"
+        opacity="0.6"
+      />
+    );
+  }, [connectingNode, nodes, pan, scale]);
+
+  // #ADDED: Memoized node delete handler for each node
+  const createDeleteHandler = useCallback((nodeId: string) => {
+    return () => {
+      onNodesChange(nodes.filter(n => n.node_id !== nodeId));
+      onEdgesChange(edges.filter(e => e.source_node !== nodeId && e.target_node !== nodeId));
+    };
+  }, [nodes, edges, onNodesChange, onEdgesChange]);
 
   return (
     <div
@@ -162,45 +216,8 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
             </filter>
           </defs>
 
-          {edges.map(edge => {
-            const from = nodes.find(n => n.node_id === edge.source_node);
-            const to = nodes.find(n => n.node_id === edge.target_node);
-            if (!from || !to) return null;
-
-            const x1 = from.position_x + 140;
-            const y1 = from.position_y + 50;
-            const x2 = to.position_x;
-            const y2 = to.position_y + 50;
-            const cp1x = x1 + (x2 - x1) * 0.5;
-
-            return (
-              <path
-                key={edge.id}
-                d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp1x} ${y2}, ${x2} ${y2}`}
-                stroke="var(--bronze-base)"
-                strokeWidth="1.5"
-                fill="none"
-                filter="url(#glow-line)"
-                markerEnd="url(#arrowhead)"
-                opacity="0.6"
-                style={{ pointerEvents: 'none' }}
-              />
-            );
-          })}
-
-          {/* Connection line in progress */}
-          {connectingNode && (
-            <line
-              x1={nodes.find(n => n.node_id === connectingNode)?.position_x! + 140}
-              y1={nodes.find(n => n.node_id === connectingNode)?.position_y! + 50}
-              x2={(pan.x + 0) / scale}
-              y2={(pan.y + 0) / scale}
-              stroke="var(--bronze-base)"
-              strokeWidth="1.5"
-              strokeDasharray="5,5"
-              opacity="0.6"
-            />
-          )}
+          {edgeElements}
+          {connectionLine}
         </svg>
 
         <div style={{ pointerEvents: 'auto' }}>
@@ -211,10 +228,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
               isSelected={selectedNode === node.node_id}
               isConnecting={connectingNode === node.node_id}
               onDragStart={handleNodeDragStart}
-              onDelete={(nodeId) => {
-                onNodesChange(nodes.filter(n => n.node_id !== nodeId));
-                onEdgesChange(edges.filter(e => e.source_node !== nodeId && e.target_node !== nodeId));
-              }}
+              onDelete={createDeleteHandler(node.node_id)}
               onStartConnection={handleStartConnection}
               onCompleteConnection={handleCompleteConnection}
             />

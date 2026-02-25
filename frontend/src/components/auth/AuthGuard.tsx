@@ -19,7 +19,8 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
     try {
       const res = await api.auth.session();
       setIsAuthenticated(res.authenticated === true);
-    } catch (error) {
+    } catch {
+      // #CHANGED: removed unused error parameter
       setIsAuthenticated(false);
     } finally {
       setChecking(false);

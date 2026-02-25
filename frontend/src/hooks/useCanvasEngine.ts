@@ -1,4 +1,3 @@
-// frontend/src/hooks/useCanvasEngine.ts
 import { useState, useCallback, useRef } from 'react';
 import {
   NODE_HALF_WIDTH,
@@ -17,7 +16,7 @@ export interface NodeData {
   prompt_key: string;
   position_x: number;
   position_y: number;
-  config?: Record<string, any>;
+  config?: Record<string, unknown>; // #CHANGED: any -> unknown
 }
 
 export interface EdgeData {
@@ -42,6 +41,7 @@ export const useCanvasEngine = (
   _nodes: NodeData[],
   _edges: EdgeData[],
   setNodes: (nodes: NodeData[]) => void,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _setEdges: (edges: EdgeData[]) => void
 ): UseCanvasEngineReturn => {
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -49,14 +49,14 @@ export const useCanvasEngine = (
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
-  
+
   const mouseStart = useRef({ x: 0, y: 0 });
 
   const handleWheel = useCallback((e: React.WheelEvent, containerRect: DOMRect) => {
     e.preventDefault();
     const factor = Math.pow(ZOOM_FACTOR, -e.deltaY / ZOOM_SENSITIVITY);
     const newScale = Math.min(Math.max(scale * factor, VIEWPORT_SCALE_MIN), VIEWPORT_SCALE_MAX);
-    
+
     const mx = e.clientX - containerRect.left;
     const my = e.clientY - containerRect.top;
 

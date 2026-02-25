@@ -5,7 +5,8 @@ export interface Artifact {
   id: string;
   type: string;
   parent_id: string | null;
-  content: any;
+  // #CHANGED: any -> Record<string, unknown> | null (более конкретно)
+  content: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   version: string;
@@ -46,7 +47,7 @@ interface AppState {
   currentProjectId: string | null;
   artifacts: Artifact[];
   parentData: Record<string, string>;
-  currentArtifact: { content: any } | null;
+  currentArtifact: { content: unknown } | null;
   currentParentId: string | null;
   models: Model[];
   modes: Mode[];
@@ -62,7 +63,7 @@ interface AppState {
   setProjects: (projects: Project[]) => void;
   setCurrentProjectId: (id: string | null) => void;
   setArtifacts: (artifacts: Artifact[]) => void;
-  setCurrentArtifact: (artifact: { content: any } | null) => void;
+  setCurrentArtifact: (artifact: { content: unknown } | null) => void;
   setCurrentParentId: (id: string | null) => void;
   setModels: (models: Model[]) => void;
   setModes: (modes: Mode[]) => void;

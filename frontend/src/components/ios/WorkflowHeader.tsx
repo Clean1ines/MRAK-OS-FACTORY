@@ -10,7 +10,6 @@ interface WorkflowHeaderProps {
   onWorkflowNameChange: (name: string) => void;
   currentWorkflowId: string | null;
   loading: boolean;
-  showNodeList: boolean;
   onToggleNodeList: () => void;
   onDelete: () => void;
   onSave: () => void;
@@ -25,7 +24,6 @@ export const WorkflowHeader: React.FC<WorkflowHeaderProps> = ({
   onWorkflowNameChange,
   currentWorkflowId,
   loading,
-  showNodeList,
   onToggleNodeList,
   onDelete,
   onSave,

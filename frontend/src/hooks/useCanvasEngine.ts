@@ -6,10 +6,10 @@ import {
   NODE_HALF_HEIGHT,
   VIEWPORT_SCALE_MIN,
   VIEWPORT_SCALE_MAX,
+  VIEWPORT_SCALE_DEFAULT,
   ZOOM_SENSITIVITY,
   ZOOM_FACTOR,
   PAN_MOUSE_BUTTON,
-  PAN_MODIFIER_KEY,
 } from '../constants/canvas';
 
 export interface NodeData {
@@ -53,7 +53,6 @@ export const useCanvasEngine = (
   
   const mouseStart = useRef({ x: 0, y: 0 });
 
-  // #CHANGED: Use named constants instead of magic numbers
   const handleWheel = useCallback((e: React.WheelEvent, containerRect: DOMRect) => {
     e.preventDefault();
     const factor = Math.pow(ZOOM_FACTOR, -e.deltaY / ZOOM_SENSITIVITY);
@@ -62,7 +61,6 @@ export const useCanvasEngine = (
     const mx = e.clientX - containerRect.left;
     const my = e.clientY - containerRect.top;
 
-    // Invariant: screen_pos = (world_pos × scale) + pan
     setPan(prev => ({
       x: mx - (mx - prev.x) * (newScale / scale),
       y: my - (my - prev.y) * (newScale / scale),
@@ -70,9 +68,8 @@ export const useCanvasEngine = (
     setScale(newScale);
   }, [scale]);
 
-  // #CHANGED: Use named constants for pan button
   const handlePanStart = useCallback((e: React.MouseEvent) => {
-    if (e.button === PAN_MOUSE_BUTTON || (e.button === 0 && e.altKey === (PAN_MODIFIER_KEY === 'Alt'))) {
+    if (e.button === PAN_MOUSE_BUTTON || (e.button === 0 && e.altKey)) {
       setIsPanning(true);
       mouseStart.current = {
         x: e.clientX - pan.x,
@@ -81,7 +78,6 @@ export const useCanvasEngine = (
     }
   }, [pan]);
 
-  // #CHANGED: Use named constants for node centering
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (isPanning) {
       setPan({
@@ -89,8 +85,6 @@ export const useCanvasEngine = (
         y: e.clientY - mouseStart.current.y,
       });
     } else if (draggedNode) {
-      // Invariant: world_pos = (screen_pos - pan) / scale
-      // Center node: subtract half dimensions
       setNodes(nodes.map(node => {
         if (node.node_id === draggedNode) {
           return {

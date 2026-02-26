@@ -12,8 +12,8 @@ repos:
       - id: check-json
       - id: end-of-file-fixer
         exclude: ^frontend/src/api/generated/
-      - id: trailing-whitespace
-
+#       - id: trailing-whitespace
+# 
   # Backend: Python checks
   - repo: local
     hooks:

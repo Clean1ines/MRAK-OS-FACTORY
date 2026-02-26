@@ -22,3 +22,25 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+package-lock.json
+
+# Test & Coverage
+coverage/
+*.lcov
+.turbo/
+.vitest/
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local env
+*.local
+.env.local

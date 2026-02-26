@@ -1,0 +1,2892 @@
+# TASK-012: Playwright E2E Tests Context Dump
+# Generated: 2026-02-26T23:58:33+03:00
+# Project root: /home/haku/MRAK-OS-FACTORY
+# Files: 12
+
+## FILE: frontend/src/components/ios/WorkspacePage.tsx
+## SIZE: 13603 bytes
+## LINES: 346
+```
+import React, { useState, useEffect } from 'react';
+import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
+import { IOSShell } from './IOSShell';
+import { IOSCanvas } from './IOSCanvas';
+import { client } from '../../api/client';
+import { api } from '../../api/client';
+import { validateWorkflowAcyclic } from '../../utils/graphUtils';
+import { WorkflowHeader } from './WorkflowHeader';
+import { NodeListPanel } from './NodeListPanel';
+import { NodeModal } from './NodeModal';
+import { useNodeValidation } from './useNodeValidation';
+import type { components } from '../../api/generated/schema';
+
+type Project = components['schemas']['Project'];
+type Workflow = components['schemas']['Workflow'];
+type WorkflowDetail = components['schemas']['WorkflowDetail'];
+type WorkflowNode = NonNullable<WorkflowDetail['nodes']>[number];
+type WorkflowEdge = NonNullable<WorkflowDetail['edges']>[number];
+
+export const WorkspacePage: React.FC = () => {
+  const [nodes, setNodes] = useState<NodeData[]>([]);
+  const [edges, setEdges] = useState<EdgeData[]>([]);
+  const [workflowName, setWorkflowName] = useState('');
+  const [currentWorkflowId, setCurrentWorkflowId] = useState<string | null>(null);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [showNodeModal, setShowNodeModal] = useState(false);
+  const [showNodeList, setShowNodeList] = useState(false);
+  const [newNodePrompt, setNewNodePrompt] = useState('');
+  const [newNodeTitle, setNewNodeTitle] = useState('');
+  const { validateNodeUnique } = useNodeValidation(nodes);
+
+  useEffect(() => {
+    const s = localStorage.getItem('workspace_selected_project');
+    if (s) setSelectedProjectId(s);
+    loadProjects();
+    // #REMOVED: unused eslint-disable directive
+  }, []);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      localStorage.setItem('workspace_selected_project', selectedProjectId);
+      loadWorkflows();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (currentWorkflowId) loadWorkflows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkflowId]);
+
+  const loadProjects = async () => {
+    try {
+      const r = await client.GET('/api/projects');
+      if (r.error) throw new Error(r.error.error || 'Failed');
+      const projectsData = (r.data || []) as Project[];
+      setProjects(projectsData.map(p => ({
+        id: p.id!,
+        name: p.name!,
+        description: p.description || ''
+      })));
+      if (projectsData.length > 0 && !localStorage.getItem('workspace_selected_project')) {
+        setSelectedProjectId(projectsData[0].id!);
+      }
+    } catch (e: unknown) {
+      console.error(e);
+      alert('Ошибка: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const loadWorkflows = async () => {
+    if (!selectedProjectId) return;
+    try {
+      const r = await client.GET('/api/workflows');
+      if (r.error) throw new Error(r.error.error || 'Failed');
+      const workflowsData = (r.data || []) as Workflow[];
+      setWorkflows(workflowsData.map(w => ({
+        id: w.id!,
+        name: w.name!,
+        description: w.description || '',
+        is_default: w.is_default || false,
+        created_at: w.created_at
+      })));
+    } catch (e: unknown) {
+      console.error(e);
+      alert('Ошибка: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const loadWorkflow = async (id: string) => {
+    try {
+      const r = await client.GET('/api/workflows/{workflow_id}', {
+        params: { path: { workflow_id: id } }
+      });
+      if (r.error) throw new Error(r.error.error || 'Failed');
+      const detail = r.data as WorkflowDetail;
+      setNodes((detail?.nodes || []).map((n: WorkflowNode) => ({
+        id: n.node_id || crypto.randomUUID(),
+        node_id: n.node_id!,
+        prompt_key: n.prompt_key || 'UNKNOWN',
+        position_x: n.position_x || 100,
+        position_y: n.position_y || 100,
+        config: n.config || {}
+      })));
+      setEdges((detail?.edges || []).map((e: WorkflowEdge) => ({
+        id: e.id || crypto.randomUUID(),
+        source_node: e.source_node!,
+        target_node: e.target_node!
+      })));
+      setCurrentWorkflowId(id);
+      setWorkflowName(detail?.workflow?.name || '');
+    } catch (e: unknown) {
+      console.error(e);
+      alert('Ошибка: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const handleSave = async () => {
+    if (!workflowName.trim() || !selectedProjectId) {
+      alert('⚠️ Fill required fields');
+      return;
+    }
+    if (!validateWorkflowAcyclic(nodes, edges).valid) {
+      alert('⚠️ Cycle detected - remove circular connections');
+      return;
+    }
+    setLoading(true);
+    try {
+      const url = currentWorkflowId
+        ? `/api/workflows/${currentWorkflowId}`
+        : '/api/workflows';
+      const res = await fetch(url, {
+        method: currentWorkflowId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: workflowName,
+          description: 'Created in workspace editor',
+          project_id: selectedProjectId,
+          nodes: nodes.map(n => ({
+            node_id: n.node_id,
+            prompt_key: n.prompt_key,
+            position_x: n.position_x,
+            position_y: n.position_y,
+            config: n.config
+          })),
+          edges: edges.map(e => ({
+            source_node: e.source_node,
+            target_node: e.target_node
+          }))
+        })
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || `HTTP ${res.status}`);
+      if (!currentWorkflowId) await loadWorkflows();
+      alert(`✅ Workflow ${currentWorkflowId ? 'updated' : 'saved'}!`);
+    } catch (e: unknown) {
+      console.error(e);
+      alert('❌ ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!currentWorkflowId || !confirm(`Delete "${workflowName}"?`)) return;
+    try {
+      await client.DELETE('/api/workflows/{workflow_id}', {
+        params: { path: { workflow_id: currentWorkflowId } }
+      });
+      setNodes([]);
+      setEdges([]);
+      setCurrentWorkflowId(null);
+      setWorkflowName('New Workflow');
+      await loadWorkflows();
+      alert('✅ Deleted');
+    } catch (e: unknown) {
+      alert('❌ ' + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const handleAddCustomNode = (x: number, y: number) => {
+    setNewNodeTitle('');
+    setNewNodePrompt('');
+    setShowNodeModal(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any)._newNodePosition = { x, y };
+  };
+
+  const confirmAddCustomNode = async () => {
+    if (!newNodePrompt.trim()) {
+      alert('Enter prompt');
+      return;
+    }
+    const title = newNodeTitle.trim() || 'CUSTOM_PROMPT';
+    const err = validateNodeUnique(title, newNodePrompt);
+    if (err) {
+      alert(`⚠️ ${err}`);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pos = (window as any)._newNodePosition;
+    if (pos) {
+      setNodes(prev => [...prev, {
+        id: crypto.randomUUID(),
+        node_id: crypto.randomUUID(),
+        prompt_key: title,
+        position_x: pos.x,
+        position_y: pos.y,
+        config: { custom_prompt: newNodePrompt }
+      }]);
+    }
+    setShowNodeModal(false);
+    setNewNodePrompt('');
+    setNewNodeTitle('');
+  };
+
+  const addNodeFromList = (node: NodeData) => {
+    setNodes(prev => [...prev, node]);
+    setShowNodeList(false);
+  };
+
+  return (
+    <IOSShell>
+      <div className="flex h-full">
+        {sidebarOpen && (
+          <aside className="w-64 bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col z-50">
+            <div className="p-3 border-b border-[var(--ios-border)]">
+              <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">Project</label>
+              <select
+                value={selectedProjectId || ''}
+                onChange={(e) => setSelectedProjectId(e.target.value || null)}
+                className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
+              >
+                <option value="">-- Select Project --</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="h-12 flex items-center justify-between px-4 border-b border-[var(--ios-border)]">
+              <span className="text-xs font-bold text-[var(--bronze-base)] uppercase tracking-wider">Workflows</span>
+              <button onClick={() => setSidebarOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-3 border-b border-[var(--ios-border)]">
+              <button
+                onClick={() => {
+                  setNodes([]);
+                  setEdges([]);
+                  setCurrentWorkflowId(null);
+                  setWorkflowName('New Workflow');
+                  setShowNodeModal(true);
+                }}
+                disabled={!selectedProjectId}
+                className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2 disabled:opacity-30"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                New Workflow
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {!selectedProjectId ? (
+                <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">⚠️ Select project</div>
+              ) : workflows.length === 0 ? (
+                <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No workflows</div>
+              ) : (
+                workflows.map(wf => (
+                  <button
+                    key={wf.id}
+                    onClick={() => loadWorkflow(wf.id!)}
+                    className={`w-full text-left px-3 py-2 rounded mb-1 text-xs ${
+                      currentWorkflowId === wf.id
+                        ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--ios-glass-bright)]'
+                    }`}
+                  >
+                    <div className="font-semibold truncate">{wf.name}</div>
+                    <div className="text-[9px] opacity-60 truncate">{wf.description || 'No description'}</div>
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="p-3 border-t border-[var(--ios-border)] text-[9px] text-[var(--text-muted)] text-center">
+              {workflows.length} workflow{workflows.length !== 1 ? 's' : ''}
+            </div>
+          </aside>
+        )}
+        <div className="flex-1 flex flex-col">
+          <WorkflowHeader
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen(true)}
+            workflowName={workflowName}
+            onWorkflowNameChange={setWorkflowName}
+            currentWorkflowId={currentWorkflowId}
+            loading={loading}
+            onToggleNodeList={() => setShowNodeList(!showNodeList)}
+            onDelete={handleDelete}
+            onSave={handleSave}
+            onLogout={async () => {
+              try {
+                await api.auth.logout();
+                window.location.href = '/login';
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+            canSave={!!selectedProjectId && !!workflowName.trim() && !loading}
+          />
+          <IOSCanvas
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={setNodes}
+            onEdgesChange={setEdges}
+            onAddCustomNode={handleAddCustomNode}
+          />
+          <NodeListPanel
+            visible={showNodeList}
+            onClose={() => setShowNodeList(false)}
+            nodes={nodes}
+            onAddNode={addNodeFromList}
+          />
+          <NodeModal
+            visible={showNodeModal}
+            onClose={() => setShowNodeModal(false)}
+            title={newNodeTitle}
+            onTitleChange={setNewNodeTitle}
+            prompt={newNodePrompt}
+            onPromptChange={setNewNodePrompt}
+            onConfirm={confirmAddCustomNode}
+            validationError={newNodeTitle.trim() ? validateNodeUnique(newNodeTitle.trim(), newNodePrompt) : null}
+          />
+        </div>
+      </div>
+    </IOSShell>
+  );
+};
+```
+
+## FILE: frontend/src/components/ios/IOSCanvas.tsx
+## SIZE: 9845 bytes
+## LINES: 285
+```
+// frontend/src/components/ios/IOSCanvas.tsx
+// #CHANGED: Added useMemo for edges rendering and memoized callbacks
+
+import React, { useRef, useCallback, useState, useMemo } from 'react';
+import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
+import { useCanvasEngine } from '../../hooks/useCanvasEngine';
+import { IOSNode } from './IOSNode';
+
+interface IOSCanvasProps {
+  nodes: NodeData[];
+  edges: EdgeData[];
+  onNodesChange: (nodes: NodeData[]) => void;
+  onEdgesChange: (edges: EdgeData[]) => void;
+  onAddCustomNode?: (x: number, y: number) => void;
+}
+
+export const IOSCanvas: React.FC<IOSCanvasProps> = ({
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onAddCustomNode,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
+  const [connectingNode, setConnectingNode] = useState<string | null>(null);
+  
+  const {
+    pan,
+    scale,
+    selectedNode,
+    handleWheel,
+    handlePanStart,
+    handleMouseMove,
+    handleMouseUp,
+    handleNodeDragStart,
+  } = useCanvasEngine(nodes, edges, onNodesChange, onEdgesChange);
+
+  const getCanvasCoords = useCallback((e: React.MouseEvent) => {
+    if (!containerRef.current) return { x: 0, y: 0 };
+    const rect = containerRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left - pan.x) / scale,
+      y: (e.clientY - rect.top - pan.y) / scale,
+    };
+  }, [pan, scale]);
+
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const { x, y } = getCanvasCoords(e);
+    
+    if (onAddCustomNode) {
+      onAddCustomNode(x, y);
+    }
+    
+    setContextMenu(null);
+  }, [getCanvasCoords, onAddCustomNode]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const { x, y } = getCanvasCoords(e);
+    setContextMenu({ x: e.clientX, y: e.clientY, canvasX: x, canvasY: y });
+  }, [getCanvasCoords]);
+
+  // #CHANGED: Memoized node addition from context menu
+  const addNodeFromMenu = useCallback((prompt_key: string) => {
+    if (!contextMenu) return;
+    
+    const newNode: NodeData = {
+      id: crypto.randomUUID(),
+      node_id: crypto.randomUUID(),
+      prompt_key,
+      position_x: contextMenu.canvasX,
+      position_y: contextMenu.canvasY,
+      config: {},
+    };
+    
+    onNodesChange([...nodes, newNode]);
+    setContextMenu(null);
+  }, [contextMenu, nodes, onNodesChange]);
+
+  // #CHANGED: Memoized connection handlers
+  const handleStartConnection = useCallback((nodeId: string) => {
+    setConnectingNode(nodeId);
+  }, []);
+
+  const handleCompleteConnection = useCallback((targetNodeId: string) => {
+    if (connectingNode && connectingNode !== targetNodeId) {
+      const edgeExists = edges.some(
+        e => e.source_node === connectingNode && e.target_node === targetNodeId
+      );
+      
+      if (!edgeExists) {
+        const newEdge: EdgeData = {
+          id: crypto.randomUUID(),
+          source_node: connectingNode,
+          target_node: targetNodeId,
+        };
+        onEdgesChange([...edges, newEdge]);
+      }
+    }
+    setConnectingNode(null);
+  }, [connectingNode, edges, onEdgesChange]);
+
+  const handleCloseMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const onWheelHandler = useCallback((e: React.WheelEvent) => {
+    if (containerRef.current) {
+      handleWheel(e, containerRef.current.getBoundingClientRect());
+    }
+  }, [handleWheel]);
+
+  // #ADDED: Memoized edge rendering to prevent re-calc on every render
+  const edgeElements = useMemo(() => {
+    return edges.map(edge => {
+      const from = nodes.find(n => n.node_id === edge.source_node);
+      const to = nodes.find(n => n.node_id === edge.target_node);
+      if (!from || !to) return null;
+
+      const x1 = from.position_x + 140;
+      const y1 = from.position_y + 50;
+      const x2 = to.position_x;
+      const y2 = to.position_y + 50;
+      const cp1x = x1 + (x2 - x1) * 0.5;
+
+      return (
+        <path
+          key={edge.id}
+          d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp1x} ${y2}, ${x2} ${y2}`}
+          stroke="var(--bronze-base)"
+          strokeWidth="1.5"
+          fill="none"
+          filter="url(#glow-line)"
+          markerEnd="url(#arrowhead)"
+          opacity="0.6"
+          style={{ pointerEvents: 'none' }}
+        />
+      );
+    });
+  }, [edges, nodes]);
+
+  // #ADDED: Memoized connection line
+  const connectionLine = useMemo(() => {
+    if (!connectingNode) return null;
+    const from = nodes.find(n => n.node_id === connectingNode);
+    if (!from) return null;
+    
+    return (
+      <line
+        x1={from.position_x + 140}
+        y1={from.position_y + 50}
+        x2={(pan.x + 0) / scale}
+        y2={(pan.y + 0) / scale}
+        stroke="var(--bronze-base)"
+        strokeWidth="1.5"
+        strokeDasharray="5,5"
+        opacity="0.6"
+      />
+    );
+  }, [connectingNode, nodes, pan, scale]);
+
+  // #ADDED: Memoized node delete handler for each node
+  const createDeleteHandler = useCallback((nodeId: string) => {
+    return () => {
+      onNodesChange(nodes.filter(n => n.node_id !== nodeId));
+      onEdgesChange(edges.filter(e => e.source_node !== nodeId && e.target_node !== nodeId));
+    };
+  }, [nodes, edges, onNodesChange, onEdgesChange]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex-1 relative overflow-hidden bg-[var(--bg-canvas)] cursor-crosshair"
+      onWheel={onWheelHandler}
+      onMouseDown={(e) => {
+        handleCloseMenu();
+        handlePanStart(e);
+      }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onDoubleClick={handleDoubleClick}
+      onContextMenu={handleContextMenu}
+    >
+      <div className="absolute top-[15%] left-1/2 -translate-x-1/2 text-6xl font-bold text-[var(--bronze-base)] opacity-[0.03] select-none" style={{ pointerEvents: 'none' }}>
+        CRAFT IN SILENCE
+      </div>
+
+      <div
+        className="absolute w-full h-full origin-top-left"
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+          pointerEvents: 'none',
+        }}
+      >
+        <svg 
+          className="absolute top-0 left-0 w-[20000px] h-[20000px] z-10"
+          style={{ pointerEvents: 'none' }}
+        >
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="var(--bronze-base)" />
+            </marker>
+            <filter id="glow-line" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="2" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          {edgeElements}
+          {connectionLine}
+        </svg>
+
+        <div style={{ pointerEvents: 'auto' }}>
+          {nodes.map(node => (
+            <IOSNode
+              key={node.node_id}
+              node={node}
+              isSelected={selectedNode === node.node_id}
+              isConnecting={connectingNode === node.node_id}
+              onDragStart={handleNodeDragStart}
+              onDelete={createDeleteHandler(node.node_id)}
+              onStartConnection={handleStartConnection}
+              onCompleteConnection={handleCompleteConnection}
+            />
+          ))}
+        </div>
+      </div>
+
+      {contextMenu && (
+        <div
+          className="absolute z-[1000] bg-[var(--ios-glass)] backdrop-blur-md border border-[var(--ios-border)] rounded-lg p-2 shadow-[var(--shadow-heavy)]"
+          style={{ left: contextMenu.x, top: contextMenu.y, pointerEvents: 'auto' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="text-[10px] text-[var(--text-muted)] mb-2 px-2">Add Node</div>
+          <button
+            onClick={() => addNodeFromMenu('IDEA_CLARIFIER')}
+            className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--bronze-dim)] rounded text-[var(--text-main)]"
+          >
+            💡 Idea Clarifier
+          </button>
+          <button
+            onClick={() => addNodeFromMenu('BUSINESS_REQ_GEN')}
+            className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--bronze-dim)] rounded text-[var(--text-main)]"
+          >
+            📋 Business Req
+          </button>
+          <button
+            onClick={() => addNodeFromMenu('CODE_GEN')}
+            className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--bronze-dim)] rounded text-[var(--text-main)]"
+          >
+            💻 Code Gen
+          </button>
+        </div>
+      )}
+
+      <div className="absolute bottom-4 right-4 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-2 py-1 rounded border border-[var(--ios-border)]" style={{ pointerEvents: 'none' }}>
+        {Math.round(scale * 100)}%
+      </div>
+
+      <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)] pointer-events-none">
+        <div>🖱️ Double-click: Custom node</div>
+        <div>🖱️ Right-click: Quick add</div>
+        <div>🔗 Click node port: Start connection</div>
+        <div>✋ Alt+Drag: Pan canvas</div>
+        <div>🎯 Drag node: Move</div>
+        <div>🔍 Scroll: Zoom</div>
+      </div>
+
+      <div className="absolute top-4 right-4 text-[10px] text-[var(--bronze-dim)] bg-black/80 px-2 py-1 rounded font-mono border border-[var(--bronze-dim)]" style={{ pointerEvents: 'none' }}>
+        Scale: {scale.toFixed(2)} | Pan: {Math.round(pan.x)}, {Math.round(pan.y)}
+      </div>
+    </div>
+  );
+};
+```
+
+## FILE: frontend/src/components/ios/IOSNode.tsx
+## SIZE: 5174 bytes
+## LINES: 146
+```
+// frontend/src/components/ios/IOSNode.tsx
+import React from 'react';
+
+interface IOSNodeProps {
+  node: {
+    node_id: string;
+    prompt_key: string;
+    position_x: number;
+    position_y: number;
+    config?: Record<string, unknown>;
+  };
+  isSelected: boolean;
+  isConnecting?: boolean;
+  onDragStart: (nodeId: string, e: React.MouseEvent) => void;
+  onDelete: (nodeId: string) => void;
+  onStartConnection?: (nodeId: string) => void;
+  onCompleteConnection?: (targetNodeId: string) => void;
+}
+
+const arePropsEqual = (prev: IOSNodeProps, next: IOSNodeProps): boolean => {
+  return (
+    prev.node.node_id === next.node.node_id &&
+    prev.node.prompt_key === next.node.prompt_key &&
+    prev.node.position_x === next.node.position_x &&
+    prev.node.position_y === next.node.position_y &&
+    JSON.stringify(prev.node.config) === JSON.stringify(next.node.config) &&
+    prev.isSelected === next.isSelected &&
+    prev.isConnecting === next.isConnecting
+  );
+};
+
+export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
+  node,
+  isSelected,
+  isConnecting = false,
+  onDragStart,
+  onDelete,
+  onStartConnection,
+  onCompleteConnection,
+}) => {
+  // #ADDED: safe preview text
+  const previewText = (() => {
+    const customPrompt = node.config?.custom_prompt;
+    if (customPrompt == null) return null;
+    if (typeof customPrompt === 'string') {
+      return customPrompt.length > 80 ? customPrompt.substring(0, 80) + '...' : customPrompt;
+    }
+    try {
+      const str = JSON.stringify(customPrompt);
+      return str.length > 80 ? str.substring(0, 80) + '...' : str;
+    } catch {
+      return String(customPrompt).substring(0, 80) + '...';
+    }
+  })();
+
+  return (
+    <div
+      className={`
+        absolute min-w-[220px] max-w-[280px] p-4 rounded-lg
+        backdrop-blur-md border transition-all duration-300
+        ${isSelected
+          ? 'border-[var(--bronze-base)] shadow-[0_0_25px_var(--bronze-glow)]'
+          : 'border-[var(--ios-border)] shadow-[var(--shadow-node)]'
+        }
+        ${isConnecting ? 'ring-2 ring-[var(--bronze-base)] ring-offset-2 ring-offset-black' : ''}
+      `}
+      style={{
+        left: node.position_x,
+        top: node.position_y,
+        background: 'linear-gradient(145deg, rgba(30,30,32,0.9), rgba(20,20,22,0.95))',
+      }}
+      onMouseDown={(e) => onDragStart(node.node_id, e)}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--ios-border)]">
+        <span className="text-[10px] text-[var(--bronze-base)] uppercase tracking-wider font-bold">
+          {node.prompt_key}
+        </span>
+        <div className="flex items-center gap-1">
+          {/* Connection port */}
+          {onStartConnection && onCompleteConnection && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartConnection(node.node_id);
+              }}
+              className="w-4 h-4 rounded-full bg-[var(--bronze-dim)] hover:bg-[var(--bronze-base)] transition-colors flex items-center justify-center"
+              title="Start connection"
+            >
+              <svg className="w-2 h-2 text-[var(--bronze-bright)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          )}
+          {/* Delete button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(node.node_id);
+            }}
+            className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Title */}
+      <div className="text-sm font-semibold text-[var(--text-main)] mb-2">
+        {node.prompt_key.replace(/_/g, ' ')}
+      </div>
+
+      {/* Connection target zone */}
+      {onCompleteConnection && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onCompleteConnection(node.node_id);
+          }}
+          className="mt-2 pt-2 border-t border-[var(--ios-border)] text-[9px] text-[var(--text-muted)] hover:text-[var(--bronze-bright)] cursor-pointer transition-colors"
+        >
+          ⚡ Click to connect
+        </div>
+      )}
+
+      {/* Status */}
+      <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] mt-2">
+        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-success)] animate-pulse" />
+        Ready
+      </div>
+
+      {/* Custom prompt preview */}
+      {previewText && (
+        <div className="mt-2 p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-[9px] text-[var(--text-secondary)] font-mono max-h-16 overflow-hidden">
+          {previewText}
+        </div>
+      )}
+    </div>
+  );
+}, arePropsEqual);
+
+IOSNode.displayName = 'IOSNode';
+```
+
+## FILE: frontend/package.json
+## SIZE: 1733 bytes
+## LINES: 59
+```
+{
+  "name": "mrak-os-v2",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "generate-types": "npx openapi-typescript ./openapi.yaml -o ./src/api/generated/schema.d.ts",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.90.21",
+    "@types/three": "^0.183.1",
+    "@xyflow/react": "^12.10.1",
+    "framer-motion": "^12.34.3",
+    "lucide-react": "^0.575.0",
+    "marked": "^17.0.3",
+    "openapi-fetch": "^0.17.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.13.1",
+    "three": "^0.183.1",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.58.2",
+    "@tailwindcss/postcss": "^4.2.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^1.0.0",
+    "autoprefixer": "^10.4.24",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "jsdom": "^28.1.0",
+    "openapi-typescript": "^7.13.0",
+    "postcss": "^8.5.6",
+    "rollup-plugin-visualizer": "^7.0.0",
+    "tailwindcss": "^4.2.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "vite": "^7.3.1",
+    "vite-plugin-compression": "^0.5.1",
+    "vitest": "^1.0.0"
+  }
+}
+```
+
+## FILE: frontend/vite.config.ts
+## SIZE: 462 bytes
+## LINES: 22
+```
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path,
+      },
+    },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    setupFiles: ['./src/test/setup.ts'],
+  },
+})
+```
+
+## FILE: frontend/openapi.yaml
+## SIZE: 42511 bytes
+## LINES: 1558
+```
+openapi: 3.0.0
+info:
+  title: MRAK-OS Factory API
+  description: API для AI-ассистента разработки, управляющего проектами, артефактами, сессиями уточнения и workflow.
+  version: 1.0.0
+servers:
+  - url: https://mrak-os-factory.onrender.com
+    description: Продакшн сервер
+  - url: http://localhost:8000
+    description: Локальный сервер разработки
+
+paths:
+  # ==================== Проекты ====================
+  /api/projects:
+    get:
+      operationId: getProjects
+      summary: Список всех проектов
+      tags:
+        - projects
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: createProject
+      summary: Создать новый проект
+      tags:
+        - projects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+      responses:
+        '200':
+          description: Проект создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/projects/{project_id}:
+    delete:
+      operationId: deleteProject
+      summary: Удалить проект (каскадно удаляет все артефакты)
+      tags:
+        - projects
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Проект удалён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/projects/{project_id}/unlock:
+    post:
+      operationId: unlockProject
+      summary: Разблокировать проект паролем (устанавливает cookie)
+      tags:
+        - projects
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Доступ разрешён, cookie установлена
+        '400':
+          description: Проект не защищён паролем
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Неверный пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/projects/{project_id}/set_password:
+    post:
+      operationId: setProjectPassword
+      summary: Установить или снять пароль проекта (только для администратора)
+      tags:
+        - projects
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  description: Если пустая строка – пароль удаляется
+      security:
+        - MasterKeyAuth: []
+      responses:
+        '200':
+          description: Пароль обновлён
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== Артефакты ====================
+  /api/projects/{project_id}/artifacts:
+    get:
+      operationId: getArtifacts
+      summary: Получить список артефактов проекта
+      tags:
+        - artifacts
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Фильтр по типу артефакта
+      responses:
+        '200':
+          description: Список артефактов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Artifact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/artifact:
+    post:
+      operationId: createArtifact
+      summary: Сохранить или сгенерировать артефакт
+      tags:
+        - artifacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactCreate'
+      responses:
+        '200':
+          description: Успешно сохранено/сгенерировано
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  generated:
+                    type: boolean
+        '404':
+          description: Родительский артефакт не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/latest_artifact:
+    get:
+      operationId: getLatestArtifact
+      summary: Получить последнюю версию артефакта по родителю и типу
+      tags:
+        - artifacts
+      parameters:
+        - name: parent_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Информация о существовании и содержимом
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+                  artifact_id:
+                    type: string
+                    format: uuid
+                  content:
+                    type: object
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/validate_artifact:
+    post:
+      operationId: validateArtifact
+      summary: Установить статус артефакта (VALIDATED / REJECTED)
+      tags:
+        - artifacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                artifact_id:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  enum: [VALIDATED, REJECTED]
+      responses:
+        '200':
+          description: Статус обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: updated
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/artifact/{artifact_id}:
+    delete:
+      operationId: deleteArtifact
+      summary: Удалить артефакт (каскадно)
+      tags:
+        - artifacts
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Артефакт удалён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/generate_artifact:
+    post:
+      operationId: generateArtifact
+      summary: Сгенерировать артефакт с учётом фидбека (специализированные методы)
+      tags:
+        - artifacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateArtifactRequest'
+      responses:
+        '200':
+          description: Результат генерации
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/save_artifact_package:
+    post:
+      operationId: saveArtifactPackage
+      summary: Сохранить пакет артефактов (с версионированием и проверкой дубликатов)
+      tags:
+        - artifacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavePackageRequest'
+      responses:
+        '200':
+          description: Сохранённый артефакт (или дубликат)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  duplicate:
+                    type: boolean
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/projects/{project_id}/messages:
+    get:
+      operationId: getProjectMessages
+      summary: Получить историю сообщений (LLMResponse) проекта
+      tags:
+        - artifacts
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список артефактов типа LLMResponse
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Artifact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== Типы артефактов ====================
+  /api/artifact-types:
+    get:
+      operationId: getArtifactTypes
+      summary: Список всех типов артефактов с метаданными
+      tags:
+        - artifact-types
+      responses:
+        '200':
+          description: Массив типов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArtifactType'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: createArtifactType
+      summary: Создать новый тип артефакта (админ)
+      tags:
+        - artifact-types
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactTypeCreate'
+      security:
+        - MasterKeyAuth: []
+      responses:
+        '201':
+          description: Тип создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/artifact-types/{type}:
+    get:
+      operationId: getArtifactType
+      summary: Получить метаданные конкретного типа
+      tags:
+        - artifact-types
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Метаданные типа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactType'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      operationId: updateArtifactType
+      summary: Обновить метаданные типа (админ)
+      tags:
+        - artifact-types
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Частичные обновляемые поля (schema, allowed_parents, requires_clarification, icon)
+      security:
+        - MasterKeyAuth: []
+      responses:
+        '200':
+          description: Обновлено
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteArtifactType
+      summary: Удалить тип артефакта (админ)
+      tags:
+        - artifact-types
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - MasterKeyAuth: []
+      responses:
+        '200':
+          description: Удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== Сессии уточнения ====================
+  /api/clarification/start:
+    post:
+      operationId: startClarification
+      summary: Начать новую сессию уточнения
+      tags:
+        - clarification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartClarificationRequest'
+      responses:
+        '200':
+          description: Сессия создана, возвращается первый вопрос ассистента
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClarificationSessionResponse'
+        '400':
+          description: Неверные параметры или режим не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/clarification/{session_id}/message:
+    post:
+      operationId: sendClarificationMessage
+      summary: Отправить сообщение в сессию и получить ответ
+      tags:
+        - clarification
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageRequest'
+      responses:
+        '200':
+          description: Обновлённая сессия
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClarificationSessionResponse'
+        '400':
+          description: Сессия не активна
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/clarification/{session_id}:
+    get:
+      operationId: getClarificationSession
+      summary: Получить текущее состояние сессии
+      tags:
+        - clarification
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Сессия
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClarificationSessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/clarification/{session_id}/complete:
+    post:
+      operationId: completeClarificationSession
+      summary: Завершить сессию (установить статус completed)
+      tags:
+        - clarification
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Сессия завершена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: completed
+                  session_id:
+                    type: string
+        '400':
+          description: Сессия уже завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/projects/{project_id}/clarification/active:
+    get:
+      operationId: getActiveClarificationSessions
+      summary: Список активных сессий проекта
+      tags:
+        - clarification
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Массив активных сессий
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    target_artifact_type:
+                      type: string
+                    created_at:
+                      type: string
+                      format: date-time
+                    updated_at:
+                      type: string
+                      format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== Workflow ====================
+  /api/workflows:
+    get:
+      operationId: getWorkflows
+      summary: Список всех workflow
+      tags:
+        - workflows
+      responses:
+        '200':
+          description: Массив workflow
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workflow'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: createWorkflow
+      summary: Создать новый workflow
+      tags:
+        - workflows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowCreate'
+      responses:
+        '201':
+          description: Workflow создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/{workflow_id}:
+    get:
+      operationId: getWorkflow
+      summary: Получить workflow с узлами и рёбрами
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Детальная информация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      operationId: updateWorkflow
+      summary: Обновить метаданные workflow
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowUpdate'
+      responses:
+        '200':
+          description: Обновлено
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteWorkflow
+      summary: Удалить workflow
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/{workflow_id}/nodes:
+    post:
+      operationId: createWorkflowNode
+      summary: Добавить узел в workflow
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNodeCreate'
+      responses:
+        '201':
+          description: Узел создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Узел с таким node_id уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/nodes/{node_record_id}:
+    put:
+      operationId: updateWorkflowNode
+      summary: Обновить узел
+      tags:
+        - workflows
+      parameters:
+        - name: node_record_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowNodeUpdate'
+      responses:
+        '200':
+          description: Обновлено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteWorkflowNode
+      summary: Удалить узел
+      tags:
+        - workflows
+      parameters:
+        - name: node_record_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/{workflow_id}/edges:
+    post:
+      operationId: createWorkflowEdge
+      summary: Добавить ребро в workflow
+      tags:
+        - workflows
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowEdgeCreate'
+      responses:
+        '201':
+          description: Ребро создано
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Некорректные узлы (не найдены)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflows/edges/{edge_record_id}:
+    delete:
+      operationId: deleteWorkflowEdge
+      summary: Удалить ребро
+      tags:
+        - workflows
+      parameters:
+        - name: edge_record_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflow/next:
+    get:
+      operationId: getNextWorkflowStep
+      summary: Получить следующий шаг для проекта (простой режим)
+      tags:
+        - workflows
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Информация о следующем шаге или завершении
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  next_stage:
+                    type: string
+                    description: Тип следующего артефакта или 'finished'
+                  prompt_type:
+                    type: string
+                  parent_id:
+                    type: string
+                    format: uuid
+                  description:
+                    type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/workflow/execute_next:
+    post:
+      operationId: executeNextWorkflowStep
+      summary: Выполнить следующий шаг (сгенерировать артефакт)
+      tags:
+        - workflows
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: model
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Результат выполнения шага (артефакт)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifact_id:
+                    type: string
+                  artifact_type:
+                    type: string
+                  content:
+                    type: object
+                  parent_id:
+                    type: string
+                  next_stage:
+                    type: string
+                  existing:
+                    type: boolean
+        '400':
+          description: Нет следующего шага или ошибка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== Модели и режимы ====================
+  /api/models:
+    get:
+      operationId: getModels
+      summary: Список доступных LLM-моделей
+      tags:
+        - modes
+      responses:
+        '200':
+          description: Массив моделей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/modes:
+    get:
+      operationId: getModes
+      summary: Список доступных режимов промптов
+      tags:
+        - modes
+      responses:
+        '200':
+          description: Массив режимов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    default:
+                      type: boolean
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/analyze:
+    post:
+      operationId: analyzeStream
+      summary: Отправить запрос к LLM в стриминговом режиме
+      tags:
+        - modes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+                mode:
+                  type: string
+                model:
+                  type: string
+                project_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Стриминг текстового ответа (text/plain)
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Неверный JSON или отсутствует prompt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Ошибка получения системного промпта
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "🔴 SYSTEM_CRITICAL_ERROR: ..."
+
+components:
+  securitySchemes:
+    MasterKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Master-Key
+      description: Ключ администратора для доступа к защищённым операциям.
+
+  schemas:
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        password_hash:
+          type: string
+          nullable: true
+
+    ProjectCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    Artifact:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        content:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, GENERATED, VALIDATED, REJECTED]
+        summary:
+          type: string
+
+    ArtifactCreate:
+      type: object
+      required:
+        - project_id
+        - artifact_type
+        - content
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        artifact_type:
+          type: string
+        content:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        generate:
+          type: boolean
+        model:
+          type: string
+
+    GenerateArtifactRequest:
+      type: object
+      required:
+        - artifact_type
+        - parent_id
+        - project_id
+      properties:
+        artifact_type:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+        feedback:
+          type: string
+        model:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        existing_content:
+          type: object
+          nullable: true
+
+    SavePackageRequest:
+      type: object
+      required:
+        - project_id
+        - parent_id
+        - artifact_type
+        - content
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+        artifact_type:
+          type: string
+        content:
+          type: object
+
+    ArtifactType:
+      type: object
+      properties:
+        type:
+          type: string
+        schema:
+          type: object
+        allowed_parents:
+          type: array
+          items:
+            type: string
+        requires_clarification:
+          type: boolean
+        icon:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ArtifactTypeCreate:
+      type: object
+      required:
+        - type
+        - schema
+      properties:
+        type:
+          type: string
+        schema:
+          type: object
+        allowed_parents:
+          type: array
+          items:
+            type: string
+        requires_clarification:
+          type: boolean
+        icon:
+          type: string
+
+    StartClarificationRequest:
+      type: object
+      required:
+        - project_id
+        - target_artifact_type
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        target_artifact_type:
+          type: string
+        model:
+          type: string
+
+    MessageRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+
+    ClarificationSessionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        target_artifact_type:
+          type: string
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+        status:
+          type: string
+          enum: [active, completed]
+        context_summary:
+          type: object
+          nullable: true
+        final_artifact_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Workflow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        is_default:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WorkflowCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        is_default:
+          type: boolean
+
+    WorkflowUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        is_default:
+          type: boolean
+
+    WorkflowNodeCreate:
+      type: object
+      required:
+        - node_id
+        - prompt_key
+        - position_x
+        - position_y
+      properties:
+        node_id:
+          type: string
+        prompt_key:
+          type: string
+        config:
+          type: object
+        position_x:
+          type: number
+          format: float
+        position_y:
+          type: number
+          format: float
+
+    WorkflowNodeUpdate:
+      type: object
+      properties:
+        prompt_key:
+          type: string
+        config:
+          type: object
+        position_x:
+          type: number
+          format: float
+        position_y:
+          type: number
+          format: float
+
+    WorkflowEdgeCreate:
+      type: object
+      required:
+        - source_node
+        - target_node
+      properties:
+        source_node:
+          type: string
+        target_node:
+          type: string
+        source_output:
+          type: string
+          default: output
+        target_input:
+          type: string
+          default: input
+
+    WorkflowDetail:
+      type: object
+      properties:
+        workflow:
+          $ref: '#/components/schemas/Workflow'
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              workflow_id:
+                type: string
+              node_id:
+                type: string
+              prompt_key:
+                type: string
+              config:
+                type: object
+              position_x:
+                type: number
+              position_y:
+                type: number
+              created_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
+        edges:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              workflow_id:
+                type: string
+              source_node:
+                type: string
+              target_node:
+                type: string
+              source_output:
+                type: string
+              target_input:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+    InternalServerError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'```
+
+## FILE: frontend/src/api/client.ts
+## SIZE: 2689 bytes
+## LINES: 95
+```
+// frontend/src/api/client.ts
+import createClient from 'openapi-fetch';
+import type { paths, components } from './generated/schema';
+import { createTimeoutMiddleware } from './fetchWithTimeout';
+
+// Get token from sessionStorage
+const getSessionToken = (): string | null => {
+  return sessionStorage.getItem('mrak_session_token');
+};
+
+// Helper to get auth headers - returns proper HeadersInit type
+const getAuthHeaders = (): HeadersInit | undefined => {
+  const token = getSessionToken();
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` };
+  }
+  return undefined;
+};
+
+// Create client
+export const client = createClient<paths>({
+  baseUrl: '',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Register middleware for client.GET/POST/etc
+client.use({
+  onRequest({ request }) {
+    const token = getSessionToken();
+    if (token) {
+      request.headers.set('Authorization', `Bearer ${token}`);
+    }
+    return request;
+  },
+});
+
+client.use(createTimeoutMiddleware(30000));
+
+export const api = {
+  projects: {
+    list: () => client.GET('/api/projects'),
+    create: (body: components['schemas']['ProjectCreate']) =>
+      client.POST('/api/projects', { body }),
+    delete: (projectId: string) =>
+      client.DELETE('/api/projects/{project_id}', { params: { path: { project_id: projectId } } }),
+  },
+  models: {
+    list: () => client.GET('/api/models'),
+  },
+  modes: {
+    list: () => client.GET('/api/modes'),
+  },
+  artifactTypes: {
+    list: () => client.GET('/api/artifact-types'),
+  },
+  artifacts: {
+    list: (projectId: string) =>
+      client.GET('/api/projects/{project_id}/artifacts', { params: { path: { project_id: projectId } } }),
+  },
+  messages: {
+    list: (projectId: string) =>
+      client.GET('/api/projects/{project_id}/messages', { params: { path: { project_id: projectId } } }),
+  },
+  auth: {
+    login: async (body: { master_key: string }) => {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.session_token) {
+        sessionStorage.setItem('mrak_session_token', data.session_token);
+      }
+      return data;
+    },
+    logout: async () => {
+      sessionStorage.removeItem('mrak_session_token');
+      const res = await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+      return res.json();
+    },
+    session: async () => {
+      const headers = getAuthHeaders();
+      const res = await fetch('/api/auth/session', {
+        method: 'GET',
+        headers: headers || {},
+      });
+      return res.json();
+    },
+  },
+};
+```
+
+## FILE: frontend/src/hooks/useCanvasEngine.ts
+## SIZE: 3494 bytes
+## LINES: 122
+```
+import { useState, useCallback, useRef } from 'react';
+import {
+  NODE_HALF_WIDTH,
+  NODE_HALF_HEIGHT,
+  VIEWPORT_SCALE_MIN,
+  VIEWPORT_SCALE_MAX,
+  VIEWPORT_SCALE_DEFAULT,
+  ZOOM_SENSITIVITY,
+  ZOOM_FACTOR,
+  PAN_MOUSE_BUTTON,
+} from '../constants/canvas';
+
+export interface NodeData {
+  id: string;
+  node_id: string;
+  prompt_key: string;
+  position_x: number;
+  position_y: number;
+  config?: Record<string, unknown>; // #CHANGED: any -> unknown
+}
+
+export interface EdgeData {
+  id: string;
+  source_node: string;
+  target_node: string;
+}
+
+interface UseCanvasEngineReturn {
+  pan: { x: number; y: number };
+  scale: number;
+  selectedNode: string | null;
+  handleWheel: (e: React.WheelEvent, containerRect: DOMRect) => void;
+  handlePanStart: (e: React.MouseEvent) => void;
+  handleMouseMove: (e: React.MouseEvent) => void;
+  handleMouseUp: () => void;
+  handleNodeDragStart: (nodeId: string, e: React.MouseEvent) => void;
+  setSelectedNode: (id: string | null) => void;
+}
+
+export const useCanvasEngine = (
+  _nodes: NodeData[],
+  _edges: EdgeData[],
+  setNodes: (nodes: NodeData[]) => void,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _setEdges: (edges: EdgeData[]) => void
+): UseCanvasEngineReturn => {
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(VIEWPORT_SCALE_DEFAULT);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const [draggedNode, setDraggedNode] = useState<string | null>(null);
+
+  const mouseStart = useRef({ x: 0, y: 0 });
+
+  const handleWheel = useCallback((e: React.WheelEvent, containerRect: DOMRect) => {
+    e.preventDefault();
+    const factor = Math.pow(ZOOM_FACTOR, -e.deltaY / ZOOM_SENSITIVITY);
+    const newScale = Math.min(Math.max(scale * factor, VIEWPORT_SCALE_MIN), VIEWPORT_SCALE_MAX);
+
+    const mx = e.clientX - containerRect.left;
+    const my = e.clientY - containerRect.top;
+
+    setPan(prev => ({
+      x: mx - (mx - prev.x) * (newScale / scale),
+      y: my - (my - prev.y) * (newScale / scale),
+    }));
+    setScale(newScale);
+  }, [scale]);
+
+  const handlePanStart = useCallback((e: React.MouseEvent) => {
+    if (e.button === PAN_MOUSE_BUTTON || (e.button === 0 && e.altKey)) {
+      setIsPanning(true);
+      mouseStart.current = {
+        x: e.clientX - pan.x,
+        y: e.clientY - pan.y,
+      };
+    }
+  }, [pan]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (isPanning) {
+      setPan({
+        x: e.clientX - mouseStart.current.x,
+        y: e.clientY - mouseStart.current.y,
+      });
+    } else if (draggedNode) {
+      setNodes(_nodes.map(node => {
+        if (node.node_id === draggedNode) {
+          return {
+            ...node,
+            position_x: (e.clientX - pan.x) / scale - NODE_HALF_WIDTH,
+            position_y: (e.clientY - pan.y) / scale - NODE_HALF_HEIGHT,
+          };
+        }
+        return node;
+      }));
+    }
+  }, [isPanning, draggedNode, pan, scale, _nodes, setNodes]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsPanning(false);
+    setDraggedNode(null);
+  }, []);
+
+  const handleNodeDragStart = useCallback((nodeId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDraggedNode(nodeId);
+    setSelectedNode(nodeId);
+  }, []);
+
+  return {
+    pan,
+    scale,
+    selectedNode,
+    handleWheel,
+    handlePanStart,
+    handleMouseMove,
+    handleMouseUp,
+    handleNodeDragStart,
+    setSelectedNode,
+  };
+};
+```
+
+## FILE: frontend/src/constants/canvas.ts
+## SIZE: 2986 bytes
+## LINES: 104
+```
+// frontend/src/constants/canvas.ts
+// ADDED: Named constants for canvas coordinate system
+
+/**
+ * # Canvas Coordinate System Specification
+ * 
+ * ## Three Coordinate Layers
+ * 
+ * 1. **World Space** (node_world_pos)
+ *    - Absolute coordinates in the infinite canvas
+ *    - Nodes are positioned in world space
+ *    - Origin: (0, 0) at top-left of canvas
+ * 
+ * 2. **Viewport Space** (node_viewport_pos)
+ *    - Coordinates relative to the visible viewport
+ *    - Affected by pan offset
+ *    - Formula: viewport_pos = world_pos + pan
+ * 
+ * 3. **Screen Space** (node_screen_pos)
+ *    - Final pixel coordinates on the monitor
+ *    - Affected by both pan and scale
+ *    - Formula: screen_pos = (world_pos × scale) + pan
+ * 
+ * ## Invariants
+ * 
+ * - node_screen_pos = (node_world_pos × scale) + pan
+ * - node_world_pos = (node_screen_pos - pan) / scale
+ * - Scale bounds: VIEWPORT_SCALE_MIN ≤ scale ≤ VIEWPORT_SCALE_MAX
+ * 
+ * ## Visual Reference
+ * 
+ * ```
+ * World Space:  [node] at (100, 200)
+ *               ↓ × scale (1.5)
+ * Viewport:     [node] at (150, 300)
+ *               ↓ + pan (50, 100)
+ * Screen:       [node] at (200, 400) pixels
+ * ```
+ */
+
+// ==================== NODE DIMENSIONS ====================
+
+/** Half width of a node in pixels (used for centering) */
+export const NODE_HALF_WIDTH = 110;
+
+/** Half height of a node in pixels (used for centering) */
+export const NODE_HALF_HEIGHT = 40;
+
+/** Full width of a node in pixels */
+export const NODE_WIDTH = NODE_HALF_WIDTH * 2;
+
+/** Full height of a node in pixels */
+export const NODE_HEIGHT = NODE_HALF_HEIGHT * 2;
+
+// ==================== VIEWPORT CONSTRAINTS ====================
+
+/** Minimum zoom scale (20% zoom out) */
+export const VIEWPORT_SCALE_MIN = 0.2;
+
+/** Maximum zoom scale (300% zoom in) */
+export const VIEWPORT_SCALE_MAX = 3.0;
+
+/** Default zoom scale (100%) */
+export const VIEWPORT_SCALE_DEFAULT = 1.0;
+
+// ==================== ZOOM CONFIGURATION ====================
+
+/** Zoom sensitivity factor for mouse wheel */
+export const ZOOM_SENSITIVITY = 300;
+
+/** Zoom factor per wheel step (1.1 = 10% per step) */
+export const ZOOM_FACTOR = 1.1;
+
+// ==================== PAN CONFIGURATION ====================
+
+/** Mouse button for panning (1 = middle click) */
+export const PAN_MOUSE_BUTTON = 1;
+
+/** Alternative pan modifier key */
+export const PAN_MODIFIER_KEY = 'Alt';
+
+// ==================== SELECTION CONFIGURATION ====================
+
+/** Distance in pixels for click detection on nodes */
+export const NODE_CLICK_THRESHOLD = 5;
+
+/** Connection port size in pixels */
+export const CONNECTION_PORT_SIZE = 16;
+
+// Export all constants as a single object for convenience
+export const CANVAS_CONSTANTS = {
+  NODE_HALF_WIDTH,
+  NODE_HALF_HEIGHT,
+  NODE_WIDTH,
+  NODE_HEIGHT,
+  VIEWPORT_SCALE_MIN,
+  VIEWPORT_SCALE_MAX,
+  VIEWPORT_SCALE_DEFAULT,
+  ZOOM_SENSITIVITY,
+  ZOOM_FACTOR,
+  PAN_MOUSE_BUTTON,
+  PAN_MODIFIER_KEY,
+  NODE_CLICK_THRESHOLD,
+  CONNECTION_PORT_SIZE,
+} as const;```
+
+## FILE: frontend/tsconfig.json
+## SIZE: 652 bytes
+## LINES: 25
+```
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__tests__/**"]
+}
+```
+
+## FILE: frontend/src/test/setup.ts
+## SIZE: 1300 bytes
+## LINES: 50
+```
+// frontend/src/test/setup.ts
+import { vi, beforeEach, afterEach } from 'vitest';
+
+// Mock sessionStorage for tests (jsdom doesn't provide it by default)
+const mockSessionStorage: any = {
+  store: new Map<string, string>(),
+  getItem: vi.fn((key: string): string | null => mockSessionStorage.store.get(key) ?? null),
+  setItem: vi.fn((key: string, value: string): void => { mockSessionStorage.store.set(key, value); }),
+  removeItem: vi.fn((key: string): void => { mockSessionStorage.store.delete(key); }),
+  clear: vi.fn((): void => { mockSessionStorage.store.clear(); }),
+};
+
+Object.defineProperty(window, 'sessionStorage', {
+  value: mockSessionStorage,
+  writable: true,
+  configurable: true,
+});
+
+// Mock import.meta.env for Vite-specific code
+Object.defineProperty(global, 'import.meta', {
+  value: {
+    env: {
+      PROD: false,
+      DEV: true,
+      VITE_API_URL: 'http://localhost:3000',
+    },
+  },
+  writable: true,
+});
+
+// Mock fetch for tests
+global.fetch = vi.fn(() =>
+  Promise.resolve({
+    json: () => Promise.resolve({}),
+    ok: true,
+    status: 200,
+    headers: new Map(),
+  } as any)
+);
+
+// Reset mocks before each test
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockSessionStorage.store.clear();
+});
+
+// Cleanup after each test
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+```
+
+## FILE: frontend/.env.production
+## SIZE: 17 bytes
+## LINES: 0
+```
+VITE_API_URL=/api```
+
+## SUMMARY
+Total size: 84K
+Total lines: 2891

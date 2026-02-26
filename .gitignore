@@ -75,3 +75,6 @@ frontend/.vite/
 # Migrations
 migrations/*.sql
 !migrations/.gitkeep
+test-results/
+frontend/test-results/
+frontend/playwright-report/

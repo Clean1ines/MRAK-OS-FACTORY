@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -n 'FE,BE' -c 'cyan,yellow' 'npm run dev:frontend' 'npm run dev:backend'",
     "dev:frontend": "cd frontend && vite",
-    "dev:backend": "python server.py",
+    "dev:backend": "python -m uvicorn server:app --host 0.0.0.0 --port 8000",
     "build": "cd frontend && tsc -b && vite build",
     "lint": "cd frontend && eslint .",
     "preview": "cd frontend && vite preview",
@@ -14,14 +14,13 @@
     "test": "cd frontend && vitest",
     "test:ui": "cd frontend && vitest --ui",
     "test:run": "cd frontend && vitest run",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug",
-    "test:e2e:ci": "playwright test --reporter=list",
+    "test:e2e:auto": "bash scripts/e2e-auto.sh",
     "type-check": "cd frontend && tsc --noEmit",
     "playwright:install": "playwright install",
     "playwright:install-deps": "npx playwright install-deps",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "test:e2e:headed": "bash scripts/e2e-one-shot.sh --headed",
+    "test:e2e": "bash scripts/e2e-run.sh"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",

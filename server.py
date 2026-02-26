@@ -44,6 +44,9 @@ async def health():
     """
     Health check endpoint for load balancers and monitoring.
     Returns {"status": "ok"} if service is alive.
+    
+    Returns:
+        dict: Status indicator.
     """
     return {"status": "ok"}
 
@@ -58,6 +61,12 @@ app.include_router(auth.router)
 # ==================== STARTUP ====================
 @app.on_event("startup")
 async def startup_event():
+    """
+    Initialize database connection on startup.
+    
+    Logs connection status via structlog. Exits silently on failure
+    to allow health-check-based orchestration.
+    """
     # #CHANGED: Use structlog logger
     logger.info("Starting up... Testing database connection.")
     try:
@@ -72,6 +81,16 @@ async def startup_event():
 # ==================== MIDDLEWARE ====================
 @app.middleware("http")
 async def correlation_id_middleware(request: Request, call_next):
+    """
+    Inject correlation_id into logs and response headers for request tracing.
+    
+    Args:
+        request: FastAPI Request object.
+        call_next: Next middleware/handler in chain.
+    
+    Returns:
+        Response with X-Request-ID header.
+    """
     # #ADDED: Extract or generate correlation_id for request tracing
     correlation_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
 
@@ -95,6 +114,23 @@ async def correlation_id_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def validate_session_middleware(request: Request, call_next):
+    """
+    Validate session token from Authorization header (Bearer scheme ONLY).
+    
+    Cookies are NOT supported due to cross-domain/cors constraints.
+    Token must be present in sessionStorage on client and sent as:
+        Authorization: Bearer <session_token>
+    
+    Args:
+        request: FastAPI Request object.
+        call_next: Next middleware/handler in chain.
+    
+    Returns:
+        Response if auth fails, else continues to handler.
+    
+    Raises:
+        HTTPException: 401 if token missing or invalid.
+    """
     # #CHANGED: Use structlog logger with request context
     request_logger = logger.bind(path=request.url.path)
 
@@ -118,10 +154,19 @@ async def validate_session_middleware(request: Request, call_next):
 
     # Check session for API requests
     if request.url.path.startswith("/api"):
-        session_token = request.cookies.get("mrak_session")
+        # #CHANGED: Accept ONLY Bearer token from Authorization header (NO cookie fallback)
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            request_logger.warning("401: Missing or invalid Authorization header (expected 'Bearer <token>')")
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required: send 'Authorization: Bearer <token>'"}
+            )
+        
+        session_token = auth_header[7:]  # Remove "Bearer " prefix
 
         if not session_token:
-            request_logger.warning("401: No session cookie")
+            request_logger.warning("401: Empty session token")
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Authentication required"}
@@ -130,7 +175,7 @@ async def validate_session_middleware(request: Request, call_next):
         # Validate session
         from routers.auth import validate_session
         if not validate_session(session_token):
-            request_logger.warning("401: Invalid session")
+            request_logger.warning("401: Invalid session token")
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Session expired or invalid"}
@@ -152,6 +197,12 @@ if assets_dir.exists():
 
 @app.get("/")
 async def serve_frontend():
+    """
+    Serve frontend index.html for SPA routing.
+    
+    Returns:
+        FileResponse: index.html if exists, else error JSON.
+    """
     index_path = static_dir / "index.html"
     if index_path.exists():
         return FileResponse(str(index_path))
@@ -161,6 +212,15 @@ async def serve_frontend():
 
 @app.get("/{path:path}")
 async def serve_spa(path: str):
+    """
+    Handle SPA client-side routing: serve index.html for unknown paths.
+    
+    Args:
+        path: URL path segment.
+    
+    Returns:
+        FileResponse or JSON error.
+    """
     if path.startswith("api/") or path.startswith("docs") or path.startswith("openapi") or path == "health":
         return {"detail": "Not Found"}
 

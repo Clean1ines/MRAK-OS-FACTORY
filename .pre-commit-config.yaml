@@ -84,3 +84,17 @@ repos:
         pass_filenames: false
         always_run: false
         stages: [pre-push]  # ← Только перед пушем
+
+  # E2E Tests — pre-push only (solo-dev optimized)
+  - repo: local
+    hooks:
+      - id: e2e-tests-workspace
+        name: Playwright E2E (TASK-012 workspace flows)
+        entry: bash scripts/run_e2e_tests.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+        files: ^frontend/|^tests/e2e/
+        # Soft-fail: выводим ошибку но не блокируем пуш (уберите || true для strict mode)
+        # Для solo-dev: лучше видеть ошибку чем блокировать работу

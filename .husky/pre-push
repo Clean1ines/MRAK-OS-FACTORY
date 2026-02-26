@@ -1,0 +1,7 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Запускаем pre-commit хуки сначала (type-check, lint, unit tests)
+# Затем — E2E если есть изменения в frontend/tests
+
+npx pre-push || exit 0

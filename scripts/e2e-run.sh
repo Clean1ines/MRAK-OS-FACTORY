@@ -57,6 +57,7 @@ done
 sleep 3
 
 echo "🎭 Running tests..."
+echo "▶️ Command: playwright test ${@} --config=$ROOT/playwright.config.ts --reporter=list --timeout=20000"
 "$ROOT/node_modules/.bin/playwright" test \
   --config="$ROOT/playwright.config.ts" \
   --reporter=list \

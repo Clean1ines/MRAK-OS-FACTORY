@@ -82,3 +82,64 @@ async def delete_project(project_id: str, tx=None) -> None:
     finally:
         if close_conn:
             await conn.close()
+
+async def check_name_exists(name: str, exclude_id: Optional[str] = None, tx=None) -> bool:
+    """
+    Проверяет, существует ли проект с указанным именем.
+
+    Args:
+        name: Имя для проверки.
+        exclude_id: ID проекта, который следует исключить из проверки (для обновления).
+        tx: Опциональная транзакция.
+
+    Returns:
+        True, если проект с таким именем уже существует (и не равен exclude_id), иначе False.
+    """
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
+        conn = await get_connection()
+        close_conn = True
+    try:
+        if exclude_id:
+            query = "SELECT 1 FROM projects WHERE name = $1 AND id != $2 LIMIT 1"
+            result = await conn.fetchval(query, name, exclude_id)
+        else:
+            query = "SELECT 1 FROM projects WHERE name = $1 LIMIT 1"
+            result = await conn.fetchval(query, name)
+        return result is not None
+    finally:
+        if close_conn:
+            await conn.close()
+
+async def update_project(project_id: str, name: str, description: str, tx=None) -> bool:
+    """
+    Обновляет существующий проект.
+
+    Args:
+        project_id: ID проекта.
+        name: Новое имя.
+        description: Новое описание.
+        tx: Опциональная транзакция.
+
+    Returns:
+        True, если проект был обновлён (затронута хотя бы одна строка), иначе False.
+    """
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
+        conn = await get_connection()
+        close_conn = True
+    try:
+        result = await conn.execute('''
+            UPDATE projects
+            SET name = $1, description = $2, updated_at = NOW()
+            WHERE id = $3
+        ''', name, description, project_id)
+        # asyncpg возвращает строку вида "UPDATE <count>"
+        return result.split()[-1] != '0'
+    finally:
+        if close_conn:
+            await conn.close()

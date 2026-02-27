@@ -17,9 +17,13 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   const checkAuth = async () => {
     try {
       const { data, error } = await api.auth.session();
-      console.log('[AuthGuard] Session response:', { data, error }); // Debug log
-      // Check if data exists and has authenticated === true
-      setIsAuthenticated(data?.authenticated === true);
+      console.log('[AuthGuard] Session response:', { data, error });
+      // Проверяем, что data не null/undefined и содержит свойство authenticated
+      if (data && typeof data === 'object' && 'authenticated' in data) {
+        setIsAuthenticated(data.authenticated === true);
+      } else {
+        setIsAuthenticated(false);
+      }
     } catch (err) {
       console.error('[AuthGuard] Session check failed:', err);
       setIsAuthenticated(false);

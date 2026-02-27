@@ -35,11 +35,13 @@ export const useProjectData = () => {
       try {
         const { data, error } = await api.projects.list();
         if (error) throw error;
-        const projects = (data || []).map((p) => ({
-          id: p.id!,
-          name: p.name!,
-          description: p.description!,
-        }));
+        const projects = Array.isArray(data)
+          ? data.map((p) => ({
+              id: p.id!,
+              name: p.name!,
+              description: p.description!,
+            }))
+          : [];
         setProjects(projects);
       } catch {
         showNotification('Ошибка загрузки проектов', 'error');
@@ -54,7 +56,9 @@ export const useProjectData = () => {
       try {
         const { data, error } = await api.models.list();
         if (error) throw error;
-        const models = (data || []).map((m) => ({ id: m.id! }));
+        const models = Array.isArray(data)
+          ? data.map((m: { id?: string }) => ({ id: m.id! }))
+          : [];
         setModels(models);
       } catch {
         console.warn('Failed to load models');
@@ -69,11 +73,13 @@ export const useProjectData = () => {
       try {
         const { data, error } = await api.modes.list();
         if (error) throw error;
-        const modes = (data || []).map((m) => ({
-          id: m.id!,
-          name: m.name!,
-          default: m.default,
-        }));
+        const modes = Array.isArray(data)
+          ? data.map((m: { id?: string; name?: string; default?: boolean }) => ({
+              id: m.id!,
+              name: m.name!,
+              default: m.default,
+            }))
+          : [];
         setModes(modes);
       } catch {
         console.warn('Failed to load modes');
@@ -88,13 +94,15 @@ export const useProjectData = () => {
       try {
         const { data, error } = await api.artifactTypes.list();
         if (error) throw error;
-        const types = (data || []).map((t) => ({
-          type: t.type!,
-          allowed_parents: t.allowed_parents!,
-          requires_clarification: t.requires_clarification!,
-          schema: t.schema,
-          icon: t.icon,
-        }));
+        const types = Array.isArray(data)
+          ? data.map((t: { type?: string; allowed_parents?: string[]; requires_clarification?: boolean; schema?: unknown; icon?: unknown }) => ({
+              type: t.type!,
+              allowed_parents: t.allowed_parents!,
+              requires_clarification: t.requires_clarification!,
+              schema: t.schema,
+              icon: t.icon,
+            }))
+          : [];
         setArtifactTypes(types);
       } catch {
         console.warn('Failed to load artifact types');
@@ -113,17 +121,20 @@ export const useProjectData = () => {
       try {
         const { data, error } = await api.artifacts.list(currentProjectId);
         if (error) throw error;
-        const artifacts = (data || []).map((a) => ({
-          id: a.id!,
-          type: a.type!,
-          parent_id: a.parent_id ?? null,
-          content: a.content ?? {},
-          created_at: a.created_at!,
-          updated_at: a.updated_at!,
-          version: a.version!,
-          status: a.status!,
-          summary: a.summary,
-        }));
+        const artifacts = Array.isArray(data)
+          ? data.map((a: { id?: string; type?: string; parent_id?: string | null; content?: unknown; created_at?: string; updated_at?: string; version?: string; status?: string; summary?: string }) => ({
+              id: a.id!,
+              type: a.type!,
+              parent_id: a.parent_id ?? null,
+              // #CHANGED: приводим к Record<string, unknown>, так как в сторе ожидается именно такой тип
+              content: (a.content ?? {}) as Record<string, unknown>,
+              created_at: a.created_at!,
+              updated_at: a.updated_at!,
+              version: a.version!,
+              status: a.status!,
+              summary: a.summary,
+            }))
+          : [];
         setArtifacts(artifacts);
       } catch {
         console.warn('Failed to load artifacts');
@@ -142,18 +153,19 @@ export const useProjectData = () => {
       try {
         const { data, error } = await api.messages.list(currentProjectId);
         if (error) throw error;
-        const messages = (data || []).map((m: MessageArtifact) => {
-          const role = m.content?.role;
-          // #CHANGED: explicit cast to union type
-          const validRole = (role === 'user' || role === 'assistant')
-            ? (role as 'user' | 'assistant')
-            : 'assistant';
-          return {
-            role: validRole,
-            content: m.content?.content || '',
-            timestamp: new Date(m.created_at || '').getTime(),
-          };
-        });
+        const messages = Array.isArray(data)
+          ? data.map((m: MessageArtifact) => {
+              const role = m.content?.role;
+              const validRole = (role === 'user' || role === 'assistant')
+                ? (role as 'user' | 'assistant')
+                : 'assistant';
+              return {
+                role: validRole,
+                content: m.content?.content || '',
+                timestamp: new Date(m.created_at || '').getTime(),
+              };
+            })
+          : [];
         setMessages(messages);
       } catch {
         console.warn('Failed to load messages');

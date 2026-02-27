@@ -4,27 +4,65 @@ import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
 import { client } from '../../api/client';
-import { api } from '../../api/client';
+import { api, ProjectResponse } from '../../api/client';
 import { validateWorkflowAcyclic } from '../../utils/graphUtils';
 import { WorkflowHeader } from './WorkflowHeader';
 import { NodeListPanel } from './NodeListPanel';
 import { NodeModal } from './NodeModal';
 import { useNodeValidation } from './useNodeValidation';
-import type { components } from '../../api/generated/schema';
 
-type Project = components['schemas']['Project'];
-type Workflow = components['schemas']['Workflow'];
-type WorkflowDetail = components['schemas']['WorkflowDetail'];
-type WorkflowNode = NonNullable<WorkflowDetail['nodes']>[number];
-type WorkflowEdge = NonNullable<WorkflowDetail['edges']>[number];
+// #CHANGED: объявляем глобальное свойство для координат нового узла
+declare global {
+  interface Window {
+    _newNodePosition?: { x: number; y: number };
+  }
+}
+
+// Локальные типы для ответов API (поскольку в схеме их нет)
+interface WorkflowSummary {
+  id: string;
+  name: string;
+  description?: string;
+  is_default?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface WorkflowNode {
+  id: string;
+  workflow_id: string;
+  node_id: string;
+  prompt_key: string;
+  config?: Record<string, unknown>;
+  position_x: number;
+  position_y: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface WorkflowEdge {
+  id: string;
+  workflow_id: string;
+  source_node: string;
+  target_node: string;
+  source_output?: string;
+  target_input?: string;
+  created_at?: string;
+}
+
+interface WorkflowDetail {
+  workflow: WorkflowSummary;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
 
 export const WorkspacePage: React.FC = () => {
   const [nodes, setNodes] = useState<NodeData[]>([]);
   const [edges, setEdges] = useState<EdgeData[]>([]);
   const [workflowName, setWorkflowName] = useState('');
   const [currentWorkflowId, setCurrentWorkflowId] = useState<string | null>(null);
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
+  const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -55,42 +93,40 @@ export const WorkspacePage: React.FC = () => {
 
   const loadProjects = async () => {
     try {
-      const r = await client.GET('/api/projects');
-      if (r.error) {
-        console.error('Failed to load projects:', r.error);
-        return; // Глобальный перехватчик уже показал тост
+      const { data, error } = await api.projects.list();
+      if (error) {
+        console.error('Failed to load projects:', error);
+        return;
       }
-      const projectsData = (r.data || []) as Project[];
-      setProjects(projectsData.map(p => ({
-        id: p.id!,
-        name: p.name!,
-        description: p.description || ''
-      })));
-      if (projectsData.length > 0 && !localStorage.getItem('workspace_selected_project')) {
-        setSelectedProjectId(projectsData[0].id!);
+      if (data && Array.isArray(data)) {
+        setProjects(data);
+        if (data.length > 0 && !localStorage.getItem('workspace_selected_project')) {
+          setSelectedProjectId(data[0].id!);
+        }
+      } else {
+        setProjects([]);
       }
     } catch (e: unknown) {
       console.error('Error loading projects:', e);
-      // Глобальный перехватчик уже показал тост, если это ошибка HTTP
     }
   };
 
   const loadWorkflows = async () => {
     if (!selectedProjectId) return;
     try {
-      const r = await client.GET('/api/workflows');
-      if (r.error) {
-        console.error('Failed to load workflows:', r.error);
+      const response = (await client.GET('/api/workflows')) as {
+        data?: WorkflowSummary[];
+        error?: unknown;
+      };
+      if (response.error) {
+        console.error('Failed to load workflows:', response.error);
         return;
       }
-      const workflowsData = (r.data || []) as Workflow[];
-      setWorkflows(workflowsData.map(w => ({
-        id: w.id!,
-        name: w.name!,
-        description: w.description || '',
-        is_default: w.is_default || false,
-        created_at: w.created_at
-      })));
+      if (response.data && Array.isArray(response.data)) {
+        setWorkflows(response.data);
+      } else {
+        setWorkflows([]);
+      }
     } catch (e: unknown) {
       console.error('Error loading workflows:', e);
     }
@@ -106,21 +142,23 @@ export const WorkspacePage: React.FC = () => {
         return;
       }
       const detail = r.data as WorkflowDetail;
-      setNodes((detail?.nodes || []).map((n: WorkflowNode) => ({
-        id: n.node_id || crypto.randomUUID(),
-        node_id: n.node_id!,
-        prompt_key: n.prompt_key || 'UNKNOWN',
-        position_x: n.position_x || 100,
-        position_y: n.position_y || 100,
-        config: n.config || {}
-      })));
-      setEdges((detail?.edges || []).map((e: WorkflowEdge) => ({
-        id: e.id || crypto.randomUUID(),
-        source_node: e.source_node!,
-        target_node: e.target_node!
-      })));
-      setCurrentWorkflowId(id);
-      setWorkflowName(detail?.workflow?.name || '');
+      if (detail) {
+        setNodes((detail.nodes || []).map((n: WorkflowNode) => ({
+          id: n.node_id || crypto.randomUUID(),
+          node_id: n.node_id!,
+          prompt_key: n.prompt_key || 'UNKNOWN',
+          position_x: n.position_x || 100,
+          position_y: n.position_y || 100,
+          config: n.config || {}
+        })));
+        setEdges((detail.edges || []).map((e: WorkflowEdge) => ({
+          id: e.id || crypto.randomUUID(),
+          source_node: e.source_node!,
+          target_node: e.target_node!
+        })));
+        setCurrentWorkflowId(id);
+        setWorkflowName(detail.workflow?.name || '');
+      }
     } catch (e: unknown) {
       console.error('Error loading workflow:', e);
     }
@@ -200,8 +238,8 @@ export const WorkspacePage: React.FC = () => {
     setNewNodeTitle('');
     setNewNodePrompt('');
     setShowNodeModal(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any)._newNodePosition = { x, y };
+    // #CHANGED: используем объявленное свойство window напрямую
+    window._newNodePosition = { x, y };
   };
 
   const confirmAddCustomNode = async () => {
@@ -215,8 +253,7 @@ export const WorkspacePage: React.FC = () => {
       toast.error(`⚠️ ${err}`);
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pos = (window as any)._newNodePosition;
+    const pos = window._newNodePosition;
     if (pos) {
       setNodes(prev => [...prev, {
         id: crypto.randomUUID(),

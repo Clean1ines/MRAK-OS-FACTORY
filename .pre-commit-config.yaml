@@ -10,10 +10,8 @@ repos:
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json
-      
         exclude: ^frontend/src/api/generated/
 
-# 
   # Backend: Python checks
   - repo: local
     hooks:
@@ -26,9 +24,9 @@ repos:
         stages: [pre-commit]
 
       - id: pytest-quick
-        name: Run pytest (quick mode)
-        # #CHANGED: Run ensure_test_db.sh BEFORE pytest
-        entry: bash -c 'bash scripts/ensure_test_db.sh && python -m pytest -q --tb=no -x tests/ 2>/dev/null || echo "⚠️ pytest skipped or passed"'
+        name: Run pytest (quick mode) with migrations
+        # #CHANGED: added migrations before tests
+        entry: bash -c 'bash scripts/ensure_test_db.sh && python migrations/run_all.py && python -m pytest -q --tb=no -x tests/ 2>/dev/null || echo "⚠️ pytest skipped or passed"'
         language: system
         pass_filenames: false
         always_run: true
@@ -83,7 +81,7 @@ repos:
         language: system
         pass_filenames: false
         always_run: false
-        stages: [pre-push]  # ← Только перед пушем
+        stages: [pre-push]
 
   # E2E Tests — pre-push only (solo-dev optimized)
   - repo: local
@@ -97,5 +95,3 @@ repos:
         verbose: true
         stages: [pre-push]
         files: ^frontend/|^tests/e2e/
-        # Soft-fail: выводим ошибку но не блокируем пуш (уберите || true для strict mode)
-        # Для solo-dev: лучше видеть ошибку чем блокировать работу

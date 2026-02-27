@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 
+console.log('>>> auth.client.spec.ts is loaded');
 const MASTER_KEY = process.env.MASTER_KEY || '12345678';
 
 test.describe('API Client Token Injection (E2E)', () => {

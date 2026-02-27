@@ -1,6 +1,7 @@
 // tests/e2e/workspace.spec.ts — FIXED: explicit Bearer header for API requests
 import { test, expect } from '@playwright/test';
 
+console.log('>>> workspace.spec.ts is loaded');
 const MASTER_KEY = process.env.MASTER_KEY || '12345678';
 
 test.describe('Workspace E2E', () => {

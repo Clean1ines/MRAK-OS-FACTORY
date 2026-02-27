@@ -37,7 +37,10 @@ project_dump.txt
 tree_output.txt
 
 # Scripts
-scripts/
+scripts/*
+!scripts/e2e-run.sh
+!scripts/ensure_test_db.sh
+!scripts/verify_docker.sh
 
 # Backups
 *.sql

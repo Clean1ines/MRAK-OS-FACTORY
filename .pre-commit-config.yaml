@@ -90,7 +90,7 @@ repos:
     hooks:
       - id: e2e-tests-workspace
         name: Playwright E2E (TASK-012 workspace flows)
-        entry: bash e2e-run.sh
+        entry: bash scripts/e2e-run.sh
         language: system
         pass_filenames: false
         always_run: true

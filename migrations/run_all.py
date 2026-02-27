@@ -29,7 +29,8 @@ MIGRATION_ORDER = [
     "add_artifact_types.sql",
     "add_clarification_sessions.py",
     "cleanup_duplicate_projects.py",   # ← добавить здесь
-    "add_projects_name_unique.sql",    # теперь можно применять после очистки
+    "add_projects_name_unique.sql",
+    "add_project_constraints.py",    # теперь можно применять после очистки
     "add_default_workflow.sql",
 ]
 

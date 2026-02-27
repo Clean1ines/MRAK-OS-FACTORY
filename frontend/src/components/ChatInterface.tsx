@@ -1,10 +1,10 @@
-// frontend/src/components/ChatInterface.tsx
 import React, { useEffect, useRef } from 'react';
 import { IOSShell } from './ios/IOSShell';
 import { client } from '../api/client';
 import type { components } from '../api/generated/schema';
 
-type Project = components['schemas']['Project'];
+// Используем правильный тип из схемы
+type Project = components['schemas']['ProjectResponse'];
 
 export const ChatInterface: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -13,9 +13,11 @@ export const ChatInterface: React.FC = () => {
   const loadProjects = async () => {
     try {
       const res = await client.GET('/api/projects');
-      if (res.data && res.data.length > 0) {
+      // res.data имеет тип ProjectResponse[] (по схеме)
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
         const project = res.data[0];
-        if (project.id) {
+        // Проверяем наличие id (хотя по схеме он всегда есть)
+        if (project && project.id) {
           setCurrentProject(project);
         }
       }
@@ -25,7 +27,7 @@ export const ChatInterface: React.FC = () => {
   };
 
   useEffect(() => {
-    // #CHANGED: disabled rule because this is a standard data fetching pattern
+    // #CHANGED: отключаем правило линтера, так как вызов loadProjects при монтировании безопасен
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProjects();
   }, []);

@@ -1,4 +1,3 @@
-// frontend/src/components/auth/LoginPage.tsx
 import React, { useState } from 'react';
 import { api } from '../../api/client';
 import { useNotification } from '../../hooks/useNotifications';
@@ -23,7 +22,8 @@ export const LoginPage: React.FC = () => {
       
       if (res.authenticated || res.status === 'authenticated') {
         showNotification('✅ Успешный вход!', 'success');
-        window.location.href = '/workspace';
+        // #CHANGED: редирект на главную страницу, где теперь есть ProjectsSidebar
+        window.location.href = '/';
       } else {
         showNotification('❌ Ошибка аутентификации', 'error');
       }

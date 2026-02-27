@@ -9,6 +9,7 @@ from use_cases.add_message import AddMessageUseCase
 from services import prompt_service
 import logging
 
+
 logger = logging.getLogger("MRAK-SERVER")
 session_service = SessionService()
 

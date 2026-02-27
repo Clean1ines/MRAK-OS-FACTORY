@@ -1,4 +1,3 @@
-// frontend/src/components/auth/AuthGuard.tsx
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { LoginPage } from './LoginPage';
@@ -17,10 +16,12 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
 
   const checkAuth = async () => {
     try {
-      const res = await api.auth.session();
-      setIsAuthenticated(res.authenticated === true);
-    } catch {
-      // #CHANGED: removed unused error parameter
+      const { data, error } = await api.auth.session();
+      console.log('[AuthGuard] Session response:', { data, error }); // Debug log
+      // Check if data exists and has authenticated === true
+      setIsAuthenticated(data?.authenticated === true);
+    } catch (err) {
+      console.error('[AuthGuard] Session check failed:', err);
       setIsAuthenticated(false);
     } finally {
       setChecking(false);

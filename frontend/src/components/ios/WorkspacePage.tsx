@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
@@ -37,7 +38,6 @@ export const WorkspacePage: React.FC = () => {
     const s = localStorage.getItem('workspace_selected_project');
     if (s) setSelectedProjectId(s);
     loadProjects();
-    // #REMOVED: unused eslint-disable directive
   }, []);
 
   useEffect(() => {
@@ -56,7 +56,10 @@ export const WorkspacePage: React.FC = () => {
   const loadProjects = async () => {
     try {
       const r = await client.GET('/api/projects');
-      if (r.error) throw new Error(r.error.error || 'Failed');
+      if (r.error) {
+        console.error('Failed to load projects:', r.error);
+        return; // Глобальный перехватчик уже показал тост
+      }
       const projectsData = (r.data || []) as Project[];
       setProjects(projectsData.map(p => ({
         id: p.id!,
@@ -67,8 +70,8 @@ export const WorkspacePage: React.FC = () => {
         setSelectedProjectId(projectsData[0].id!);
       }
     } catch (e: unknown) {
-      console.error(e);
-      alert('Ошибка: ' + (e instanceof Error ? e.message : String(e)));
+      console.error('Error loading projects:', e);
+      // Глобальный перехватчик уже показал тост, если это ошибка HTTP
     }
   };
 
@@ -76,7 +79,10 @@ export const WorkspacePage: React.FC = () => {
     if (!selectedProjectId) return;
     try {
       const r = await client.GET('/api/workflows');
-      if (r.error) throw new Error(r.error.error || 'Failed');
+      if (r.error) {
+        console.error('Failed to load workflows:', r.error);
+        return;
+      }
       const workflowsData = (r.data || []) as Workflow[];
       setWorkflows(workflowsData.map(w => ({
         id: w.id!,
@@ -86,8 +92,7 @@ export const WorkspacePage: React.FC = () => {
         created_at: w.created_at
       })));
     } catch (e: unknown) {
-      console.error(e);
-      alert('Ошибка: ' + (e instanceof Error ? e.message : String(e)));
+      console.error('Error loading workflows:', e);
     }
   };
 
@@ -96,7 +101,10 @@ export const WorkspacePage: React.FC = () => {
       const r = await client.GET('/api/workflows/{workflow_id}', {
         params: { path: { workflow_id: id } }
       });
-      if (r.error) throw new Error(r.error.error || 'Failed');
+      if (r.error) {
+        console.error('Failed to load workflow:', r.error);
+        return;
+      }
       const detail = r.data as WorkflowDetail;
       setNodes((detail?.nodes || []).map((n: WorkflowNode) => ({
         id: n.node_id || crypto.randomUUID(),
@@ -114,18 +122,17 @@ export const WorkspacePage: React.FC = () => {
       setCurrentWorkflowId(id);
       setWorkflowName(detail?.workflow?.name || '');
     } catch (e: unknown) {
-      console.error(e);
-      alert('Ошибка: ' + (e instanceof Error ? e.message : String(e)));
+      console.error('Error loading workflow:', e);
     }
   };
 
   const handleSave = async () => {
     if (!workflowName.trim() || !selectedProjectId) {
-      alert('⚠️ Fill required fields');
+      toast.error('⚠️ Заполните обязательные поля');
       return;
     }
     if (!validateWorkflowAcyclic(nodes, edges).valid) {
-      alert('⚠️ Cycle detected - remove circular connections');
+      toast.error('⚠️ Обнаружен цикл – удалите круговые соединения');
       return;
     }
     setLoading(true);
@@ -153,31 +160,39 @@ export const WorkspacePage: React.FC = () => {
           }))
         })
       });
-      if (!res.ok) throw new Error((await res.json()).detail || `HTTP ${res.status}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
       if (!currentWorkflowId) await loadWorkflows();
-      alert(`✅ Workflow ${currentWorkflowId ? 'updated' : 'saved'}!`);
+      toast.success(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
     } catch (e: unknown) {
-      console.error(e);
-      alert('❌ ' + (e instanceof Error ? e.message : String(e)));
+      console.error('Save error:', e);
+      toast.error('❌ Ошибка при сохранении: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!currentWorkflowId || !confirm(`Delete "${workflowName}"?`)) return;
+    if (!currentWorkflowId || !confirm(`Удалить "${workflowName}"?`)) return;
     try {
-      await client.DELETE('/api/workflows/{workflow_id}', {
+      const r = await client.DELETE('/api/workflows/{workflow_id}', {
         params: { path: { workflow_id: currentWorkflowId } }
       });
+      if (r.error) {
+        console.error('Delete error:', r.error);
+        return;
+      }
       setNodes([]);
       setEdges([]);
       setCurrentWorkflowId(null);
       setWorkflowName('New Workflow');
       await loadWorkflows();
-      alert('✅ Deleted');
+      toast.success('✅ Удалено');
     } catch (e: unknown) {
-      alert('❌ ' + (e instanceof Error ? e.message : String(e)));
+      console.error('Delete exception:', e);
+      toast.error('❌ Ошибка при удалении');
     }
   };
 
@@ -191,13 +206,13 @@ export const WorkspacePage: React.FC = () => {
 
   const confirmAddCustomNode = async () => {
     if (!newNodePrompt.trim()) {
-      alert('Enter prompt');
+      toast.error('Введите промпт');
       return;
     }
     const title = newNodeTitle.trim() || 'CUSTOM_PROMPT';
     const err = validateNodeUnique(title, newNodePrompt);
     if (err) {
-      alert(`⚠️ ${err}`);
+      toast.error(`⚠️ ${err}`);
       return;
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -3,6 +3,13 @@ import toast from 'react-hot-toast';
 import type { paths, components } from './generated/schema';
 import { createTimeoutMiddleware } from './fetchWithTimeout';
 
+// Extend Window interface for deduplication
+declare global {
+  interface Window {
+    __lastToast: string | null;
+  }
+}
+
 // ---------- Augment OpenAPI schema with auth endpoints (not generated) ----------
 declare module './generated/schema' {
   interface paths {
@@ -94,6 +101,22 @@ const getErrorMessage = (error: unknown): string => {
   return 'Произошла неизвестная ошибка';
 };
 
+// ---------- Toast Helpers ----------
+/**
+ * Shows a user-friendly error toast with deduplication to avoid spam in development.
+ * @param {string} message - The message to display.
+ */
+const showErrorToast = (message: string): void => {
+  // Простая дедупликация для разработки (убирает дубли в StrictMode)
+  const key = `error-${message}`;
+  if (window.__lastToast === key) return;
+  window.__lastToast = key;
+  setTimeout(() => {
+    window.__lastToast = null;
+  }, 1000);
+  toast.error(message);
+};
+
 // ---------- API Client Setup ----------
 /**
  * Unified API client with automatic Bearer token injection,
@@ -143,7 +166,7 @@ client.use({
         .json()
         .then((errData) => {
           const message = getErrorMessage(errData);
-          toast.error(message);
+          showErrorToast(message);
           return response; // Return original response so openapi-fetch can still populate error
         })
         .catch(() => {
@@ -155,7 +178,7 @@ client.use({
           } else {
             message = `Ошибка ${response.status}: ${response.statusText}`;
           }
-          toast.error(message);
+          showErrorToast(message);
           return response;
         });
     }
@@ -248,17 +271,30 @@ export const api = {
      * @returns {Promise<any>} Server response (contains session_token on success).
      */
     login: async (body: { master_key: string }) => {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      console.log('[Login] Response:', data); // Debug
-      if (data.session_token) {
-        setSessionToken(data.session_token);
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        console.log('[Login] Response:', data); // Debug
+        if (!res.ok) {
+          // Если статус не 2xx, показываем тост
+          const message = getErrorMessage(data) || `Ошибка входа (${res.status})`;
+          showErrorToast(message);
+          throw new Error(message);
+        }
+        if (data.session_token) {
+          setSessionToken(data.session_token);
+        }
+        return data;
+      } catch (error) {
+        // Если fetch упал (сетевая ошибка)
+        const message = error instanceof Error ? error.message : 'Ошибка соединения с сервером';
+        showErrorToast(message);
+        throw error;
       }
-      return data;
     },
 
     /**
@@ -266,11 +302,23 @@ export const api = {
      * Removes token locally and calls logout endpoint.
      */
     logout: async () => {
-      clearSessionToken();
-      const res = await fetch('/api/auth/logout', {
-        method: 'POST',
-      });
-      return res.json();
+      try {
+        const res = await fetch('/api/auth/logout', {
+          method: 'POST',
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const message = getErrorMessage(data) || `Ошибка выхода (${res.status})`;
+          showErrorToast(message);
+        }
+        clearSessionToken();
+        return await res.json().catch(() => ({}));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Ошибка соединения с сервером';
+        showErrorToast(message);
+        clearSessionToken(); // Всё равно чистим токен локально
+        throw error;
+      }
     },
 
     /**

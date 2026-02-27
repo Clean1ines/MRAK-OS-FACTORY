@@ -89,11 +89,12 @@ repos:
   - repo: local
     hooks:
       - id: e2e-tests-workspace
-        name: Playwright E2E (TASK-012 workspace flows)
+        name: Playwright E2E tests
         entry: bash scripts/e2e-run.sh
         language: system
         pass_filenames: false
         always_run: true
+        verbose: true
         stages: [pre-push]
         files: ^frontend/|^tests/e2e/
         # Soft-fail: выводим ошибку но не блокируем пуш (уберите || true для strict mode)

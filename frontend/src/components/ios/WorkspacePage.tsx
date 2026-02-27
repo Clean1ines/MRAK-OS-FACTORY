@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { IOSShell } from './IOSShell';
@@ -54,6 +55,9 @@ interface WorkflowDetail {
 }
 
 export const WorkspacePage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlProjectId = searchParams.get('projectId');
+
   const [nodes, setNodes] = useState<NodeData[]>([]);
   const [edges, setEdges] = useState<EdgeData[]>([]);
   const [workflowName, setWorkflowName] = useState('');
@@ -69,13 +73,7 @@ export const WorkspacePage: React.FC = () => {
   const [newNodeTitle, setNewNodeTitle] = useState('');
   const { validateNodeUnique } = useNodeValidation(nodes);
 
-  useEffect(() => {
-    const s = localStorage.getItem('workspace_selected_project');
-    if (s) setSelectedProjectId(s);
-    loadProjects();
-  }, []);
-
-  // Мемоизируем функции загрузки, чтобы использовать их в зависимостях эффектов
+  // Загрузка проектов при монтировании
   const loadProjects = useCallback(async () => {
     try {
       const { data, error } = await api.projects.list();
@@ -85,8 +83,22 @@ export const WorkspacePage: React.FC = () => {
       }
       if (data && Array.isArray(data)) {
         setProjects(data);
-        if (data.length > 0 && !localStorage.getItem('workspace_selected_project')) {
-          setSelectedProjectId(data[0].id!);
+        // Если проекты загружены и нет выбранного, но есть projectId в URL – используем его
+        if (data.length > 0 && !selectedProjectId) {
+          if (urlProjectId && data.some(p => p.id === urlProjectId)) {
+            setSelectedProjectId(urlProjectId);
+          } else if (!urlProjectId && localStorage.getItem('workspace_selected_project')) {
+            // Fallback: если в localStorage есть старый выбор, используем его
+            const stored = localStorage.getItem('workspace_selected_project');
+            if (stored && data.some(p => p.id === stored)) {
+              setSelectedProjectId(stored);
+            } else {
+              setSelectedProjectId(data[0].id!);
+            }
+          } else if (!urlProjectId) {
+            // Ничего нет – выбираем первый проект
+            setSelectedProjectId(data[0].id!);
+          }
         }
       } else {
         setProjects([]);
@@ -94,8 +106,9 @@ export const WorkspacePage: React.FC = () => {
     } catch (e: unknown) {
       console.error('Error loading projects:', e);
     }
-  }, []);
+  }, [selectedProjectId, urlProjectId]);
 
+  // Загрузка воркфлоу для выбранного проекта
   const loadWorkflows = useCallback(async () => {
     if (!selectedProjectId) return;
     try {
@@ -117,6 +130,7 @@ export const WorkspacePage: React.FC = () => {
     }
   }, [selectedProjectId]);
 
+  // Загрузка конкретного воркфлоу
   const loadWorkflow = useCallback(async (id: string) => {
     try {
       const r = await client.GET('/api/workflows/{workflow_id}', {
@@ -149,23 +163,47 @@ export const WorkspacePage: React.FC = () => {
     }
   }, []);
 
-  // Эффекты с правильными зависимостями
+  // При монтировании загружаем проекты
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  // При изменении selectedProjectId загружаем воркфлоу и обновляем URL
   useEffect(() => {
     if (selectedProjectId) {
       localStorage.setItem('workspace_selected_project', selectedProjectId);
+      // Обновляем URL, если он не совпадает
+      if (searchParams.get('projectId') !== selectedProjectId) {
+        setSearchParams({ projectId: selectedProjectId });
+      }
       loadWorkflows();
     }
-  }, [selectedProjectId, loadWorkflows]);
+  }, [selectedProjectId, loadWorkflows, searchParams, setSearchParams]);
 
+  // При изменении URL (projectId) синхронизируем selectedProjectId
+  useEffect(() => {
+    if (urlProjectId && urlProjectId !== selectedProjectId) {
+      setSelectedProjectId(urlProjectId);
+    } else if (!urlProjectId && !selectedProjectId) {
+      // Если в URL нет projectId и у нас нет выбранного, пытаемся взять из localStorage
+      const stored = localStorage.getItem('workspace_selected_project');
+      if (stored) {
+        setSelectedProjectId(stored);
+      }
+    }
+  }, [urlProjectId, selectedProjectId]);
+
+  // При изменении currentWorkflowId загружаем детали воркфлоу
   useEffect(() => {
     if (currentWorkflowId) {
       loadWorkflow(currentWorkflowId);
+    } else {
+      // Если нет выбранного воркфлоу, очищаем холст
+      setNodes([]);
+      setEdges([]);
+      setWorkflowName('');
     }
   }, [currentWorkflowId, loadWorkflow]);
-
-  // Остальные обработчики (handleSave, handleDelete, ...) можно оставить без изменений,
-  // но для полноты тоже обернуть в useCallback, если они используются в эффектах.
-  // Здесь они не используются в эффектах, поэтому можно не трогать.
 
   const handleSave = async () => {
     if (!workflowName.trim() || !selectedProjectId) {
@@ -285,6 +323,12 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
+  const handleProjectChange = (projectId: string | null) => {
+    setSelectedProjectId(projectId);
+    // Принудительно сбрасываем текущий воркфлоу
+    setCurrentWorkflowId(null);
+  };
+
   return (
     <IOSShell>
       <div className="flex h-full">
@@ -294,7 +338,7 @@ export const WorkspacePage: React.FC = () => {
               <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">Project</label>
               <select
                 value={selectedProjectId || ''}
-                onChange={(e) => setSelectedProjectId(e.target.value || null)}
+                onChange={(e) => handleProjectChange(e.target.value || null)}
                 className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
               >
                 <option value="">-- Select Project --</option>
@@ -313,7 +357,7 @@ export const WorkspacePage: React.FC = () => {
                 workflows.map(wf => (
                   <button
                     key={wf.id}
-                    onClick={() => loadWorkflow(wf.id!)}
+                    onClick={() => setCurrentWorkflowId(wf.id!)}
                     className={`w-full text-left px-3 py-2 rounded mb-1 text-xs ${
                       currentWorkflowId === wf.id
                         ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]'

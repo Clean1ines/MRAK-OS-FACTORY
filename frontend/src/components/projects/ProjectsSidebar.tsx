@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore, Project } from '../../store/useAppStore';
 import { useProjects } from '../../hooks/useProjects';
+import { HamburgerMenu } from '../layout/HamburgerMenu';
 
-// Стилизованные UI-компоненты с использованием CSS-переменных
 const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className, ...props }) => (
   <button
     {...props}
@@ -40,9 +40,6 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; chi
   );
 };
 
-/**
- * Компонент боковой панели со списком проектов
- */
 export const ProjectsSidebar: React.FC = () => {
   const navigate = useNavigate();
   const { currentProjectId, setCurrentProjectId } = useAppStore();
@@ -62,13 +59,14 @@ export const ProjectsSidebar: React.FC = () => {
     deleteProject,
   } = useProjects();
 
-  // Локальные состояния для форм
+  // #ADDED: состояние видимости сайдбара
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [editProjectName, setEditProjectName] = useState('');
   const [editProjectDescription, setEditProjectDescription] = useState('');
 
-  // --- Локальные обработчики открытия/закрытия с управлением формой ---
   const handleOpenCreate = () => {
     setNewProjectName('');
     setNewProjectDescription('');
@@ -89,7 +87,6 @@ export const ProjectsSidebar: React.FC = () => {
     setEditProjectDescription('');
   };
 
-  // --- Обработчики отправки форм ---
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const success = await createProject({
@@ -121,15 +118,36 @@ export const ProjectsSidebar: React.FC = () => {
     await deleteProject(deletingProject.id);
   };
 
-  // --- Навигация при клике на проект ---
   const handleProjectClick = (projectId: string) => {
     setCurrentProjectId(projectId);
-    navigate('/workspace');
+    navigate(`/workspace?projectId=${projectId}`);
   };
 
+  const handleCloseSidebar = () => setIsSidebarOpen(false);
+  const handleOpenSidebar = () => setIsSidebarOpen(true);
+
+  // Если сайдбар закрыт, показываем только гамбургер-меню
+  if (!isSidebarOpen) {
+    return <HamburgerMenu onOpenSidebar={handleOpenSidebar} />;
+  }
+
+  // Иначе показываем полную панель
   return (
     <aside className="w-64 h-full bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col text-[var(--text-main)]">
-      {/* Верхняя часть: дропдаун выбора проекта */}
+      {/* Кнопка закрытия панели */}
+      <div className="flex justify-end p-2">
+        <button
+          onClick={handleCloseSidebar}
+          className="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+          aria-label="Close sidebar"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
       <div className="p-4 border-b border-[var(--ios-border)]">
         <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
           Current Project
@@ -148,7 +166,6 @@ export const ProjectsSidebar: React.FC = () => {
         </select>
       </div>
 
-      {/* Список проектов */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {projects.map((project) => (
           <div
@@ -185,7 +202,6 @@ export const ProjectsSidebar: React.FC = () => {
         ))}
       </div>
 
-      {/* Нижняя часть: кнопка создания и счётчик */}
       <div className="p-4 border-t border-[var(--ios-border)] space-y-2">
         <Button
           onClick={handleOpenCreate}

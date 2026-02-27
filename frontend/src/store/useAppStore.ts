@@ -5,7 +5,6 @@ export interface Artifact {
   id: string;
   type: string;
   parent_id: string | null;
-  // #CHANGED: any -> Record<string, unknown> | null (более конкретно)
   content: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -75,6 +74,11 @@ interface AppState {
   setSimpleMode: (isSimple: boolean) => void;
   setSelectedModel: (model: string | null) => void;
   setSelectedArtifactType: (type: string) => void;
+
+  // #ADDED: методы для точечного изменения проектов
+  addProject: (project: Project) => void;
+  updateProject: (id: string, updates: Partial<Project>) => void;
+  removeProject: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -122,6 +126,20 @@ export const useAppStore = create<AppState>()(
       setSimpleMode: (isSimple) => set({ isSimpleMode: isSimple }),
       setSelectedModel: (model) => set({ selectedModel: model }),
       setSelectedArtifactType: (type) => set({ selectedArtifactType: type }),
+
+      // #ADDED: реализации новых методов
+      addProject: (project) =>
+        set((state) => ({ projects: [...state.projects, project] })),
+      updateProject: (id, updates) =>
+        set((state) => ({
+          projects: state.projects.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          ),
+        })),
+      removeProject: (id) =>
+        set((state) => ({
+          projects: state.projects.filter((p) => p.id !== id),
+        })),
     }),
     {
       name: 'mrak-ui-state',

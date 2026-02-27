@@ -44,3 +44,5 @@ Thumbs.db
 # Local env
 *.local
 .env.local
+
+docs/*

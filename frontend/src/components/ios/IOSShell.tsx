@@ -1,4 +1,3 @@
-// frontend/src/components/ios/IOSShell.tsx
 import { useEffect, useRef, memo } from 'react';
 import * as THREE from 'three';
 
@@ -21,7 +20,6 @@ const isMobileDevice = (): boolean => {
 
 // Get particle count with safe env access
 const getParticleCount = (): number => {
-  // import.meta.env is injected by Vite
   const env = import.meta.env;
   const envCount = env?.VITE_THREE_PARTICLES_COUNT;
 
@@ -29,7 +27,6 @@ const getParticleCount = (): number => {
     return Number(envCount);
   }
 
-  // Default based on device type
   return isMobileDevice() ? 500 : 1500;
 };
 
@@ -52,13 +49,11 @@ export const IOSShell: React.FC<IOSShellProps> = memo(({ children }) => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Skip Three.js on unsupported devices
     if (!supportsWebGL()) {
       console.warn('🎨 WebGL not supported - skipping Three.js background');
       return;
     }
 
-    // Three.js фон
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -78,7 +73,6 @@ export const IOSShell: React.FC<IOSShellProps> = memo(({ children }) => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // Use dynamic particle count
     const particleCount = getParticleCount();
     const geo = new THREE.BufferGeometry();
     const pos = [];
@@ -104,7 +98,6 @@ export const IOSShell: React.FC<IOSShellProps> = memo(({ children }) => {
     scene.add(cloud);
     camera.position.z = 800;
 
-    // Throttled animation for mobile
     const isMobile = isMobileDevice();
     const animationSpeed = isMobile ? 0.00015 : 0.0003;
     const animationSpeedX = isMobile ? 0.00005 : 0.0001;
@@ -126,7 +119,6 @@ export const IOSShell: React.FC<IOSShellProps> = memo(({ children }) => {
 
     window.addEventListener('resize', handleResize);
 
-    // Cleanup
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
@@ -142,7 +134,8 @@ export const IOSShell: React.FC<IOSShellProps> = memo(({ children }) => {
   }, []);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden font-mono">
+    // Используем h-screen для полной высоты и w-full для ширины (без vw, чтобы избежать проблем)
+    <div className="relative h-screen w-full overflow-hidden font-mono">
       <div ref={containerRef} id="three-container" className="absolute inset-0 z-0" />
       <div className="relative z-10 h-full flex flex-col">{children}</div>
     </div>

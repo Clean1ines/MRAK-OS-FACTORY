@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAppStore, Project } from '../../store/useAppStore'; // #CHANGED импортируем Project
+import { useAppStore, Project } from '../../store/useAppStore';
 import { useProjects } from '../../hooks/useProjects';
 
-// Простые UI-компоненты (заменить на импорты из UI-библиотеки при наличии)
-const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = (props) => (
-  <button {...props} className={`px-3 py-1 rounded ${props.className || ''}`} />
+// Стилизованные UI-компоненты с использованием CSS-переменных
+const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className, ...props }) => (
+  <button
+    {...props}
+    className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors ${className || ''}`}
+  />
 );
 
-const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => (
-  <input {...props} className={`border rounded px-2 py-1 w-full ${props.className || ''}`} />
+const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({ className, ...props }) => (
+  <input
+    {...props}
+    className={`w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)] transition-colors ${className || ''}`}
+  />
 );
 
 const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }> = ({
@@ -20,12 +26,14 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; chi
 }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded p-6 w-96">
-        <h2 className="text-xl font-bold mb-4">{title}</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md bg-[var(--ios-glass-dark)] backdrop-blur-[var(--blur-std)] border border-[var(--ios-border)] rounded-2xl shadow-[var(--shadow-heavy)] p-6">
+        <h2 className="text-xl font-bold text-[var(--bronze-base)] mb-4">{title}</h2>
         {children}
-        <div className="flex justify-end gap-2 mt-4">
-          <Button onClick={onClose} className="bg-gray-300">Cancel</Button>
+        <div className="flex justify-end gap-2 mt-6">
+          <Button onClick={onClose} className="bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)]">
+            Cancel
+          </Button>
         </div>
       </div>
     </div>
@@ -62,21 +70,18 @@ export const ProjectsSidebar: React.FC = () => {
 
   // --- Локальные обработчики открытия/закрытия с управлением формой ---
   const handleOpenCreate = () => {
-    // Сбрасываем поля формы перед открытием
     setNewProjectName('');
     setNewProjectDescription('');
     originalOpenCreateModal();
   };
 
   const handleOpenEdit = (project: Project) => {
-    // Заполняем поля данными редактируемого проекта
     setEditProjectName(project.name);
     setEditProjectDescription(project.description);
     originalOpenEditModal(project);
   };
 
   const handleCloseModals = () => {
-    // Закрываем модалки и сбрасываем поля форм
     originalCloseModals();
     setNewProjectName('');
     setNewProjectDescription('');
@@ -92,7 +97,6 @@ export const ProjectsSidebar: React.FC = () => {
       description: newProjectDescription,
     });
     if (success) {
-      // Поля сбросятся в handleCloseModals, но можно и здесь
       setNewProjectName('');
       setNewProjectDescription('');
     }
@@ -107,7 +111,6 @@ export const ProjectsSidebar: React.FC = () => {
       description: editProjectDescription,
     });
     if (success) {
-      // Поля сбросятся в handleCloseModals
       setEditProjectName('');
       setEditProjectDescription('');
     }
@@ -125,55 +128,83 @@ export const ProjectsSidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-64 h-full bg-gray-100 border-r flex flex-col">
-      {/* Заголовок и кнопка создания */}
-      <div className="p-4 border-b">
-        <Button onClick={handleOpenCreate} className="w-full bg-blue-500 text-white hover:bg-blue-600">
-          + New Project
-        </Button>
+    <aside className="w-64 h-full bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col text-[var(--text-main)]">
+      {/* Верхняя часть: дропдаун выбора проекта */}
+      <div className="p-4 border-b border-[var(--ios-border)]">
+        <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
+          Current Project
+        </label>
+        <select
+          value={currentProjectId || ''}
+          onChange={(e) => setCurrentProjectId(e.target.value || null)}
+          className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
+        >
+          <option value="" disabled>Select a project</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Список проектов */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {projects.map((project) => (
           <div
             key={project.id}
-            className={`p-2 mb-1 rounded cursor-pointer flex items-center justify-between hover:bg-gray-200 ${
-              currentProjectId === project.id ? 'bg-blue-100' : ''
+            className={`p-2 rounded cursor-pointer flex items-center justify-between transition-colors ${
+              currentProjectId === project.id
+                ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--ios-glass-bright)]'
             }`}
             onClick={() => handleProjectClick(project.id)}
           >
-            <span className="truncate flex-1">{project.name}</span>
+            <span className="truncate flex-1 text-sm">{project.name}</span>
             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={() => handleOpenEdit(project)}
-                className="text-gray-600 hover:text-blue-600"
+                className="text-[var(--text-muted)] hover:text-[var(--bronze-base)] transition-colors p-1"
                 title="Edit"
               >
-                ✎
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 3L21 7L7 21H3V17L17 3Z" />
+                </svg>
               </button>
               <button
                 onClick={() => openDeleteConfirm(project)}
-                className="text-gray-600 hover:text-red-600"
+                className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors p-1"
                 title="Delete"
               >
-                🗑
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6H21M19 6V20C19 21.1046 18.1046 22 17 22H7C5.89543 22 5 21.1046 5 20V6M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6" />
+                </svg>
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Счётчик проектов */}
-      <div className="p-3 border-t text-sm text-gray-600">
-        {projects.length} {projects.length === 1 ? 'project' : 'projects'}
+      {/* Нижняя часть: кнопка создания и счётчик */}
+      <div className="p-4 border-t border-[var(--ios-border)] space-y-2">
+        <Button
+          onClick={handleOpenCreate}
+          className="w-full bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black"
+        >
+          + New Project
+        </Button>
+        <div className="text-xs text-[var(--text-muted)] text-center">
+          {projects.length} {projects.length === 1 ? 'project' : 'projects'}
+        </div>
       </div>
 
-      {/* Модальное окно создания проекта */}
+      {/* Модальные окна (без изменений) */}
       <Modal isOpen={isCreateOpen} onClose={handleCloseModals} title="Create New Project">
-        <form onSubmit={handleCreate}>
-          <div className="mb-3">
-            <label className="block text-sm font-medium mb-1">Project Name *</label>
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
+              Project Name *
+            </label>
             <Input
               type="text"
               value={newProjectName}
@@ -183,30 +214,33 @@ export const ProjectsSidebar: React.FC = () => {
               autoFocus
             />
           </div>
-          <div className="mb-3">
-            <label className="block text-sm font-medium mb-1">Description</label>
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
+              Description
+            </label>
             <Input
               type="text"
               value={newProjectDescription}
               onChange={(e) => setNewProjectDescription(e.target.value)}
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" onClick={handleCloseModals} className="bg-gray-300">
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" onClick={handleCloseModals} className="bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)]">
               Cancel
             </Button>
-            <Button type="submit" className="bg-blue-500 text-white">
+            <Button type="submit" className="bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)]">
               Create
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* Модальное окно редактирования проекта */}
       <Modal isOpen={isEditOpen} onClose={handleCloseModals} title="Edit Project">
-        <form onSubmit={handleUpdate}>
-          <div className="mb-3">
-            <label className="block text-sm font-medium mb-1">Project Name *</label>
+        <form onSubmit={handleUpdate} className="space-y-4">
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
+              Project Name *
+            </label>
             <Input
               type="text"
               value={editProjectName}
@@ -216,35 +250,36 @@ export const ProjectsSidebar: React.FC = () => {
               autoFocus
             />
           </div>
-          <div className="mb-3">
-            <label className="block text-sm font-medium mb-1">Description</label>
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
+              Description
+            </label>
             <Input
               type="text"
               value={editProjectDescription}
               onChange={(e) => setEditProjectDescription(e.target.value)}
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" onClick={handleCloseModals} className="bg-gray-300">
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" onClick={handleCloseModals} className="bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)]">
               Cancel
             </Button>
-            <Button type="submit" className="bg-blue-500 text-white">
+            <Button type="submit" className="bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)]">
               Save
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* Модальное окно подтверждения удаления */}
       <Modal isOpen={isDeleteOpen} onClose={handleCloseModals} title="Delete Project">
-        <p className="mb-4">
-          Are you sure you want to delete project "{deletingProject?.name}"? This action cannot be undone.
+        <p className="text-[var(--text-main)] mb-4">
+          Are you sure you want to delete project <span className="font-semibold text-[var(--bronze-base)]">"{deletingProject?.name}"</span>? This action cannot be undone.
         </p>
         <div className="flex justify-end gap-2">
-          <Button onClick={handleCloseModals} className="bg-gray-300">
+          <Button onClick={handleCloseModals} className="bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)]">
             Cancel
           </Button>
-          <Button onClick={handleDelete} className="bg-red-500 text-white">
+          <Button onClick={handleDelete} className="bg-[var(--accent-danger)] text-white hover:bg-[#ff6961]">
             Delete
           </Button>
         </div>

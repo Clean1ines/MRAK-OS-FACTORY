@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { IOSShell } from './IOSShell';
@@ -6,19 +6,16 @@ import { IOSCanvas } from './IOSCanvas';
 import { client } from '../../api/client';
 import { api, ProjectResponse } from '../../api/client';
 import { validateWorkflowAcyclic } from '../../utils/graphUtils';
-import { WorkflowHeader } from './WorkflowHeader';
 import { NodeListPanel } from './NodeListPanel';
 import { NodeModal } from './NodeModal';
 import { useNodeValidation } from './useNodeValidation';
 
-// #CHANGED: объявляем глобальное свойство для координат нового узла
 declare global {
   interface Window {
     _newNodePosition?: { x: number; y: number };
   }
 }
 
-// Локальные типы для ответов API (поскольку в схеме их нет)
 interface WorkflowSummary {
   id: string;
   name: string;
@@ -78,20 +75,8 @@ export const WorkspacePage: React.FC = () => {
     loadProjects();
   }, []);
 
-  useEffect(() => {
-    if (selectedProjectId) {
-      localStorage.setItem('workspace_selected_project', selectedProjectId);
-      loadWorkflows();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProjectId]);
-
-  useEffect(() => {
-    if (currentWorkflowId) loadWorkflows();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWorkflowId]);
-
-  const loadProjects = async () => {
+  // Мемоизируем функции загрузки, чтобы использовать их в зависимостях эффектов
+  const loadProjects = useCallback(async () => {
     try {
       const { data, error } = await api.projects.list();
       if (error) {
@@ -109,9 +94,9 @@ export const WorkspacePage: React.FC = () => {
     } catch (e: unknown) {
       console.error('Error loading projects:', e);
     }
-  };
+  }, []);
 
-  const loadWorkflows = async () => {
+  const loadWorkflows = useCallback(async () => {
     if (!selectedProjectId) return;
     try {
       const response = (await client.GET('/api/workflows')) as {
@@ -130,9 +115,9 @@ export const WorkspacePage: React.FC = () => {
     } catch (e: unknown) {
       console.error('Error loading workflows:', e);
     }
-  };
+  }, [selectedProjectId]);
 
-  const loadWorkflow = async (id: string) => {
+  const loadWorkflow = useCallback(async (id: string) => {
     try {
       const r = await client.GET('/api/workflows/{workflow_id}', {
         params: { path: { workflow_id: id } }
@@ -162,7 +147,25 @@ export const WorkspacePage: React.FC = () => {
     } catch (e: unknown) {
       console.error('Error loading workflow:', e);
     }
-  };
+  }, []);
+
+  // Эффекты с правильными зависимостями
+  useEffect(() => {
+    if (selectedProjectId) {
+      localStorage.setItem('workspace_selected_project', selectedProjectId);
+      loadWorkflows();
+    }
+  }, [selectedProjectId, loadWorkflows]);
+
+  useEffect(() => {
+    if (currentWorkflowId) {
+      loadWorkflow(currentWorkflowId);
+    }
+  }, [currentWorkflowId, loadWorkflow]);
+
+  // Остальные обработчики (handleSave, handleDelete, ...) можно оставить без изменений,
+  // но для полноты тоже обернуть в useCallback, если они используются в эффектах.
+  // Здесь они не используются в эффектах, поэтому можно не трогать.
 
   const handleSave = async () => {
     if (!workflowName.trim() || !selectedProjectId) {
@@ -238,7 +241,6 @@ export const WorkspacePage: React.FC = () => {
     setNewNodeTitle('');
     setNewNodePrompt('');
     setShowNodeModal(true);
-    // #CHANGED: используем объявленное свойство window напрямую
     window._newNodePosition = { x, y };
   };
 
@@ -274,6 +276,15 @@ export const WorkspacePage: React.FC = () => {
     setShowNodeList(false);
   };
 
+  const handleLogout = async () => {
+    try {
+      await api.auth.logout();
+      window.location.href = '/login';
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
     <IOSShell>
       <div className="flex h-full">
@@ -292,34 +303,7 @@ export const WorkspacePage: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div className="h-12 flex items-center justify-between px-4 border-b border-[var(--ios-border)]">
-              <span className="text-xs font-bold text-[var(--bronze-base)] uppercase tracking-wider">Workflows</span>
-              <button onClick={() => setSidebarOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-3 border-b border-[var(--ios-border)]">
-              <button
-                onClick={() => {
-                  setNodes([]);
-                  setEdges([]);
-                  setCurrentWorkflowId(null);
-                  setWorkflowName('New Workflow');
-                  setShowNodeModal(true);
-                }}
-                disabled={!selectedProjectId}
-                className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2 disabled:opacity-30"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                New Workflow
-              </button>
-            </div>
+
             <div className="flex-1 overflow-y-auto p-2">
               {!selectedProjectId ? (
                 <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">⚠️ Select project</div>
@@ -342,32 +326,83 @@ export const WorkspacePage: React.FC = () => {
                 ))
               )}
             </div>
-            <div className="p-3 border-t border-[var(--ios-border)] text-[9px] text-[var(--text-muted)] text-center">
-              {workflows.length} workflow{workflows.length !== 1 ? 's' : ''}
+
+            <div className="p-3 border-t border-[var(--ios-border)] space-y-2">
+              <button
+                onClick={() => {
+                  setNodes([]);
+                  setEdges([]);
+                  setCurrentWorkflowId(null);
+                  setWorkflowName('New Workflow');
+                  setShowNodeModal(true);
+                }}
+                disabled={!selectedProjectId}
+                className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2 disabled:opacity-30"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                New Workflow
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleSave}
+                  disabled={!selectedProjectId || !workflowName.trim() || loading}
+                  className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setShowNodeList(true)}
+                  disabled={!selectedProjectId}
+                  className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
+                >
+                  Nodes
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={!currentWorkflowId}
+                  className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
+
+              <div className="text-[9px] text-[var(--text-muted)] text-center pt-2">
+                {workflows.length} workflow{workflows.length !== 1 ? 's' : ''}
+              </div>
             </div>
           </aside>
         )}
+
         <div className="flex-1 flex flex-col">
-          <WorkflowHeader
-            sidebarOpen={sidebarOpen}
-            onToggleSidebar={() => setSidebarOpen(true)}
-            workflowName={workflowName}
-            onWorkflowNameChange={setWorkflowName}
-            currentWorkflowId={currentWorkflowId}
-            loading={loading}
-            onToggleNodeList={() => setShowNodeList(!showNodeList)}
-            onDelete={handleDelete}
-            onSave={handleSave}
-            onLogout={async () => {
-              try {
-                await api.auth.logout();
-                window.location.href = '/login';
-              } catch (e) {
-                console.error(e);
-              }
-            }}
-            canSave={!!selectedProjectId && !!workflowName.trim() && !loading}
-          />
+          <div className="h-12 flex items-center justify-between px-4 border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
+            <div className="flex items-center gap-2">
+              {!sidebarOpen && (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </svg>
+                </button>
+              )}
+              <h2 className="text-sm font-semibold text-[var(--text-main)]">
+                {workflowName || 'Untitled Workflow'}
+              </h2>
+            </div>
+          </div>
           <IOSCanvas
             nodes={nodes}
             edges={edges}
@@ -375,23 +410,24 @@ export const WorkspacePage: React.FC = () => {
             onEdgesChange={setEdges}
             onAddCustomNode={handleAddCustomNode}
           />
-          <NodeListPanel
-            visible={showNodeList}
-            onClose={() => setShowNodeList(false)}
-            nodes={nodes}
-            onAddNode={addNodeFromList}
-          />
-          <NodeModal
-            visible={showNodeModal}
-            onClose={() => setShowNodeModal(false)}
-            title={newNodeTitle}
-            onTitleChange={setNewNodeTitle}
-            prompt={newNodePrompt}
-            onPromptChange={setNewNodePrompt}
-            onConfirm={confirmAddCustomNode}
-            validationError={newNodeTitle.trim() ? validateNodeUnique(newNodeTitle.trim(), newNodePrompt) : null}
-          />
         </div>
+
+        <NodeListPanel
+          visible={showNodeList}
+          onClose={() => setShowNodeList(false)}
+          nodes={nodes}
+          onAddNode={addNodeFromList}
+        />
+        <NodeModal
+          visible={showNodeModal}
+          onClose={() => setShowNodeModal(false)}
+          title={newNodeTitle}
+          onTitleChange={setNewNodeTitle}
+          prompt={newNodePrompt}
+          onPromptChange={setNewNodePrompt}
+          onConfirm={confirmAddCustomNode}
+          validationError={newNodeTitle.trim() ? validateNodeUnique(newNodeTitle.trim(), newNodePrompt) : null}
+        />
       </div>
     </IOSShell>
   );

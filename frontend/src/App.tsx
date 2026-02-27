@@ -4,9 +4,9 @@ import { ChatInterface } from './components/ChatInterface';
 import { WorkspacePage } from './components/ios/WorkspacePage';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { LoginPage } from './components/auth/LoginPage';
-import { Toast } from './components/common/Toast'; // CHANGED: named import
+import { ProtectedLayout } from './components/layout/ProtectedLayout';
+import { Toast } from './components/common/Toast';
 
-// Простой ErrorBoundary для отлова ошибок рендера
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean }
@@ -21,9 +21,7 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Логируем ошибку, но не показываем пользователю технические детали
     console.error('Uncaught error:', error, errorInfo);
-    // Можно также отправить в Sentry или аналоги
   }
 
   render() {
@@ -54,19 +52,21 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <Routes>
-          {/* Public route - login page */}
           <Route path="/login" element={<LoginPage />} />
 
-          {/* Protected routes */}
+          {/* Главная страница с сайдбаром проектов и чатом */}
           <Route
             path="/"
             element={
               <AuthGuard>
-                <ChatInterface />
+                <ProtectedLayout />
               </AuthGuard>
             }
-          />
+          >
+            <Route index element={<ChatInterface />} />
+          </Route>
 
+          {/* Workspace — отдельная страница без общего сайдбара */}
           <Route
             path="/workspace"
             element={
@@ -79,7 +79,7 @@ function App() {
           <Route path="/workspace.html" element={<Navigate to="/workspace" replace />} />
         </Routes>
       </BrowserRouter>
-      <Toast /> {/* Глобальные тосты */}
+      <Toast />
     </ErrorBoundary>
   );
 }

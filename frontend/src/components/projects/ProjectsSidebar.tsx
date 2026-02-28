@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore, Project } from '../../store/useAppStore';
 import { useProjects } from '../../hooks/useProjects';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { HamburgerMenu } from '../layout/HamburgerMenu';
 
 const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className, ...props }) => (
@@ -59,8 +60,15 @@ export const ProjectsSidebar: React.FC = () => {
     deleteProject,
   } = useProjects();
 
-  // #ADDED: состояние видимости сайдбара
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
+
+  // Синхронизируем состояние при изменении размера экрана
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsSidebarOpen(!isMobile);
+    
+  }, [isMobile]);
 
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
@@ -126,14 +134,16 @@ export const ProjectsSidebar: React.FC = () => {
   const handleCloseSidebar = () => setIsSidebarOpen(false);
   const handleOpenSidebar = () => setIsSidebarOpen(true);
 
-  // Если сайдбар закрыт, показываем только гамбургер-меню
   if (!isSidebarOpen) {
-    return <HamburgerMenu onOpenSidebar={handleOpenSidebar} />;
+    return <HamburgerMenu onOpenSidebar={handleOpenSidebar} showHomeIcon={false} />;
   }
 
-  // Иначе показываем полную панель
+  const sidebarClasses = isMobile
+    ? 'fixed top-0 left-0 h-full z-50 shadow-2xl'
+    : 'w-64 h-full';
+
   return (
-    <aside className="w-64 h-full bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col text-[var(--text-main)]">
+    <aside className={`${sidebarClasses} bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col text-[var(--text-main)]`}>
       {/* Кнопка закрытия панели */}
       <div className="flex justify-end p-2">
         <button
@@ -214,7 +224,7 @@ export const ProjectsSidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Модальные окна (без изменений) */}
+      {/* Модальные окна */}
       <Modal isOpen={isCreateOpen} onClose={handleCloseModals} title="Create New Project">
         <form onSubmit={handleCreate} className="space-y-4">
           <div>

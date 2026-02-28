@@ -1,0 +1,26 @@
+Prompt for generating tests with typical errors in mind
+
+Please, when generating tests strictly adhere to the following rules (based on repeatedly observed mistakes):
+
+    Mocking async functions – always use AsyncMock, not MagicMock. If the function may be called multiple times, either provide enough values in side_effect or use return_value for a constant result. Never set None in side_effect if real code expects a valid object (this caused StopAsyncIteration).
+
+    Completeness of returned data – when mocking DB or service responses, include all fields that the code under test expects (e.g., history, context_summary, id, status). Missing keys cause KeyError.
+
+    Correct patch path – if a function is imported in the module under test, the patch path must be the name used in that module (e.g., "use_cases.start_clarification.db.get_project", not "db.get_project"). Verify imports.
+
+    Handling tx parameter – many repository functions accept an optional tx. In tests, use ANY for this parameter when asserting calls, or configure the mock to ignore tx. Otherwise the comparison will fail.
+
+    Call count – determine exactly how many times the mocked function will be called and provide a matching number of elements in side_effect or use return_value. If unsure, add spare elements (identical values) to avoid StopAsyncIteration.
+
+    Passing version to save_artifact – in the use case save_artifact_package the version parameter is always passed. In tests that assert db.save_artifact calls, ensure the version key is present in kwargs, otherwise KeyError.
+
+    Handling None – if the code under test expects an object, do not return None in a mock when the real code is not designed for None. Specifically, in start_clarification after session creation there must be no None in side_effect.
+
+    Pydantic models – with Pydantic v2 use .model_dump() instead of the deprecated .dict(). In tests that check calls with Pydantic objects, account for this.
+
+    Imports in tests – remember to import required fixtures, models, and the use cases themselves. Always verify that names are imported correctly.
+
+    Fixtures – create separate fixtures for mocks to avoid code duplication. Ensure fixtures return the correct types (e.g., AsyncMock for async methods).
+
+Following these rules will let you generate tests that avoid the typical errors described above.
+IMPORTANT: Respond in the same language as the user's input.

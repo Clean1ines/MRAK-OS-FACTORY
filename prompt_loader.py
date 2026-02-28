@@ -1,19 +1,31 @@
 import os
 import httpx
+from pathlib import Path
 
 class PromptLoader:
     def __init__(self, gh_token):
         self.gh_token = gh_token
+        self.prompts_dir = Path(__file__).parent / "prompts"
 
     async def get_system_prompt(self, mode: str, mode_map: dict):
-        if mode == "07_BYPASS":
-            return "You are a helpful assistant."
+        # Сначала пытаемся загрузить из локальной папки
+        local_path = self.prompts_dir / mode / f"{mode}.txt"
+        # Для 01-core особый путь: prompts/01-core/01-core-prompt.txt
+        if mode == "01_CORE":
+            local_path = self.prompts_dir / "01-core" / "01-core-prompt.txt"
 
+        if local_path.exists():
+            try:
+                return local_path.read_text().strip()
+            except Exception as e:
+                return f"System Error: Cannot read local prompt file: {e}"
+
+        # Если локального файла нет, пробуем загрузить из GitHub
         env_var = mode_map.get(mode, "SYSTEM_PROMPT_URL")
         url = os.getenv(env_var)
 
         if not url:
-            return f"System Error: URL for mode {mode} not found in environment."
+            return f"System Error: URL for mode {mode} not found in environment and local file missing."
 
         headers = {
             "Accept": "application/vnd.github.v3.raw",

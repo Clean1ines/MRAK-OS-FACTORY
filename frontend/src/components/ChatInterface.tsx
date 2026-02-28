@@ -10,7 +10,7 @@ export const ChatInterface: React.FC = () => {
   const navigate = useNavigate();
   const { currentProjectId, models, selectedModel, setSelectedModel } = useAppStore();
   const { projects } = useProjects();
-  useMediaQuery('(max-width: 768px)'); // #CHANGED: we don't need the value, but hook must be called
+  useMediaQuery('(max-width: 768px)');
 
   const currentProject = projects.find(p => p.id === currentProjectId);
 
@@ -18,7 +18,10 @@ export const ChatInterface: React.FC = () => {
     <IOSShell>
       <div className="flex h-full w-full min-w-0 overflow-hidden">
         <main className="flex-1 flex flex-col w-full min-w-0 overflow-x-hidden">
-          <header className="h-14 flex items-center justify-between px-6 border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
+          <header
+            className="h-14 flex items-center justify-between px-6 border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]"
+            data-testid="main-header"
+          >
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <h1 className="text-lg font-bold text-[var(--bronze-base)] truncate">
                 {currentProject?.name || 'Select a project'}

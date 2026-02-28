@@ -9,6 +9,7 @@ import { HamburgerMenu } from '../layout/HamburgerMenu';
 import { useWorkflows } from '../../hooks/useWorkflows';
 import { useSelectedProject } from '../../hooks/useSelectedProject';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
+import { SIDEBAR_HAMBURGER_WIDTH } from '../../constants/canvas';
 
 export const WorkspacePage: React.FC = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -43,7 +44,6 @@ export const WorkspacePage: React.FC = () => {
     loadProjects();
   }, []);
 
-  const hamburgerWidth = 40;
   const currentProject = projects.find(p => p.id === selectedProjectId);
 
   return (
@@ -58,6 +58,7 @@ export const WorkspacePage: React.FC = () => {
             className={`${
               isMobile ? 'fixed top-0 left-0 h-full z-50 shadow-2xl' : 'w-64'
             } bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col`}
+            data-testid="sidebar"
           >
             <div className="flex justify-end p-2">
               <button
@@ -176,13 +177,13 @@ export const WorkspacePage: React.FC = () => {
 
         <div className="flex-1 flex flex-col">
           <div className="h-12 flex items-center border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
-            <div style={{ width: !sidebarOpen ? hamburgerWidth : 0 }} className="transition-all" />
+            <div style={{ width: !sidebarOpen ? SIDEBAR_HAMBURGER_WIDTH : 0 }} className="transition-all" />
             <div className="flex-1 flex justify-center">
               <h2 className="text-sm font-semibold text-[var(--text-main)]">
                 {workflowsHook.workflowName || 'Untitled Workflow'}
               </h2>
             </div>
-            <div style={{ width: !sidebarOpen ? hamburgerWidth : 0 }} className="transition-all" />
+            <div style={{ width: !sidebarOpen ? SIDEBAR_HAMBURGER_WIDTH : 0 }} className="transition-all" />
           </div>
           <IOSCanvas
             nodes={workflowsHook.nodes}

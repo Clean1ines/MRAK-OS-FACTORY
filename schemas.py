@@ -1,48 +1,10 @@
-# schemas.py
-import re
-from pydantic import BaseModel, Field, validator
+# ADDED: Pydantic models shared between server and routers
+from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 
-# ==================== Project Schemas ====================
-
-class ProjectBase(BaseModel):
-    """Базовая схема проекта с валидацией имени."""
-    name: str = Field(..., min_length=1, max_length=100, description="Project name, 1-100 characters")
-    description: str = Field(default="", description="Project description")
-
-    @validator('name')
-    def validate_name_chars(cls, v):
-        """Запрещаем символы, опасные для инъекций или path traversal."""
-        # Разрешены: буквы, цифры, пробел, дефис, подчёркивание, точка
-        # Запрещены: / \ .. < > : ; " ' ` | ? * [ ] { } ( ) & $ # @ ! ~
-        if re.search(r'[<>:"/\\|?*\[\]{}()&$#@!~`;\']', v):
-            raise ValueError('Name contains forbidden characters')
-        # Дополнительно проверяем на двойные точки (..) — признак path traversal
-        if '..' in v:
-            raise ValueError('Name cannot contain ".."')
-        return v.strip()  # убираем лишние пробелы в начале/конце
-
-class ProjectCreate(ProjectBase):
-    """Схема для создания нового проекта."""
-    pass
-
-class ProjectUpdate(ProjectBase):
-    """Схема для обновления проекта (PUT — все поля обязательны)."""
-    # Можно оставить как есть, все поля наследуются обязательными.
-    pass
-
-class ProjectResponse(ProjectBase):
-    """Схема для ответа с данными проекта."""
-    id: str
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-    class Config:
-        orm_mode = True  # позволяет работать с dict/row
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
+class ProjectCreate(BaseModel):
+    name: str
+    description: str = ""
 
 class ArtifactCreate(BaseModel):
     project_id: str

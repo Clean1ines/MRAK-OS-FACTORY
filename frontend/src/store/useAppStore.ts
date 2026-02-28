@@ -5,7 +5,7 @@ export interface Artifact {
   id: string;
   type: string;
   parent_id: string | null;
-  content: Record<string, unknown> | null;
+  content: any;
   created_at: string;
   updated_at: string;
   version: string;
@@ -46,7 +46,7 @@ interface AppState {
   currentProjectId: string | null;
   artifacts: Artifact[];
   parentData: Record<string, string>;
-  currentArtifact: { content: unknown } | null;
+  currentArtifact: { content: any } | null;
   currentParentId: string | null;
   models: Model[];
   modes: Mode[];
@@ -62,7 +62,7 @@ interface AppState {
   setProjects: (projects: Project[]) => void;
   setCurrentProjectId: (id: string | null) => void;
   setArtifacts: (artifacts: Artifact[]) => void;
-  setCurrentArtifact: (artifact: { content: unknown } | null) => void;
+  setCurrentArtifact: (artifact: { content: any } | null) => void;
   setCurrentParentId: (id: string | null) => void;
   setModels: (models: Model[]) => void;
   setModes: (modes: Mode[]) => void;
@@ -74,11 +74,6 @@ interface AppState {
   setSimpleMode: (isSimple: boolean) => void;
   setSelectedModel: (model: string | null) => void;
   setSelectedArtifactType: (type: string) => void;
-
-  // #ADDED: методы для точечного изменения проектов
-  addProject: (project: Project) => void;
-  updateProject: (id: string, updates: Partial<Project>) => void;
-  removeProject: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -126,20 +121,6 @@ export const useAppStore = create<AppState>()(
       setSimpleMode: (isSimple) => set({ isSimpleMode: isSimple }),
       setSelectedModel: (model) => set({ selectedModel: model }),
       setSelectedArtifactType: (type) => set({ selectedArtifactType: type }),
-
-      // #ADDED: реализации новых методов
-      addProject: (project) =>
-        set((state) => ({ projects: [...state.projects, project] })),
-      updateProject: (id, updates) =>
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === id ? { ...p, ...updates } : p
-          ),
-        })),
-      removeProject: (id) =>
-        set((state) => ({
-          projects: state.projects.filter((p) => p.id !== id),
-        })),
     }),
     {
       name: 'mrak-ui-state',

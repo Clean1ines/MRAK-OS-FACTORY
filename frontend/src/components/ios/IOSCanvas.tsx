@@ -1,3 +1,6 @@
+// frontend/src/components/ios/IOSCanvas.tsx
+// #CHANGED: Added useMemo for edges rendering and memoized callbacks
+
 import React, { useRef, useCallback, useState, useMemo } from 'react';
 import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 import { useCanvasEngine } from '../../hooks/useCanvasEngine';
@@ -63,6 +66,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     setContextMenu({ x: e.clientX, y: e.clientY, canvasX: x, canvasY: y });
   }, [getCanvasCoords]);
 
+  // #CHANGED: Memoized node addition from context menu
   const addNodeFromMenu = useCallback((prompt_key: string) => {
     if (!contextMenu) return;
     
@@ -79,6 +83,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     setContextMenu(null);
   }, [contextMenu, nodes, onNodesChange]);
 
+  // #CHANGED: Memoized connection handlers
   const handleStartConnection = useCallback((nodeId: string) => {
     setConnectingNode(nodeId);
   }, []);
@@ -111,6 +116,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     }
   }, [handleWheel]);
 
+  // #ADDED: Memoized edge rendering to prevent re-calc on every render
   const edgeElements = useMemo(() => {
     return edges.map(edge => {
       const from = nodes.find(n => n.node_id === edge.source_node);
@@ -139,6 +145,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     });
   }, [edges, nodes]);
 
+  // #ADDED: Memoized connection line
   const connectionLine = useMemo(() => {
     if (!connectingNode) return null;
     const from = nodes.find(n => n.node_id === connectingNode);
@@ -158,6 +165,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     );
   }, [connectingNode, nodes, pan, scale]);
 
+  // #ADDED: Memoized node delete handler for each node
   const createDeleteHandler = useCallback((nodeId: string) => {
     return () => {
       onNodesChange(nodes.filter(n => n.node_id !== nodeId));
@@ -169,7 +177,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     <div
       ref={containerRef}
       className="flex-1 relative overflow-hidden bg-[var(--bg-canvas)] cursor-crosshair"
-      data-testid="workspace-canvas"
       onWheel={onWheelHandler}
       onMouseDown={(e) => {
         handleCloseMenu();

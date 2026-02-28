@@ -2,70 +2,36 @@
 .git
 .gitignore
 
-# Python dev files
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .mypy_cache/
 .pytest_cache/
-.ruff_cache/
 venv/
 .venv/
+.env
 
-# Tests (exclude from Docker image)
+# Tests
 tests/
 pytest.ini
-conftest.py
-*.cover
-htmlcov/
+.conftest.py
 
-# Local dev scripts (CRITICAL: not for production)
-cleanup_neon_prod.py
-compare_schemas.sh
-sync_*.sh
-reset_test_db.sh
-run_all_tests.sh
-test_local.sh
-fix_*.sql
-check_db.py
-dump_project.py
-epic_detailer.py
-index_project.py
-generate_tree.py
-keep_alive.py
-project_dump.txt
-tree_output.txt
-scripts/
+# Node (локальный, не нужен в Docker)
+node_modules/
+frontend/node_modules/
 
-# Dumps and backups
-*.sql
-project_dump.txt
-backups/
-*.db
-*.sqlite3
-MRAK_*.json
-epic_details/
-docs/
+# Build artifacts (собираются внутри Docker)
+frontend/dist/
+
+# Documentation
+*.md
+LICENSE
+README.md
 
 # Logs
 *.log
-app.log
-
-# Environment files (SECURITY: never include secrets)
-.env
-.env.*
-!.env.example
-
-# Frontend dev (built inside Docker)
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
-frontend/src/**/__tests__/
-frontend/src/**/*.test.ts
-frontend/src/**/*.test.tsx
-frontend/src/test/
-frontend/vitest.config.ts
 
 # IDE
 .vscode/
@@ -77,5 +43,17 @@ frontend/vitest.config.ts
 .DS_Store
 Thumbs.db
 
-# Migrations (applied via CI/CD, not in image)
-migrations/
+# Local scripts (не нужны в рантайме)
+check_db.py
+generate_tree.py
+index_project.py
+init_db.sql
+keep_alive.py
+generate_tree.py
+project_dump.txt
+tree_output.txt
+
+# Dumps
+MRAK_*.json
+epic_details/
+docs/

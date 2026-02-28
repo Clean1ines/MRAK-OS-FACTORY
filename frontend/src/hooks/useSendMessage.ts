@@ -23,17 +23,19 @@ export const useSendMessage = () => {
     addMessage({ role: 'user', content: text, timestamp: Date.now() });
     setInputValue('');
 
+    let accumulated = '';
+
     await startStream(
       { prompt: text, mode, model: selectedModel || undefined, project_id: currentProjectId },
       {
-        // #CHANGED: removed unused parameter
-        onChunk: () => {},
+        onChunk: (chunk) => {
+          accumulated += chunk;
+        },
         onFinish: (fullText) => {
           addMessage({ role: 'assistant', content: fullText, timestamp: Date.now() });
         },
         onError: (err) => {
-          const message = err instanceof Error ? err.message : String(err);
-          showNotification('Ошибка: ' + message, 'error');
+          showNotification('Ошибка: ' + err.message, 'error');
         },
       }
     );

@@ -3,6 +3,22 @@ import { useAppStore } from '../store/useAppStore';
 import { useNotification } from './useNotifications';
 import { api } from '../api/client';
 
+// #ADDED: Local type for message artifacts (since schema has empty content)
+interface MessageArtifact {
+  id?: string;
+  type?: string;
+  parent_id?: string | null;
+  content?: {
+    role?: string;
+    content?: string;
+  };
+  created_at?: string;
+  updated_at?: string;
+  version?: string;
+  status?: string;
+  summary?: string;
+}
+
 export const useProjectData = () => {
   const setProjects = useAppStore((s) => s.setProjects);
   const setModels = useAppStore((s) => s.setModels);
@@ -25,7 +41,7 @@ export const useProjectData = () => {
           description: p.description!,
         }));
         setProjects(projects);
-      } catch (e) {
+      } catch {
         showNotification('Ошибка загрузки проектов', 'error');
       }
     };
@@ -40,8 +56,8 @@ export const useProjectData = () => {
         if (error) throw error;
         const models = (data || []).map((m) => ({ id: m.id! }));
         setModels(models);
-      } catch (e) {
-        console.warn('Failed to load models', e);
+      } catch {
+        console.warn('Failed to load models');
       }
     };
     loadModels();
@@ -59,8 +75,8 @@ export const useProjectData = () => {
           default: m.default,
         }));
         setModes(modes);
-      } catch (e) {
-        console.warn('Failed to load modes', e);
+      } catch {
+        console.warn('Failed to load modes');
       }
     };
     loadModes();
@@ -80,8 +96,8 @@ export const useProjectData = () => {
           icon: t.icon,
         }));
         setArtifactTypes(types);
-      } catch (e) {
-        console.warn('Failed to load artifact types', e);
+      } catch {
+        console.warn('Failed to load artifact types');
       }
     };
     loadArtifactTypes();
@@ -109,8 +125,8 @@ export const useProjectData = () => {
           summary: a.summary,
         }));
         setArtifacts(artifacts);
-      } catch (e) {
-        console.warn('Failed to load artifacts', e);
+      } catch {
+        console.warn('Failed to load artifacts');
       }
     };
     loadArtifacts();
@@ -126,14 +142,21 @@ export const useProjectData = () => {
       try {
         const { data, error } = await api.messages.list(currentProjectId);
         if (error) throw error;
-        const messages = (data || []).map((m: any) => ({
-          role: m.content?.role || 'assistant',
-          content: m.content?.content || '',
-          timestamp: new Date(m.created_at).getTime(),
-        }));
+        const messages = (data || []).map((m: MessageArtifact) => {
+          const role = m.content?.role;
+          // #CHANGED: explicit cast to union type
+          const validRole = (role === 'user' || role === 'assistant')
+            ? (role as 'user' | 'assistant')
+            : 'assistant';
+          return {
+            role: validRole,
+            content: m.content?.content || '',
+            timestamp: new Date(m.created_at || '').getTime(),
+          };
+        });
         setMessages(messages);
-      } catch (e) {
-        console.warn('Failed to load messages', e);
+      } catch {
+        console.warn('Failed to load messages');
       }
     };
     loadMessages();

@@ -1,5 +1,12 @@
 # server.py
 # CHANGED: Replaced standard logging with structlog for JSON output + correlation_id
+import os
+import uuid
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables before any other imports that might use them
+load_dotenv()
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -7,8 +14,15 @@ from fastapi.responses import FileResponse, JSONResponse
 import structlog
 from routers import projects, artifacts, clarification, workflows, modes, auth
 import db
-import os
-import uuid
+
+def validate_env():
+    required = ["DATABASE_URL", "MASTER_KEY"]
+    missing = [v for v in required if not os.getenv(v)]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+    if len(os.getenv("MASTER_KEY", "")) < 8:
+        raise RuntimeError("MASTER_KEY must be at least 8 characters")
+validate_env()
 
 # #CHANGED: Configure structlog for JSON output with correlation_id support
 # #FIX: inject_contextvars → merge_contextvars (structlog >= 22.1.0)
@@ -186,7 +200,6 @@ async def validate_session_middleware(request: Request, call_next):
     return await call_next(request)
 
 # ==================== STATIC FILES ====================
-from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 static_dir = BASE_DIR / "static"

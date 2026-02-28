@@ -10,7 +10,14 @@ import uuid
 from dotenv import load_dotenv
 from types import SimpleNamespace
 
-load_dotenv()
+from pathlib import Path
+
+# Load .env.test if exists, otherwise .env
+env_path = Path(__file__).parent.parent / '.env.test'
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    load_dotenv()  # fallback to .env
 
 # #ADDED: Automatically start Docker container if not running
 def _ensure_test_database_container():

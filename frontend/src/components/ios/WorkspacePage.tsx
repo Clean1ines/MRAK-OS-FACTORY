@@ -10,6 +10,8 @@ import { validateWorkflowAcyclic } from '../../utils/graphUtils';
 import { NodeListPanel } from './NodeListPanel';
 import { NodeModal } from './NodeModal';
 import { useNodeValidation } from './useNodeValidation';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { HamburgerMenu } from '../layout/HamburgerMenu';
 
 declare global {
   interface Window {
@@ -57,6 +59,7 @@ interface WorkflowDetail {
 export const WorkspacePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlProjectId = searchParams.get('projectId');
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const [nodes, setNodes] = useState<NodeData[]>([]);
   const [edges, setEdges] = useState<EdgeData[]>([]);
@@ -65,7 +68,7 @@ export const WorkspacePage: React.FC = () => {
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [loading, setLoading] = useState(false);
   const [showNodeModal, setShowNodeModal] = useState(false);
   const [showNodeList, setShowNodeList] = useState(false);
@@ -73,7 +76,10 @@ export const WorkspacePage: React.FC = () => {
   const [newNodeTitle, setNewNodeTitle] = useState('');
   const { validateNodeUnique } = useNodeValidation(nodes);
 
-  // Загрузка проектов при монтировании
+  useEffect(() => {
+    setSidebarOpen(!isMobile);
+  }, [isMobile]);
+
   const loadProjects = useCallback(async () => {
     try {
       const { data, error } = await api.projects.list();
@@ -83,12 +89,10 @@ export const WorkspacePage: React.FC = () => {
       }
       if (data && Array.isArray(data)) {
         setProjects(data);
-        // Если проекты загружены и нет выбранного, но есть projectId в URL – используем его
         if (data.length > 0 && !selectedProjectId) {
           if (urlProjectId && data.some(p => p.id === urlProjectId)) {
             setSelectedProjectId(urlProjectId);
           } else if (!urlProjectId && localStorage.getItem('workspace_selected_project')) {
-            // Fallback: если в localStorage есть старый выбор, используем его
             const stored = localStorage.getItem('workspace_selected_project');
             if (stored && data.some(p => p.id === stored)) {
               setSelectedProjectId(stored);
@@ -96,7 +100,6 @@ export const WorkspacePage: React.FC = () => {
               setSelectedProjectId(data[0].id!);
             }
           } else if (!urlProjectId) {
-            // Ничего нет – выбираем первый проект
             setSelectedProjectId(data[0].id!);
           }
         }
@@ -108,7 +111,6 @@ export const WorkspacePage: React.FC = () => {
     }
   }, [selectedProjectId, urlProjectId]);
 
-  // Загрузка воркфлоу для выбранного проекта
   const loadWorkflows = useCallback(async () => {
     if (!selectedProjectId) return;
     try {
@@ -130,7 +132,6 @@ export const WorkspacePage: React.FC = () => {
     }
   }, [selectedProjectId]);
 
-  // Загрузка конкретного воркфлоу
   const loadWorkflow = useCallback(async (id: string) => {
     try {
       const r = await client.GET('/api/workflows/{workflow_id}', {
@@ -163,16 +164,13 @@ export const WorkspacePage: React.FC = () => {
     }
   }, []);
 
-  // При монтировании загружаем проекты
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
 
-  // При изменении selectedProjectId загружаем воркфлоу и обновляем URL
   useEffect(() => {
     if (selectedProjectId) {
       localStorage.setItem('workspace_selected_project', selectedProjectId);
-      // Обновляем URL, если он не совпадает
       if (searchParams.get('projectId') !== selectedProjectId) {
         setSearchParams({ projectId: selectedProjectId });
       }
@@ -180,12 +178,10 @@ export const WorkspacePage: React.FC = () => {
     }
   }, [selectedProjectId, loadWorkflows, searchParams, setSearchParams]);
 
-  // При изменении URL (projectId) синхронизируем selectedProjectId
   useEffect(() => {
     if (urlProjectId && urlProjectId !== selectedProjectId) {
       setSelectedProjectId(urlProjectId);
     } else if (!urlProjectId && !selectedProjectId) {
-      // Если в URL нет projectId и у нас нет выбранного, пытаемся взять из localStorage
       const stored = localStorage.getItem('workspace_selected_project');
       if (stored) {
         setSelectedProjectId(stored);
@@ -193,12 +189,10 @@ export const WorkspacePage: React.FC = () => {
     }
   }, [urlProjectId, selectedProjectId]);
 
-  // При изменении currentWorkflowId загружаем детали воркфлоу
   useEffect(() => {
     if (currentWorkflowId) {
       loadWorkflow(currentWorkflowId);
     } else {
-      // Если нет выбранного воркфлоу, очищаем холст
       setNodes([]);
       setEdges([]);
       setWorkflowName('');
@@ -325,36 +319,69 @@ export const WorkspacePage: React.FC = () => {
 
   const handleProjectChange = (projectId: string | null) => {
     setSelectedProjectId(projectId);
-    // Принудительно сбрасываем текущий воркфлоу
     setCurrentWorkflowId(null);
   };
+
+  const handleCloseSidebar = () => setSidebarOpen(false);
+  const handleOpenSidebar = () => setSidebarOpen(true);
+
+  const hamburgerWidth = 40;
 
   return (
     <IOSShell>
       <div className="flex h-full">
+        {!sidebarOpen && (
+          <HamburgerMenu onOpenSidebar={handleOpenSidebar} showHomeIcon={true} />
+        )}
+
         {sidebarOpen && (
-          <aside className="w-64 bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col z-50">
+          <aside
+            className={`${
+              isMobile ? 'fixed top-0 left-0 h-full z-50 shadow-2xl' : 'w-64'
+            } bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col`}
+          >
+            <div className="flex justify-end p-2">
+              <button
+                onClick={handleCloseSidebar}
+                className="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+                aria-label="Close sidebar"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
             <div className="p-3 border-b border-[var(--ios-border)]">
-              <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">Project</label>
+              <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">
+                Project
+              </label>
               <select
                 value={selectedProjectId || ''}
                 onChange={(e) => handleProjectChange(e.target.value || null)}
                 className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
               >
                 <option value="">-- Select Project --</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
               {!selectedProjectId ? (
-                <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">⚠️ Select project</div>
+                <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">
+                  ⚠️ Select project
+                </div>
               ) : workflows.length === 0 ? (
-                <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No workflows</div>
+                <div className="text-[10px] text-[var(--text-muted)] text-center py-4">
+                  No workflows
+                </div>
               ) : (
-                workflows.map(wf => (
+                workflows.map((wf) => (
                   <button
                     key={wf.id}
                     onClick={() => setCurrentWorkflowId(wf.id!)}
@@ -365,7 +392,9 @@ export const WorkspacePage: React.FC = () => {
                     }`}
                   >
                     <div className="font-semibold truncate">{wf.name}</div>
-                    <div className="text-[9px] opacity-60 truncate">{wf.description || 'No description'}</div>
+                    <div className="text-[9px] opacity-60 truncate">
+                      {wf.description || 'No description'}
+                    </div>
                   </button>
                 ))
               )}
@@ -428,24 +457,14 @@ export const WorkspacePage: React.FC = () => {
         )}
 
         <div className="flex-1 flex flex-col">
-          <div className="h-12 flex items-center justify-between px-4 border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
-            <div className="flex items-center gap-2">
-              {!sidebarOpen && (
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
-                  </svg>
-                </button>
-              )}
+          <div className="h-12 flex items-center border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
+            <div style={{ width: !sidebarOpen ? hamburgerWidth : 0 }} className="transition-all" />
+            <div className="flex-1 flex justify-center">
               <h2 className="text-sm font-semibold text-[var(--text-main)]">
                 {workflowName || 'Untitled Workflow'}
               </h2>
             </div>
+            <div style={{ width: !sidebarOpen ? hamburgerWidth : 0 }} className="transition-all" />
           </div>
           <IOSCanvas
             nodes={nodes}

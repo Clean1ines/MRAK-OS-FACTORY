@@ -1,0 +1,597 @@
+{
+  "version": "0.2.0",
+  "prompts": [
+    {
+      "id": "01-core-prompt",
+      "file": "prompts/01-core/01-core-prompt.txt",
+      "role": "Senior AI Assistant",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "02-idea-clarifier",
+      "file": "prompts/02-strategy/02-idea-clarifier.txt",
+      "role": "Practical Idea Facilitator",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "03-product-council",
+      "file": "prompts/02-strategy/03-product-council.txt",
+      "role": "Product Titans Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "33-feature-to-user-story-gen",
+      "file": "prompts/02-strategy/33-feature-to-user-story-gen.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "40-json-epic-backlog-generator",
+      "file": "prompts/02-strategy/40-json-epic-backlog-generator.txt",
+      "role": "Agile Analyst / Product Owner",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "40opt-json-epic-backlog-generator",
+      "file": "prompts/02-strategy/40opt-json-epic-backlog-generator.txt",
+      "role": "Agile Analyst",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "04-business-req-gen",
+      "file": "prompts/03-requirements/04-business-req-gen.txt",
+      "role": "Senior Business Analyst & Product Manager",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "05-req-eng-council",
+      "file": "prompts/03-requirements/05-req-eng-council.txt",
+      "role": "Titans' Council of Requirements Engineering",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "06-system-req-gen",
+      "file": "prompts/03-requirements/06-system-req-gen.txt",
+      "role": "Senior Systems Analyst & Requirements Engineer",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "20-security-req-gen",
+      "file": "prompts/03-requirements/20-security-req-gen.txt",
+      "role": "Security Architect",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "21-threat-modeling-assistant",
+      "file": "prompts/03-requirements/21-threat-modeling-assistant.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "36-requirement-summarizer",
+      "file": "prompts/03-requirements/36-requirement-summarizer.txt",
+      "role": "Senior Requirements Analyst",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "37-system-requirements-summarizer",
+      "file": "prompts/03-requirements/37-system-requirements-summarizer.txt",
+      "role": "Requirements Engineer",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "08-architecture-council",
+      "file": "prompts/04-architecture/08-architecture-council.txt",
+      "role": "Titans' Council of Software Architecture",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "15-algorithm-council",
+      "file": "prompts/04-architecture/15-algorithm-council.txt",
+      "role": "Advisory Council of Algorithm Titans",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "16-ui-ux-council",
+      "file": "prompts/04-architecture/16-ui-ux-council.txt",
+      "role": "Titans of UI/UX Design Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "19-integration-plan",
+      "file": "prompts/04-architecture/19-integration-plan.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "24-tech-design-doc-gen",
+      "file": "prompts/04-architecture/24-tech-design-doc-gen.txt",
+      "role": "Lead Software Architect",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "09-code-task-gen",
+      "file": "prompts/05-implementation/09-code-task-gen.txt",
+      "role": "Senior Software Architect & Task Decomposer",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "10-code-gen.old",
+      "file": "prompts/05-implementation/10-code-gen.old.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "10-code-gen",
+      "file": "prompts/05-implementation/10-code-gen.txt",
+      "role": "Code Generation Guardian",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "10-code-generation-guardian-backend-edition",
+      "file": "prompts/05-implementation/10-code-generation-guardian-backend-edition.txt",
+      "role": "Code Generation Guardian: Backend Edition",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "10-code-generation-guardian-frontend-edition",
+      "file": "prompts/05-implementation/10-code-generation-guardian-frontend-edition.txt",
+      "role": "Code Generation Guardian: Frontend Edition",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "17-soft-eng-council",
+      "file": "prompts/05-implementation/17-soft-eng-council.txt",
+      "role": "Council of Titans for Code & Process Analysis",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "22-infrastructure-spec-gen",
+      "file": "prompts/05-implementation/22-infrastructure-spec-gen.txt",
+      "role": "DevOps Architect",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "23-observability-spec-gen",
+      "file": "prompts/05-implementation/23-observability-spec-gen.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "38-code-context-summarizer",
+      "file": "prompts/05-implementation/38-code-context-summarizer.txt",
+      "role": "Code Analyst",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "42-code-quality-task-generator",
+      "file": "prompts/05-implementation/42-code-quality-task-generator.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "07-qa-council",
+      "file": "prompts/06-validation/07-qa-council.txt",
+      "role": "Titans' Council of Quality Assurance",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "11-test-gen",
+      "file": "prompts/06-validation/11-test-gen.txt",
+      "role": "Senior Test Automation Engineer & Quality Strategist",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "25-user-doc-gen",
+      "file": "prompts/06-validation/25-user-doc-gen.txt",
+      "role": "Senior Technical Writer",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "26-api-doc-gen",
+      "file": "prompts/06-validation/26-api-doc-gen.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "27-uat-script-gen",
+      "file": "prompts/06-validation/27-uat-script-gen.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "28-jira-issue-formatter",
+      "file": "prompts/06-validation/28-jira-issue-formatter.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "29-project-status-reporter",
+      "file": "prompts/06-validation/29-project-status-reporter.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "30-incident-post-mortem-gen",
+      "file": "prompts/06-validation/30-incident-post-mortem-gen.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "41-based-on-failures-test-gen",
+      "file": "prompts/06-validation/41-based-on-failures-test-gen.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "code-generation-guardian-backend-edition-docstrings",
+      "file": "prompts/06-validation/code-generation-guardian-backend-edition-docstrings.txt",
+      "role": "Code Generation Guardian: Backend Edition",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "code-generation-guardian-frontend-edition-docstrings",
+      "file": "prompts/06-validation/code-generation-guardian-frontend-edition-docstrings.txt",
+      "role": "Code Generation Guardian: Frontend Edition",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "senior-test-strategist-no-code",
+      "file": "prompts/06-validation/senior-test-strategist-no-code.txt",
+      "role": "Senior Test Strategist (No-Code)",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "test-code-generator-backend-edition",
+      "file": "prompts/06-validation/test-code-generator-backend-edition.txt",
+      "role": "Test Code Generator: Backend Edition",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "test-code-generator-frontend-edition",
+      "file": "prompts/06-validation/test-code-generator-frontend-edition.txt",
+      "role": "Test Code Generator: Frontend Edition",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "12-failure-detector",
+      "file": "prompts/07-meta/12-failure-detector.txt",
+      "role": "Pattern Failure Detector",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "13-self-analysis-factory",
+      "file": "prompts/07-meta/13-self-analysis-factory.txt",
+      "role": "Metaprompt Engineer",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "14-prompt-engineering-council",
+      "file": "prompts/07-meta/14-prompt-engineering-council.txt",
+      "role": "Titans' Council of Prompt Engineering",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "32-change-impact-analyzer",
+      "file": "prompts/07-meta/32-change-impact-analyzer.txt",
+      "role": "Senior Change Manager & Traceability Specialist",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "34-research-metodology-gen",
+      "file": "prompts/07-meta/34-research-metodology-gen.txt",
+      "role": "Prompt research factory",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "35-analysis-summarizer",
+      "file": "prompts/07-meta/35-analysis-summarizer.txt",
+      "role": "Expert Analyst",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    },
+    {
+      "id": "39-evolutionary-system-optimizer",
+      "file": "prompts/07-meta/39-evolutionary-system-optimizer.txt",
+      "role": "Unknown",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "01opt-core-prompt",
+      "file": "prompts/shared/01opt-core-prompt.txt",
+      "role": "Senior AI",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "02opt-idea-clarifier",
+      "file": "prompts/shared/02opt-idea-clarifier.txt",
+      "role": "Product Discovery Facilitator → structured JSON for Product Titans Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "02sum-state-synthesizer",
+      "file": "prompts/shared/02sum-state-synthesizer.txt",
+      "role": "Context Analyst",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "03opt-product-council",
+      "file": "prompts/shared/03opt-product-council.txt",
+      "role": "Product Titans Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "05opt-req-eng-council",
+      "file": "prompts/shared/05opt-req-eng-council.txt",
+      "role": "Requirements Engineering Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "07opt-qa-council",
+      "file": "prompts/shared/07opt-qa-council.txt",
+      "role": "QA Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "08opt-architecture-council",
+      "file": "prompts/shared/08opt-architecture-council.txt",
+      "role": "Architecture Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "09opt-code-task-gen",
+      "file": "prompts/shared/09opt-code-task-gen.txt",
+      "role": "Architect & Task Decomposer",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "11opt-test-gen",
+      "file": "prompts/shared/11opt-test-gen.txt",
+      "role": "Test Automation Engineer",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "12opt-failure-detector",
+      "file": "prompts/shared/12opt-failure-detector.txt",
+      "role": "Failure Detector",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "14opt-prompt-engineering-council",
+      "file": "prompts/shared/14opt-prompt-engineering-council.txt",
+      "role": "Prompt Engineering Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "15opt-algorithm-council",
+      "file": "prompts/shared/15opt-algorithm-council.txt",
+      "role": "Algorithm Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "17opt-soft-eng-council",
+      "file": "prompts/shared/17opt-soft-eng-council.txt",
+      "role": "Code & Process Council",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "18-translator",
+      "file": "prompts/shared/18-translator.txt",
+      "role": "Expert Prompt Engineer & Linguist",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "20opt-security-req-gen",
+      "file": "prompts/shared/20opt-security-req-gen.txt",
+      "role": "Security Architect",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "22opt-infrastructure-spec-gen",
+      "file": "prompts/shared/22opt-infrastructure-spec-gen.txt",
+      "role": "DevOps Architect",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "24opt-tech-design-doc-gen",
+      "file": "prompts/shared/24opt-tech-design-doc-gen.txt",
+      "role": "Lead Architect",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "31-knowledge-query-assistant",
+      "file": "prompts/shared/31-knowledge-query-assistant.txt",
+      "role": "AI Knowledge Manager",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "32opt-change-impact-analyzer",
+      "file": "prompts/shared/32opt-change-impact-analyzer.txt",
+      "role": "Change Manager",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "34opt-research-metodology-gen",
+      "file": "prompts/shared/34opt-research-metodology-gen.txt",
+      "role": "Prompt research factory",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "35opt-analysis-summarizer",
+      "file": "prompts/shared/35opt-analysis-summarizer.txt",
+      "role": "Analyst",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "36opt-requirement-summarizer",
+      "file": "prompts/shared/36opt-requirement-summarizer.txt",
+      "role": "Requirements Analyst",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "37opt-system-requirements-summarizer",
+      "file": "prompts/shared/37opt-system-requirements-summarizer.txt",
+      "role": "Requirements Engineer",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "38opt-code-context-summarizer",
+      "file": "prompts/shared/38opt-code-context-summarizer.txt",
+      "role": "Code Analyst",
+      "input_schema": {},
+      "output_format": "text",
+      "dependencies": []
+    },
+    {
+      "id": "meta-architect-gen",
+      "file": "prompts/shared/meta-architect-gen.txt",
+      "role": "Meta-Architect & Prompt Surgeon",
+      "input_schema": {},
+      "output_format": "json",
+      "dependencies": []
+    }
+  ]
+}

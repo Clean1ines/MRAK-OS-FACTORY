@@ -1,209 +1,253 @@
-from typing import Optional
-from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from orchestrator import MrakOrchestrator
-from app.schemas import (
-    ProjectCreate, ArtifactCreate,
-    GenerateArtifactRequest, SavePackageRequest
-)
-from app.utils import compute_content_hash
-import db
-import logging
+# server.py
+# CHANGED: Replaced standard logging with structlog for JSON output + correlation_id
 import os
+import uuid
+from pathlib import Path
+from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("MRAK-SERVER")
+# Load environment variables before any other imports that might use them
+load_dotenv()
+
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+import structlog
+from routers import projects, artifacts, clarification, workflows, modes, auth
+import db
+
+def validate_env():
+    required = ["DATABASE_URL", "MASTER_KEY"]
+    missing = [v for v in required if not os.getenv(v)]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+    if len(os.getenv("MASTER_KEY", "")) < 8:
+        raise RuntimeError("MASTER_KEY must be at least 8 characters")
+validate_env()
+
+# #CHANGED: Configure structlog for JSON output with correlation_id support
+# #FIX: inject_contextvars → merge_contextvars (structlog >= 22.1.0)
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.UnicodeDecoder(),
+        # #ADDED: Merge contextvars into every log entry (replaces inject_contextvars)
+        structlog.contextvars.merge_contextvars,
+        # #ADDED: Render as JSON for production log aggregation
+        structlog.processors.JSONRenderer(),
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
+
+# #CHANGED: Get structlog logger instance
+logger = structlog.get_logger("MRAK-SERVER")
 
 app = FastAPI(title="MRAK-OS Factory API")
-orch = MrakOrchestrator()
 
+# #ADDED: Health check endpoint
+@app.get("/health")
+async def health():
+    """
+    Health check endpoint for load balancers and monitoring.
+    Returns {"status": "ok"} if service is alive.
+    
+    Returns:
+        dict: Status indicator.
+    """
+    return {"status": "ok"}
+
+# Include routers
+app.include_router(projects.router)
+app.include_router(artifacts.router)
+app.include_router(clarification.router)
+app.include_router(workflows.router)
+app.include_router(modes.router)
+app.include_router(auth.router)
+
+# ==================== STARTUP ====================
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting up... Database schema is managed separately.")
-    # Проверяем подключение, но не создаём таблицы
+    """
+    Initialize database connection on startup.
+    
+    Logs connection status via structlog. Exits silently on failure
+    to allow health-check-based orchestration.
+    """
+    # #CHANGED: Use structlog logger
+    logger.info("Starting up... Testing database connection.")
     try:
         conn = await db.get_connection()
         await conn.execute('SELECT 1')
         await conn.close()
         logger.info("Database connection OK.")
     except Exception as e:
-        logger.error(f"Database connection failed: {e}")
+        # #CHANGED: Log exception with stack trace for 5xx errors
+        logger.error("Database connection failed", exc_info=e, error=str(e))
 
-# ==================== Project endpoints ====================
-@app.get("/api/projects")
-async def list_projects():
-    projects = await db.get_projects()
-    return JSONResponse(content=projects)
+# ==================== MIDDLEWARE ====================
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    """
+    Inject correlation_id into logs and response headers for request tracing.
+    
+    Args:
+        request: FastAPI Request object.
+        call_next: Next middleware/handler in chain.
+    
+    Returns:
+        Response with X-Request-ID header.
+    """
+    # #ADDED: Extract or generate correlation_id for request tracing
+    correlation_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
 
-@app.post("/api/projects")
-async def create_project_endpoint(project: ProjectCreate):
-    project_id = await db.create_project(project.name, project.description)
-    return JSONResponse(content={"id": project_id, "name": project.name})
+    # #ADDED: Bind correlation_id to structlog context for this request
+    request_logger = logger.bind(correlation_id=correlation_id, path=request.url.path, method=request.method)
 
-# ==================== Artifact endpoints ====================
-@app.get("/api/projects/{project_id}/artifacts")
-async def list_artifacts(project_id: str, type: Optional[str] = None):
-    artifacts = await db.get_artifacts(project_id, type)
-    return JSONResponse(content=artifacts)
+    # #ADDED: Log request start
+    request_logger.info("Request started", remote_addr=request.client.host if request.client else None)
 
-@app.post("/api/artifact")
-async def create_artifact(artifact: ArtifactCreate):
     try:
-        if artifact.generate:
-            parent = None
-            if artifact.parent_id:
-                parent = await db.get_artifact(artifact.parent_id)
-                if not parent:
-                    return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
-            new_id = await orch.generate_artifact(
-                artifact_type=artifact.artifact_type,
-                user_input=artifact.content,
-                parent_artifact=parent,
-                model_id=artifact.model,
-                project_id=artifact.project_id
-            )
-            return JSONResponse(content={"id": new_id, "generated": True})
-        else:
-            content_data = {"text": artifact.content}
-            new_id = await db.save_artifact(
-                artifact_type=artifact.artifact_type,
-                content=content_data,
-                owner="user",
-                status="DRAFT",
-                project_id=artifact.project_id,
-                parent_id=artifact.parent_id
-            )
-            return JSONResponse(content={"id": new_id, "generated": False})
+        response = await call_next(request)
+        # #ADDED: Log response status
+        request_logger.info("Request completed", status_code=response.status_code)
+        # #ADDED: Add correlation_id to response headers for frontend/debugging
+        response.headers["X-Request-ID"] = correlation_id
+        return response
     except Exception as e:
-        logger.error(f"Error creating artifact: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        # #ADDED: Log 5xx errors with full stack trace
+        request_logger.error("Request failed with 5xx", exc_info=e, error=str(e))
+        raise
 
-@app.get("/api/latest_artifact")
-async def latest_artifact(parent_id: str, type: str):
-    pkg = await db.get_last_package(parent_id, type)
-    if pkg:
-        return JSONResponse(content={
-            "exists": True,
-            "artifact_id": pkg['id'],
-            "content": pkg['content']
-        })
-    else:
-        return JSONResponse(content={"exists": False})
+@app.middleware("http")
+async def validate_session_middleware(request: Request, call_next):
+    """
+    Validate session token from Authorization header (Bearer scheme ONLY).
+    
+    Cookies are NOT supported due to cross-domain/cors constraints.
+    Token must be present in sessionStorage on client and sent as:
+        Authorization: Bearer <session_token>
+    
+    Args:
+        request: FastAPI Request object.
+        call_next: Next middleware/handler in chain.
+    
+    Returns:
+        Response if auth fails, else continues to handler.
+    
+    Raises:
+        HTTPException: 401 if token missing or invalid.
+    """
+    # #CHANGED: Use structlog logger with request context
+    request_logger = logger.bind(path=request.url.path)
 
-# ==================== Generation endpoints ====================
-@app.post("/api/generate_artifact")
-async def generate_artifact_endpoint(req: GenerateArtifactRequest):
-    try:
-        if req.artifact_type == "BusinessRequirementPackage":
-            result = await orch.generate_business_requirements(
-                analysis_id=req.parent_id,
-                user_feedback=req.feedback,
-                model_id=req.model,
-                project_id=req.project_id,
-                existing_requirements=req.existing_content
+    # Skip auth for test mode
+    if os.getenv("TEST_MODE") == "true":
+        return await call_next(request)
+
+    # Skip auth endpoints (don't require auth for login)
+    if request.url.path.startswith("/api/auth"):
+        request_logger.debug("Skipping auth for endpoint")
+        return await call_next(request)
+
+    # Skip static files
+    if request.url.path.startswith("/assets"):
+        return await call_next(request)
+
+    # Skip health endpoint (doesn't require auth)
+    if request.url.path == "/health":
+        request_logger.debug("Skipping auth for health endpoint")
+        return await call_next(request)
+
+    # Check session for API requests
+    if request.url.path.startswith("/api"):
+        # #CHANGED: Accept ONLY Bearer token from Authorization header (NO cookie fallback)
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            request_logger.warning("401: Missing or invalid Authorization header (expected 'Bearer <token>')")
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required: send 'Authorization: Bearer <token>'"}
             )
-        elif req.artifact_type == "ReqEngineeringAnalysis":
-            result = await orch.generate_req_engineering_analysis(
-                parent_id=req.parent_id,
-                user_feedback=req.feedback,
-                model_id=req.model,
-                project_id=req.project_id,
-                existing_analysis=req.existing_content
+        
+        session_token = auth_header[7:]  # Remove "Bearer " prefix
+
+        if not session_token:
+            request_logger.warning("401: Empty session token")
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required"}
             )
-        elif req.artifact_type == "FunctionalRequirementPackage":
-            result = await orch.generate_functional_requirements(
-                analysis_id=req.parent_id,
-                user_feedback=req.feedback,
-                model_id=req.model,
-                project_id=req.project_id,
-                existing_requirements=req.existing_content
+
+        # Validate session
+        from routers.auth import validate_session
+        if not validate_session(session_token):
+            request_logger.warning("401: Invalid session token")
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Session expired or invalid"}
             )
-        else:
-            return JSONResponse(content={"error": "Unsupported artifact type"}, status_code=400)
 
-        return JSONResponse(content={"result": result})
-    except Exception as e:
-        logger.error(f"Error generating artifact: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        request_logger.debug("200: Valid session")
 
-@app.post("/api/save_artifact_package")
-async def save_artifact_package(req: SavePackageRequest):
-    try:
-        new_hash = compute_content_hash(req.content)
+    return await call_next(request)
 
-        last_pkg = await db.get_last_package(req.parent_id, req.artifact_type)
-        if last_pkg and last_pkg.get('content_hash') == new_hash:
-            return JSONResponse(content={"id": last_pkg['id'], "duplicate": True})
+# ==================== STATIC FILES ====================
 
-        last_pkg = await db.get_last_package(req.parent_id, req.artifact_type)
-        if last_pkg:
-            try:
-                last_version = int(last_pkg['version'])
-            except (ValueError, TypeError):
-                last_version = 0
-            version = str(last_version + 1)
-        else:
-            version = "1"
+BASE_DIR = Path(__file__).parent
+static_dir = BASE_DIR / "static"
+assets_dir = static_dir / "assets"
 
-        content_to_save = req.content
-        if req.artifact_type in ["BusinessRequirementPackage", "FunctionalRequirementPackage"] and isinstance(content_to_save, list):
-            import uuid
-            for r in content_to_save:
-                if 'id' not in r:
-                    r['id'] = str(uuid.uuid4())
+if assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
-        artifact_id = await db.save_artifact(
-            artifact_type=req.artifact_type,
-            content=content_to_save,
-            owner="user",
-            status="DRAFT",
-            project_id=req.project_id,
-            parent_id=req.parent_id,
-            content_hash=new_hash
-        )
-        return JSONResponse(content={"id": artifact_id})
-    except Exception as e:
-        logger.error(f"Error saving package: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+@app.get("/")
+async def serve_frontend():
+    """
+    Serve frontend index.html for SPA routing.
+    
+    Returns:
+        FileResponse: index.html if exists, else error JSON.
+    """
+    index_path = static_dir / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    # #CHANGED: Use structlog for error logging
+    logger.error("Frontend not built", path=str(index_path))
+    return {"error": "Frontend not built. Use Docker for production or run 'npm run dev' for development."}
 
-# ==================== Model & analysis endpoints ====================
-@app.get("/api/models")
-async def get_models():
-    models = orch.get_active_models()
-    return JSONResponse(content=models)
+@app.get("/{path:path}")
+async def serve_spa(path: str):
+    """
+    Handle SPA client-side routing: serve index.html for unknown paths.
+    
+    Args:
+        path: URL path segment.
+    
+    Returns:
+        FileResponse or JSON error.
+    """
+    if path.startswith("api/") or path.startswith("docs") or path.startswith("openapi") or path == "health":
+        return {"detail": "Not Found"}
 
-@app.post("/api/analyze")
-async def analyze(request: Request):
-    try:
-        data = await request.json()
-    except Exception as e:
-        logger.error(f"Invalid JSON received: {e}")
-        return JSONResponse(content={"error": "Invalid JSON body"}, status_code=400)
+    if path == "favicon.ico":
+        return {"detail": "Not Found"}
 
-    prompt = data.get("prompt")
-    mode = data.get("mode", "01_CORE")
-    model = data.get("model")
-    project_id = data.get("project_id")
+    file_path = static_dir / path
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
 
-    if not prompt:
-        return JSONResponse(content={"error": "Prompt is required"}, status_code=400)
-    if not model:
-        model = "llama-3.3-70b-versatile"
+    index_path = static_dir / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
 
-    sys_prompt = await orch.get_system_prompt(mode)
-    if sys_prompt.startswith("System Error") or sys_prompt.startswith("Error"):
-        logger.error(f"Prompt fetch failed for mode {mode}: {sys_prompt}")
-        async def error_stream():
-            yield f"🔴 **SYSTEM_CRITICAL_ERROR**: {sys_prompt}\n"
-            yield "Check your .env (GITHUB_TOKEN) and repository URLs."
-        return StreamingResponse(error_stream(), media_type="text/plain")
-
-    logger.info(f"Starting stream: Mode={mode}, Model={model}, Project={project_id}")
-    return StreamingResponse(
-        orch.stream_analysis(prompt, sys_prompt, model, mode, project_id=project_id),
-        media_type="text/plain",
-    )
-
-# ==================== Static files ====================
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+    # #CHANGED: Log 404 with structlog
+    logger.debug("404: Path not found", path=path)
+    return {"detail": "Not Found"}

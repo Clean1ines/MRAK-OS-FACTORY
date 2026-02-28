@@ -3,64 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MRAK-OS | DYNAMIC</title>
+    <title>Made in MRAK</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body class="h-screen flex flex-col antialiased overflow-hidden">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
 
-    <nav class="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl shrink-0">
+    <style>
+        * { font-family: 'JetBrains Mono', monospace; }
+
+        body { background: radial-gradient(circle at center, #031015 0%, #010509 60%, #000000 100%); }
+
+        nav { background: rgba(3, 15, 22, 0.75); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0, 255, 255, 0.08); }
+
+        select, input, textarea { background: rgba(0, 20, 28, 0.7); border: 1px solid rgba(0, 255, 255, 0.15); border-radius: 8px; color: #d9feff; padding: 6px 10px; transition: all 0.2s ease; }
+        select:focus, input:focus, textarea:focus { outline: none; border-color: rgba(0, 255, 255, 0.6); box-shadow: 0 0 15px rgba(0, 255, 255, 0.4); }
+
+        button { background: rgba(0, 30, 45, 0.6); border: 1px solid rgba(0,255,255,0.2); color: #7afcff; border-radius: 10px; padding: 6px 14px; transition: all 0.2s ease; }
+        button:hover { background: rgba(0,255,255,0.15); box-shadow: 0 0 18px rgba(0,255,255,0.6); }
+
+        #messages { background: rgba(0, 18, 25, 0.6); border-radius: 20px; border: 1px solid rgba(0,255,255,0.15); padding: 40px; box-shadow: 0 0 50px rgba(0,255,255,0.08), inset 0 0 30px rgba(0,255,255,0.05); }
+
+        /* Скрываем messages, если он пуст */
+        #messages:empty {
+            display: none;
+        }
+
+        textarea::placeholder { color: rgba(0, 255, 255, 0.4); }
+
+        /* =================== ВИЗУАЛЬНЫЕ ЭФФЕКТЫ =================== */
+        .glow { text-shadow: 0 0 4px #0ff, 0 0 10px #0ff; }
+        .cursor::after { content: "▋"; animation: blink 1s infinite; margin-left: 4px; }
+        @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
+
+        /* CRT overlay */
+        body::before {
+            content: '';
+            position: fixed; top:0; left:0; right:0; bottom:0;
+            pointer-events: none;
+            background: repeating-linear-gradient(rgba(0,0,0,0.05) 0 2px, transparent 2px 4px);
+            mix-blend-mode: overlay;
+            z-index: 9999;
+        }
+        body::after {
+            content: '';
+            position: fixed; top:0; left:0; right:0; bottom:0;
+            pointer-events: none;
+            background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAYAAACZgbYdAAAADUlEQVQIW2NkYGD4DwABBAEAfKjX6wAAAABJRU5ErkJggg==') repeat;
+            opacity: 0.03; mix-blend-mode: overlay;
+            z-index: 9999;
+        }
+
+        /* Стили для прогресс-бара */
+        .progress-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 10px 0;
+        }
+        .progress-step {
+            flex: 1;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #0ff;
+            opacity: 0.5;
+            transition: opacity 0.3s;
+            border-bottom: 2px solid rgba(0,255,255,0.2);
+            padding-bottom: 5px;
+        }
+        .progress-step.active {
+            opacity: 1;
+            border-bottom-color: #0ff;
+            font-weight: bold;
+        }
+        .progress-step.completed {
+            opacity: 0.8;
+            color: #6f6;
+        }
+
+        /* Стили для кастомных уведомлений (создаются в ui.js) */
+        .notification {
+            background: #0f172a;
+            border: 1px solid #0ff;
+            box-shadow: 0 0 10px #0ff;
+            color: #0ff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 10px;
+        }
+        .notification.error {
+            border-color: #f56565;
+            box-shadow: 0 0 10px #f56565;
+            color: white;
+        }
+
+        /* Плейсхолдер для пустого диалога */
+        #messages-placeholder {
+            color: rgba(0, 255, 255, 0.2);
+            font-size: 1.2rem;
+            text-align: center;
+            padding: 40px;
+            border: 1px dashed rgba(0,255,255,0.1);
+            border-radius: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col antialiased overflow-hidden text-cyan-100">
+
+    <!-- NAV -->
+    <nav class="h-14 flex items-center justify-between px-6 shrink-0">
         <div class="flex items-center gap-6">
             <div class="flex flex-col">
-                <span class="text-[8px] tracking-[0.3em] text-emerald-500 font-bold uppercase">Prompt_Mode</span>
-                <select id="mode-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer">
-                    <option value="01_CORE">01: CORE_SYSTEM</option>
-                    <option value="02_UI_UX">02: UI_UX_DESIGN</option>
-                    <option value="03_SOFT_ENG">03: TITAN_DEV</option>
-                    <option value="04_FAILURE">04: FAILURE_ANALYSIS</option>
-                    <option value="06_TRANSLATOR">06: PROMPT_ENG</option>
-                    <option value="07_BYPASS">07: RAW_BYPASS</option>
-                    <option value="07_INTEGRATION_PLAN">07: INTEGRATION_PLAN</option>
-                    <option value="08_PROMPT_COUNCIL">08: PROMPT_COUNCIL</option>
-                    <option value="09_ALGO_COUNCIL">09: ALGO_COUNCIL</option>
-                    <option value="10_FULL_CODE_GEN">10: FULL_CODE_GEN</option>
-                    <option value="11_REQ_COUNCIL">11: REQ_COUNCIL</option>
-                    <option value="12_SELF_ANALYSIS_FACTORY">12: SELF_ANALYSIS_FACTORY</option>
-                    <option value="13_ARTIFACT_OUTPUT">13_ARTIFACT_OURPUT</option>
-                    <option value="14_PRODUCT_COUNCIL">14: PRODUCT_COUNCIL</option>
+                <span class="text-[8px] tracking-widest text-cyan-400 uppercase">Prompt_Mode</span>
+                <select id="mode-select">
+                    <option>Loading...</option>
                 </select>
             </div>
             <div class="flex flex-col">
-                <span class="text-[8px] tracking-[0.3em] text-zinc-500 font-bold uppercase">Neural_Model</span>
-                <select id="model-select" class="bg-transparent text-[10px] text-white font-mono outline-none cursor-pointer">
-                    <option>Loading models...</option>
+                <span class="text-[8px] tracking-widest text-cyan-400 uppercase">Neural_Model</span>
+                <select id="model-select">
+                    <option>Loading...</option>
                 </select>
             </div>
         </div>
-        <div class="flex gap-4 text-[9px] font-mono text-zinc-600">
-            <span>TOKENS: <b id="q-tokens" class="text-zinc-400">---</b></span>
-            <span>REQ: <b id="q-req" class="text-zinc-400">---</b></span>
+        <div class="flex gap-4 text-xs text-cyan-500">
+            <span>TOKENS: <b id="q-tokens">---</b></span>
+            <span>REQ: <b id="q-req">---</b></span>
         </div>
     </nav>
 
-    <div class="px-6 py-2 bg-emerald-500/5 border-b border-white/5 text-[9px] text-zinc-500 flex justify-between">
-        <span id="status-text">SYSTEM_READY</span>
-        <span id="token-count">EST_COST: 0 TOKENS</span>
+    <!-- STATUS -->
+    <div class="px-6 py-2 border-b border-white/5 text-xs flex justify-between">
+        <span id="status-text">Craft in Silence</span>
+        <span id="token-count">EST_COST: 0</span>
     </div>
 
-    <!-- Блок управления проектами и артефактами -->
-    <div class="px-6 py-2 bg-zinc-900 border-b border-white/5 flex flex-wrap items-center gap-4">
+    <!-- PROJECT PANEL -->
+    <div class="px-6 py-3 border-b border-white/5 flex flex-wrap items-center gap-4 shrink-0">
         <div class="flex items-center gap-2">
-            <span class="text-xs text-zinc-400">Проект:</span>
-            <select id="project-select" class="bg-zinc-800 text-white text-sm px-3 py-1 rounded border border-white/10 w-64">
-                <option value="">-- Выберите проект --</option>
+            <span class="text-sm text-cyan-400">Проект:</span>
+            <select id="project-select">
+                <option value="">-- Выберите --</option>
             </select>
-            <button id="new-project-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30">+ Новый</button>
+            <button id="new-project-btn">Новый</button>
+            <button id="delete-project-btn">Удалить</button>
         </div>
+        <div class="flex items-center gap-2 ml-auto">
+            <span class="text-sm text-cyan-400">Режим:</span>
+            <button id="simple-mode-btn">Простой</button>
+            <button id="advanced-mode-btn">Расширенный</button>
+        </div>
+    </div>
+
+    <!-- ПРОГРЕСС-БАР -->
+    <div id="progress-bar-container" class="px-6 py-2 hidden">
+        <div class="progress-bar" id="progress-bar">
+            <div class="progress-step" data-step="idea">Идея</div>
+            <div class="progress-step" data-step="requirements">Требования</div>
+            <div class="progress-step" data-step="architecture">Архитектура</div>
+            <div class="progress-step" data-step="code">Код</div>
+            <div class="progress-step" data-step="tests">Тесты</div>
+        </div>
+    </div>
+
+    <!-- РАСШИРЕННЫЕ КОНТРОЛЫ -->
+    <div id="advanced-controls" class="px-6 py-2 flex flex-wrap items-center gap-4 advanced-only">
         <div class="flex items-center gap-2">
-            <span class="text-xs text-zinc-400">Тип:</span>
-            <select id="artifact-type-select" class="bg-zinc-800 text-white text-sm px-3 py-1 rounded border border-white/10">
+            <span class="text-sm text-cyan-400">Тип:</span>
+            <select id="artifact-type-select">
                 <option value="BusinessIdea">Бизнес-идея</option>
                 <option value="ProductCouncilAnalysis">Анализ продуктового совета</option>
                 <option value="BusinessRequirementPackage">Пакет бизнес-требований</option>
@@ -70,51 +187,71 @@
             </select>
         </div>
         <div class="flex items-center gap-2">
-            <span class="text-xs text-zinc-400">Родитель:</span>
-            <select id="parent-select" class="bg-zinc-800 text-white text-sm px-3 py-1 rounded border border-white/10 w-64">
+            <span class="text-sm text-cyan-400">Родитель:</span>
+            <select id="parent-select">
                 <option value="">-- нет --</option>
             </select>
-            <button id="refresh-parents" class="bg-zinc-700 text-white text-xs px-2 py-1 rounded">⟲</button>
+            <button id="refresh-parents">⟲</button>
+            <button id="delete-artifact-btn">🗑️ Удалить выбранный</button>
         </div>
-        <div class="flex items-center gap-2">
-            <label class="flex items-center gap-1 text-xs">
-                <input type="checkbox" id="generate-checkbox" class="form-checkbox h-4 w-4 text-emerald-500 bg-zinc-800 border-white/10 rounded"> Генерировать
-            </label>
-        </div>
-        <button id="generate-artifact-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30" style="display:none;">Создать/редактировать</button>
-        <button id="save-artifact-btn" class="bg-emerald-600/20 text-emerald-500 text-xs px-3 py-1 rounded hover:bg-emerald-600/30">Сохранить артефакт</button>
+        <button id="generate-artifact-btn" style="display:none;">Создать/редактировать</button>
+        <button id="save-artifact-btn">Сохранить артефакт</button>
+        <!-- ADDED: кнопка завершения уточнения -->
+        <button id="complete-clarification-btn" style="display:none;">Завершить уточнение</button>
     </div>
 
-    <main id="terminal" class="flex-1 overflow-y-auto px-6 scroll-smooth">
-        <div id="messages" class="max-w-3xl mx-auto py-12 space-y-12"></div>
+    <!-- ПРОСТОЙ КОНТРОЛЬ -->
+    <div id="simple-controls" class="px-6 py-2 hidden">
+        <button id="next-btn">Далее</button>
+    </div>
+
+    <!-- TERMINAL (область сообщений) -->
+    <main class="flex-1 overflow-y-auto px-6 py-6">
+        <div id="messages" class="max-w-3xl w-full mx-auto space-y-8"></div>
+        <!-- Плейсхолдер, когда сообщений нет -->
+        <div id="messages-placeholder" class="max-w-3xl w-full mx-auto text-center text-zinc-700 py-20">Диалог пуст. Начните общение...</div>
+        <!-- ADDED: элемент для скролла -->
         <div id="scroll-anchor" class="h-32"></div>
     </main>
 
-    <footer class="p-6 bg-gradient-to-t from-black to-transparent shrink-0">
+    <!-- INPUT -->
+    <footer class="p-6 shrink-0 bg-gradient-to-t from-black to-transparent">
         <div class="max-w-3xl mx-auto">
-            <div class="flex items-end gap-3 bg-[#111113] border border-white/5 rounded-2xl p-3 transition-all duration-300 focus-within:border-emerald-500">
-                <textarea id="input" class="w-full bg-transparent text-gray-200 py-2 px-3 outline-none resize-none h-[44px] max-h-[300px] text-sm" placeholder="Введите запрос..."></textarea>
-                <button id="send-btn" class="p-2 bg-emerald-600/10 text-emerald-500 rounded-xl hover:bg-emerald-600/20 transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2"/></svg>
-                </button>
+            <div class="flex items-end gap-3 bg-[#111113] border border-white/10 rounded-2xl p-3 focus-within:border-cyan-400 transition-all">
+                <textarea id="input" rows="1" placeholder="Введите запрос..." class="flex-1 bg-transparent border-none resize-none outline-none text-cyan-100"></textarea>
+                <button id="send-btn">Отправить</button>
             </div>
         </div>
     </footer>
 
-    <!-- Подключаем модули в правильном порядке -->
-    <script src="js/api.js"></script>
-    <script src="js/state.js"></script>
-    <script src="js/utils.js"></script>
-    <script src="js/renderers.js"></script>
-    <script src="js/notifications.js"></script>
-    <script src="js/modals.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/toolbar.js"></script>
-    <script src="js/projectHandlers.js"></script>
-    <script src="js/artifactHandlers.js"></script>
-    <script src="js/chatHandlers.js"></script>
-    <script src="js/main.js"></script>
-<script>window.addEventListener("DOMContentLoaded",()=>{const s=document.getElementById("model-select");if(s&&(s.innerText.includes("loading")||s.options.length<2)){s.innerHTML="<option value='llama3-70b-8192'>llama3-70b-8192</option><option value='llama3-8b-8192'>llama3-8b-8192</option><option value='mixtral-8x7b-32768'>mixtral-8x7b-32768</option>";console.log("Force-loaded models via HTML script")};});</script>
+    <!-- Скрипты подключаются в правильном порядке -->
+    <script src="api.js"></script>
+    <script src="state.js"></script>
+    <script src="ui.js"></script>
+    <script src="simpleMode.js"></script>
+    <script src="main.js"></script>
+
+    <script>
+        // Дополнительная логика для скрытия плейсхолдера при появлении сообщений
+        (function() {
+            const messagesDiv = document.getElementById('messages');
+            const placeholder = document.getElementById('messages-placeholder');
+            if (messagesDiv && placeholder) {
+                const observer = new MutationObserver(() => {
+                    if (messagesDiv.children.length > 0) {
+                        placeholder.style.display = 'none';
+                    } else {
+                        placeholder.style.display = 'block';
+                    }
+                });
+                observer.observe(messagesDiv, { childList: true, subtree: true });
+                // Начальная проверка
+                if (messagesDiv.children.length > 0) {
+                    placeholder.style.display = 'none';
+                }
+            }
+        })();
+    </script>
 </body>
 </html>
     <script>

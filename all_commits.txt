@@ -1,0 +1,2410 @@
+commit b653070d8677c93c1306418ffbf7afb9a110c752
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 20:03:14 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 21:34:24 2026 +0300
+
+    fix: add DOMPurify for XSS protection and unify E2E selectors
+    
+    - Install DOMPurify and sanitize assistant responses in ChatMessage
+    - Add data-testid attributes to key components (sidebar, canvas, header)
+    - Update E2E tests to use data-testid selectors instead of fragile CSS classes
+    - Fix duplicate data-testid in WorkspacePage by removing from wrapper div
+    - Increase timeout in navigation test for reliability
+    - All E2E tests now pass consistently
+
+commit 8027c92bd8aca14b58bf4e94a5969ad8cec9996e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 19:41:42 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 19:41:42 2026 +0300
+
+    refactor: extract modal components for better reusability
+    
+    - Create BaseModal as a reusable styled modal foundation
+    - Add CreateProjectModal, EditProjectModal for project CRUD
+    - Add CreateWorkflowModal for workflow creation
+    - Replace inline modal JSX in ProjectsSidebar and WorkspacePage with new components
+    - Remove unused Notifications.tsx
+    - Adjust useWorkflows to handle workflow creation with proper arguments
+    - Fix type mismatches and linter warnings
+
+commit 75cdab470ac0e5975f22f896c639f2fe079eaa64
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 19:02:13 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 19:02:13 2026 +0300
+
+    feat: integrate React Query for server state management
+    
+    - Add QueryClientProvider to App.tsx with queryClient configuration
+    - Create focused hooks: useModels, useModes, useArtifactTypes, useArtifacts, useMessages
+    - Refactor useProjectData to aggregate new hooks instead of manual fetch
+    - Convert useProjects and useWorkflows to use useQuery/useMutation
+    - Remove manual loading states and replace with React Query's caching
+    - Fix type errors by using local interfaces instead of generated schema
+    - Ensure all E2E tests pass after refactoring
+
+commit b7c7be3e6d4d7ffc81381caab4f381bb7e609858
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 17:54:49 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 17:54:49 2026 +0300
+
+    refactor(workspace): extract project selection and workflows logic into custom hooks
+    
+    - Create useSelectedProject hook to manage project selection sync with URL/localStorage
+    - Create useWorkflows hook to handle all workflows operations (CRUD, nodes, modals)
+    - Replace global window._newNodePosition with local state in useWorkflows
+    - Add data-testid attributes to sidebar elements for stable E2E tests
+    - Add E2E tests for navigation and sidebar collapse (TASK-006, TASK-009)
+    - Fix all linter warnings without using eslint-disable comments (by proper refactoring)
+    - Remove unused imports and variables
+
+commit ff06e28e2e4ebc949207b1fb4a559b37719b4de2
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 08:28:26 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 15:27:16 2026 +0300
+
+    fix: remove unused variables to fix production build
+
+commit 68613d8d6bdb2208585052e067a81da42aab49ed
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 08:14:19 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 08:14:19 2026 +0300
+
+    feat(chat): integrate local prompts and fix streaming authorization
+    
+    - Add local prompts catalog and load 01-core-prompt.txt from filesystem
+    - Update useStreaming to include Bearer token in /api/analyze requests
+    - Enhance ChatCanvas with ExpandingTextarea and MADE IN MRAK placeholder
+    - Add model selector to ChatInterface header
+    - Update prompt_loader to serve prompts from local prompts/ directory
+    
+    Closes issues with chat functionality and authorization errors
+
+commit 1933b5757e5400bdd6b8b0676c09426f00c30c06
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 06:31:19 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 06:33:36 2026 +0300
+
+    fix: resolve frontend TypeScript errors, linter warnings, and test failures
+    
+    - Remove unused useCallback from WorkspacePage, replace any with proper types
+    - Delete unused useEffect import from ProtectedLayout
+    - Move eslint-disable to correct line in ProjectsSidebar
+    - Update test_api.py to expect owner_id parameter in check_name_exists
+    - Ensure conftest.py loads .env.test for consistent test database credentials
+    
+    Closes various issues with project CRUD tests and frontend type safety
+
+commit 8fc5735e665dd7d79771c936382789eaebbb74a0
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 04:56:12 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 04:56:12 2026 +0300
+
+    chore(env): add environment validation and documentation to prevent config errors
+    
+    - Add check_env.py to validate required variables in pre-push
+    - Add check_db_connection.py to verify DB connectivity before push
+    - Add env validation on server startup
+    - Unify environment files with .env.example
+    - Update README with environment setup instructions
+
+commit 771bc076446ed3badcd4c2b3bfe4a4bea46c3c65
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 04:36:56 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 04:36:56 2026 +0300
+
+    fix(e2e): ensure MASTER_KEY and migrations are applied in e2e test script
+    
+    - Load .env.test in e2e-run.sh to get MASTER_KEY and DATABASE_URL
+    - Apply migrations before starting backend to ensure correct DB schema
+    - Explicitly export MASTER_KEY for uvicorn process
+
+commit 1c9e217d5f6c76a58a214e2e684e3c07f475176a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 04:24:02 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 04:24:02 2026 +0300
+
+    fix: resolve database connection issues and restore backend functionality
+    
+    - Move load_dotenv to top of server.py to ensure env vars loaded before imports
+    - Add explicit path to .env in repositories/base.py
+    - Fix check_name_exists calls by adding owner_id parameter
+    - Ensure DATABASE_URL from .env is used correctly in dev mode
+    - Update project repository to handle owner_id correctly
+    - Restore project creation and deletion functionality
+
+commit 54fb278fce6a5e2361451e1f8853c5dbee3e4b4a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 03:14:11 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 03:14:11 2026 +0300
+
+    feat(ui): enhance chat input and fix responsive layout issues
+    
+    - Add expanding textarea with max height (15 rows desktop / 5 mobile)
+    - Show 'MADE IN MRAK' placeholder when no messages
+    - Center workflow title in WorkspacePage with dynamic spacing
+    - Restore full modal functionality in ProjectsSidebar
+    - Fix unused variables and linter warnings (useMediaQuery, navigate)
+    - Add useMediaQuery hook for consistent responsive behavior
+
+commit a324405f04629c1cfc2278b5406c8395364bdc76
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 02:03:23 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 02:03:23 2026 +0300
+
+    feat(ui): implement collapsible sidebar with hamburger menu and navigation to projects
+    
+    - Add HamburgerMenu component with floating toggle button
+    - Make ProjectsSidebar collapsible (isOpen state)
+    - Add close button to sidebar
+    - Integrate hamburger menu with link to home page (/)
+    - Update layout to show sidebar conditionally
+    
+    Closes TASK-007, REQ-018
+
+commit 11b593b6412051ded2abb88bc48f03ff29a2ec81
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 01:43:42 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 01:43:42 2026 +0300
+
+    feat(db): add owner_id and composite unique constraint for projects
+    
+    - Add migration add_project_constraints.py to add owner_id column to projects table
+    - Create composite unique constraint (name, owner_id) to enforce project name uniqueness per user
+    - Drop the old projects_name_unique constraint (now replaced)
+    - Update project_repository.py to include owner_id in CRUD operations with default value
+    - Update migrations/run_all.py to include new migration in correct order
+    
+    Closes TASK-012, REQ-013
+
+commit 6dc65cc00970c6f67d194252b9622ca5ea14c0b2
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 28 01:28:18 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 28 01:28:18 2026 +0300
+
+    fix(ui): resolve layout and responsiveness issues
+    
+    - Fix horizontal scroll on '/' page by adjusting IOSShell and CSS
+    - Move project dropdown to sidebar top and 'New Project' button to bottom
+    - Add Manage Workflows button to ChatInterface header
+    - Remove duplicate sidebar from WorkspacePage and relocate workflow actions
+    - Create ProtectedLayout for shared sidebar on '/' route
+    - Improve type safety and remove eslint disables
+
+commit 8b694218b0aff9a17cec4bb13c761773a1436f1f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 23:43:52 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 23:43:52 2026 +0300
+
+    fix: add migration scripts and finalize type fixes
+
+commit fb7789e5d40a941fa402b68f8cf40d670e498150
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 22:42:09 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 22:42:09 2026 +0300
+
+    feat(projects): implement project management sidebar with CRUD operations
+    
+    - Add ProjectsSidebar component with list, create, edit, delete modals
+    - Add useProjects hook for state and API integration
+    - Extend useAppStore with addProject/updateProject/removeProject methods
+    - Update api client to include project update method and improve error handling
+    - Remove duplicate schema.d.ts in favor of auto-generated schema.ts
+    - Fix TypeScript errors and linter warnings (no more set-state-in-effect)
+    
+    Closes TASK-003, REQ-012, REQ-021, REQ-022
+
+commit cf30b057b4e6a770bd538479c73c47736e6b3be3
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 21:54:50 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 21:54:50 2026 +0300
+
+    fix(projects): add name uniqueness validation and improve tests
+    
+    - Implement name uniqueness check in project creation and update
+    - Add check_name_exists function to repository layer
+    - Update project router to validate uniqueness and return 400 on conflict
+    - Fix test_api.py mocks to align with repository layer changes
+    - Add integration tests for unique constraint in test_migrations.py
+    - Add mypy.ini to ignore missing stubs for asyncpg
+    
+    Closes REQ-013, REQ-023
+
+commit 51a2ecec47dcde987d06bd07225789f164a3d811
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 21:25:26 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 21:25:26 2026 +0300
+
+    ci: temporarily disable end-of-file-fixer
+
+commit 16610349309ee514c402ac9ebe0fb6422ef54c5f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 20:07:13 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 20:07:13 2026 +0300
+
+    test(e2e): add error toast E2E test
+    
+    - Verify that 400 API response triggers toast with error message
+    - Uses route interception to simulate 400 error
+    - Covers REQ-025 and TEST-012
+
+commit 655cb42ed00639451618cfd95f11473707d59ef8
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 19:32:55 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 19:32:55 2026 +0300
+
+    test(e2e): add unauthorized redirect E2E test
+    
+    - Verify that API 401 response triggers redirect to /login
+    - Add console log to auth.client.spec.ts for better visibility
+    - Update .pre-commit-config.yaml as needed
+    
+    Closes TEST-002
+
+commit 259a652f387ba0346e16e0e1bc04ff75f812688b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 19:08:46 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 19:08:46 2026 +0300
+
+    chore(e2e): add verbose command output in e2e-run.sh
+
+commit a5a89f3063042ed40a2821f2b7fec351562bcc1a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 19:03:06 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 19:03:06 2026 +0300
+
+    test(e2e): add E2E test for API client token injection
+    
+    - Verify that after login, Bearer token is stored in sessionStorage
+    - Confirm token is attached to Authorization header in subsequent API calls
+    - Covers REQ-011 and TEST-001
+
+commit 24e369a6f94a75fe29ddaf047854c24834a1ea51
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 17:15:38 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 17:15:38 2026 +0300
+
+    feat(error-handling): implement global error boundary and toast notifications
+    
+    - Add ErrorBoundary in App.tsx to catch render errors and show fallback UI
+    - Create Toast component and integrate into App, remove Toaster from main.tsx
+    - Enhance client.ts with deduplication of error toasts to prevent duplicates in StrictMode
+    - Improve error handling for auth endpoints (login/logout) with user-friendly messages
+    - Extend Window interface for deduplication state (__lastToast)
+    - Replace any usage with proper type declarations
+    - Ensure all error messages are in Russian and meet REQ-025 requirements
+    
+    Closes TASK-010
+
+commit 45bfd50c2a7cef4eabf8f6afc530d773743ac48e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 16:32:07 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 16:43:01 2026 +0300
+
+    feat(api): implement unified API client with automatic token injection and error handling
+    
+    - Add request interceptor to attach Bearer token from sessionStorage to all API calls
+    - Add response interceptor for 401 → redirect to login, other errors → toast notifications
+    - Integrate react-hot-toast for user-friendly error messages (supports Russian)
+    - Augment OpenAPI types with auth endpoints for type safety
+    - Replace raw fetch calls in auth.session with typed client
+    - Update AuthGuard to correctly read session response (data.authenticated)
+    - Migrate WorkspacePage from alert() to toast for consistent UX
+    - Add debug logging for API requests/responses (dev only)
+    - Handle 5xx errors with friendly message "Сервер временно недоступен..."
+    
+    Closes TASK-001
+
+commit da38f11722337c9c5e6a4190f5dea349171c75ee
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 14:58:48 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 14:58:48 2026 +0300
+
+    feat(api): implement unified API client with automatic token injection and error handling
+    
+    - Add request interceptor to attach Bearer token from sessionStorage to all API calls
+    - Add response interceptor for 401 → redirect to login, other errors → toast notifications
+    - Integrate react-hot-toast for user-friendly error messages (supports Russian)
+    - Augment OpenAPI types with auth endpoints for type safety
+    - Replace raw fetch calls in auth.session with typed client
+    - Update AuthGuard to correctly read session response (data.authenticated)
+    - Migrate WorkspacePage from alert() to toast for consistent UX
+    - Add debug logging for API requests/responses (dev only)
+    - Handle 5xx errors with friendly message "Сервер временно недоступен..."
+    
+    Closes TASK-001
+
+commit 464b255def5f641795902bc48a26e56d230c416b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 03:19:45 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 03:26:59 2026 +0300
+
+    fix: force-add ensure_test_db.sh, correct e2e hook path
+
+commit 59c9ff4686ea9b4a7a6668e716400bb20e1f9f90
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 03:08:15 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 03:08:15 2026 +0300
+
+    fix: разрешить E2E скрипты в gitignore, исправить pre-push hook путь
+
+commit ac40e4f2c94416b2ceb210a34042f516d348920b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 02:35:30 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 02:38:17 2026 +0300
+
+    test(e2e): добавить Playwright E2E тесты для критических путей (TASK-012)
+    
+    - Настроена инфраструктура E2E тестирования (Playwright + TypeScript)
+    - Добавлены 3 smoke-теста: auth, API projects, API workflows
+    - Автоматический запуск тестовой БД перед тестами (scripts/e2e-run.sh)
+    - Миграция конфигов из frontend/ в корень проекта
+    - Бэкенд: поддержка Bearer token авторизации (без cookies)
+    - Время прохода тестов: ~4.6 секунды
+    
+    Технические детали:
+    - playwright.config.ts: ES modules совместимость, chromium only
+    - server.py: validate_session_middleware принимает Authorization: Bearer
+    - tests/e2e/workspace.spec.ts: sessionStorage + explicit headers для API
+    
+    Coverage:
+    ✅ Auth flow (sessionStorage → Bearer header)
+    ✅ API: GET /api/projects с авторизацией
+    ✅ API: POST /api/workflows с авторизацией
+    ⚠️ UI interactions: dblclick, modal, drag-and-drop (TASK-013)
+    
+    Dependencies: TASK-006, TASK-011
+    Requirements: REQ-022, REQ-023
+
+commit 2eb7c9c5f35c108e983cb8447e40a6ec7bc273e9
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 27 00:47:33 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 27 00:47:33 2026 +0300
+
+    feat: new node type
+
+commit 87b992c63a9a95aaadbe2631271d4a4ab874929c
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 26 23:36:32 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 26 23:36:32 2026 +0300
+
+    test(ios-canvas): add unit tests for IOSCanvas and useCanvasEngine
+    
+    - IOSCanvas.test.tsx: render, double-click, context menu, drag, zoom, connection, delete
+    - useCanvasEngine.test.ts: pan, zoom bounds, node drag, selection, wheel prevention
+    - Mock external deps via vi.mock(), crypto.randomUUID stubbed
+    - Coverage: IOSCanvas 93%, useCanvasEngine 99%
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 92ab7a578179a0e7535d3e037b004f6943244ecd
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 04:22:54 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 26 19:05:47 2026 +0300
+
+    fix: TypeScript errors in IOSShell.tsx
+    
+    - Remove unused useMemo import
+    - Add @ts-ignore for import.meta.env (Vite-specific, not in TS by default)
+    - Keep safe fallback for particle count
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 972cb26ab05d5dc147e8e43c9fe1c773315c8815
+Merge: a9e6615 7ebd06c
+Author:     git stash <git@stash>
+AuthorDate: Thu Feb 26 06:09:07 2026 +0300
+Commit:     git stash <git@stash>
+CommitDate: Thu Feb 26 06:09:07 2026 +0300
+
+    WIP on main: a9e6615 fix: restore save and send button handlers
+
+commit 7ebd06c513f2a7924b8c27faa5ab757c76a91584
+Author:     git stash <git@stash>
+AuthorDate: Thu Feb 26 06:09:07 2026 +0300
+Commit:     git stash <git@stash>
+CommitDate: Thu Feb 26 06:09:07 2026 +0300
+
+    index on main: a9e6615 fix: restore save and send button handlers
+
+commit ea7a3d8c5f15f4a3991294882b958e677f5ef151
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 04:22:54 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 04:22:54 2026 +0300
+
+    fix: TypeScript errors in IOSShell.tsx
+    
+    - Remove unused useMemo import
+    - Add @ts-ignore for import.meta.env (Vite-specific, not in TS by default)
+    - Keep safe fallback for particle count
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 67d1369bc6eb2d04348c7bad0ced26ce205d40c5
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 04:18:16 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 04:18:16 2026 +0300
+
+    feat: optimize Three.js background for mobile (TASK-008)
+    
+    - Add mobile device detection via userAgent + touch/small screen fallback
+    - Use VITE_THREE_PARTICLES_COUNT env variable (default: 500 mobile, 1500 desktop)
+    - Wrap IOSShell in React.memo to prevent unnecessary re-renders
+    - Disable antialiasing and cap pixelRatio on mobile for performance
+    - Use low-power GPU preference on mobile devices
+    - Add graceful fallback for devices without WebGL support
+    - Reduce particle size and animation speed on mobile
+    
+    Performance targets:
+    - Mobile: ≤500 particles, FPS ≥30 on iPhone 12
+    - Desktop: 1500 particles, FPS ≥60
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit be5fe819fa0e4ef2c3d4deb501e9695e1270b089
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 03:55:28 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 03:55:28 2026 +0300
+
+    feat: React.memo optimization for nodes and edges (TASK-007)
+    
+    - Wrap IOSNode in React.memo with custom arePropsEqual comparison
+    - Use useMemo for edge rendering in IOSCanvas to prevent re-calc
+    - Memoize connection handlers and delete handlers with useCallback
+    - Add displayName for React DevTools profiling
+    - Expected: 60 FPS with 100+ nodes, 0 wasted renders
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 6a2eb3a7e7708f5379995f82232af0d888c7a5be
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 03:47:20 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 03:47:20 2026 +0300
+
+    fix: remove showNodeList prop from WorkflowHeader usage
+    
+    - Prop was removed from WorkflowHeader interface but still passed in WorkspacePage
+    - Fixes TypeScript error TS2322
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit bea9aeac76b8c1d3773b5c20ba4e15086f3cacc2
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 03:43:52 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 03:43:52 2026 +0300
+
+    fix: remove unused showNodeList prop from WorkflowHeader
+    
+    - Prop was declared but never used in component
+    - Fixes TypeScript error TS6133 in strict mode
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 9a6c86c40c01e24738102d58eb065c005b6ad80e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 03:37:38 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 03:37:38 2026 +0300
+
+    feat: split WorkspacePage into 4 SRP components (TASK-006)
+    
+    - Create WorkflowHeader.tsx (header UI)
+    - Create NodeListPanel.tsx (node list sidebar)
+    - Create NodeModal.tsx (custom node creation modal)
+    - Create useNodeValidation.ts (validation logic hook)
+    - Reduce WorkspacePage.tsx to ~120 lines
+    - Fix unused params in addNodeFromList signature
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit c0338425a280fb19b388886eec102131e9401dad
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 03:30:51 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 03:30:51 2026 +0300
+
+    feat: deterministic node positioning (TASK-005)
+    
+    - Create deterministicRandom.ts with hashPosition() and avoidCollisions()
+    - Replace Math.random() with hash-based positioning in addNodeFromList
+    - Same node_id always produces same position (reproducible debugging)
+    - Collision avoidance with spiral offset algorithm
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit bf107f34c6116373c9461e59babaccf7c0d637c6
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 03:19:08 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 03:19:08 2026 +0300
+
+    fix: TypeScript build errors
+    
+    - client.ts: Fix getAuthHeaders() return type for HeadersInit compatibility
+    - ChatInterface.tsx: Ensure project.id is defined before use
+    - IOSCanvas.tsx: Remove unused setSelectedNode from destructuring
+    - useCanvasEngine.ts: Prefix unused params with _ to suppress warnings
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 369d3a5e2031de54a928681e745e3efe1f793f16
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 03:07:21 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 03:07:21 2026 +0300
+
+    fix: TypeScript build errors
+    
+    - Import VIEWPORT_SCALE_DEFAULT in useCanvasEngine.ts
+    - Remove vitest test files from build (not in dependencies)
+    - Exclude test files from tsconfig.json build
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 23b35413daaf32c37de0d764a22b3f9e4d301cb4
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 03:02:24 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 03:02:24 2026 +0300
+
+    feat: add cycle detection for workflow graphs (TASK-004)
+    
+    - Create graphUtils.ts with DFS-based hasCycle() algorithm O(V+E)
+    - Add validateWorkflowAcyclic() helper with user-friendly error messages
+    - Integrate cycle check into WorkspacePage handleSave
+    - Add 10+ unit tests covering cycles, performance, edge cases
+    - Block save with alert if cycle detected
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 54ab86899ff4923304ad11bfe3ccbf4fe4fbff46
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 02:52:54 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 02:52:54 2026 +0300
+
+    feat: add named constants for canvas coordinates (TASK-003)
+    
+    - Create canvas.ts with NODE_HALF_WIDTH, NODE_HALF_HEIGHT, etc.
+    - Replace magic numbers (110, 40, 0.2, 3) with named constants
+    - Add documentation for 3-layer coordinate system
+    - Add unit tests for coordinate transformation invariants
+    - Formula: screen_pos = (world_pos × scale) + pan
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit ecb36b339cb2108e2e01ad1ed9c1b57bc48d5da0
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 02:32:12 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 02:32:12 2026 +0300
+
+    fix: auth session endpoint was bypassing middleware
+    
+    - api.auth.session() used raw fetch() which skips client middleware
+    - Added getAuthHeaders() helper to manually add Authorization header
+    - Token now sent with /api/auth/session requests
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit cc9dc98c06da6d90d8d4a7568983458ab4f7df3d
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 02:25:16 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 02:25:16 2026 +0300
+
+    fix: auth - backend check Authorization header, not just cookies
+    
+    - routers/auth.py: Check Bearer token from Authorization header
+    - client.ts: Send Authorization: Bearer header on all requests
+    - sessionStorage stores token, header sends it automatically
+    
+    This fixes the mismatch where frontend saved token but backend only checked cookies.
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit ec8760ef1c131da651b5047feaf5b9b593a00275
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 02:11:17 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 02:11:17 2026 +0300
+
+    fix: move client.use() after createClient (openapi-fetch API)
+    
+    - 'use' is a method, not an option
+    - Register middleware after client creation
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit f365e8f38e3495f25449c7162ae32016e818268e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 02:02:40 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 02:02:40 2026 +0300
+
+    feat: switch from cookies to Bearer token auth (no custom domain needed)
+    
+    - Session token stored in sessionStorage
+    - Token sent via Authorization: Bearer header
+    - Works on *.onrender.com without custom domain
+    - Updated auth router, client.ts, LoginPage, AuthGuard
+    
+    SECURITY: Less secure than httpOnly cookies (XSS vulnerable) but works on free tier
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 3e8bcbaf209ac4ee08626165253f9c170a4c646e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 25 00:02:12 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 25 00:02:12 2026 +0300
+
+    fix: final auth fix for Firefox + HTTPS
+    
+    - secure=True (required for HTTPS)
+    - samesite=lax (works for same-site navigation)
+    - Firefox Enhanced Tracking Protection may block - user must disable for site
+    
+    SECURITY: This is the correct configuration for HTTPS production
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 30b61a311ba6a42f44a9fb79b35da3b9d853c05c
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 23:49:31 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 23:49:31 2026 +0300
+
+    fix: disable secure cookie flag for debugging auth issues
+    
+    - Set IS_HTTPS=false by default
+    - Use raw fetch for auth endpoints with explicit credentials: include
+    - Add detailed cookie logging in session endpoint
+    - Log Set-Cookie header in login response
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 01329bc5d04df7fafc891873be84f8e52e010f97
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 23:38:52 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 23:38:52 2026 +0300
+
+    fix: debug cookie issues - disable secure, add logging
+    
+    - Set IS_HTTPS=false by default for debugging
+    - Add 500ms delay before redirect after login
+    - Log all cookies in AuthGuard and session endpoint
+    - Log Set-Cookie header in login response
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 4bb3390f1bdb736c8b8806945675ba1e0cd37555
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 23:31:18 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 23:31:18 2026 +0300
+
+    fix: add logging and make cookie secure configurable
+    
+    - Add IS_HTTPS env variable for cookie secure flag
+    - Add detailed logging to auth endpoints
+    - Add console.log to LoginPage for debugging
+    - Log middleware 401 responses
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 650e59143fa094ac32f0838f17b1f0fdb24575aa
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 23:21:52 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 23:21:52 2026 +0300
+
+    fix: add missing imports for LoginPage and api in WorkspacePage
+    
+    - Import LoginPage in App.tsx
+    - Import api in WorkspacePage.tsx for logout functionality
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit a93f4422198882c84c9a29fb0246ab38bce7140d
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 23:03:01 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 23:03:01 2026 +0300
+
+    feat: add login page and auth guard (TASK-001 continuation)
+    
+    - Create LoginPage component with master key input
+    - Create AuthGuard for protected routes
+    - Add logout button to Workspace header
+    - Session check on app load
+    - Redirect to /login if not authenticated
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 7c6e3e8083f0cc4cc6d7b8c1a1f7d610f1b135e1
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 22:58:13 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 22:58:13 2026 +0300
+
+    feat: add 30s timeout to all API requests (TASK-002)
+    
+    - Create fetchWithTimeout.ts utility with AbortController
+    - Add timeout middleware to openapi-fetch client
+    - Add TimeoutError handling in useNotifications hook
+    - Auth endpoints use fetchWithTimeout directly
+    - Notification duration: 5s for error messages
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit cad49e3f287dc46bbec8ab2c9d39e28883229720
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 22:42:39 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 22:42:39 2026 +0300
+
+    fix: use raw fetch for auth endpoints (not in OpenAPI schema)
+    
+    - openapi-fetch requires paths in generated schema
+    - Auth endpoints are new - use raw fetch instead
+    - credentials: 'include' for cookie handling
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit a0e1d12964bbb625c5f11abc7752403f478458f9
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 22:32:25 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 22:32:25 2026 +0300
+
+    feat: replace localStorage X-Master-Key with httpOnly cookie sessions
+    
+    - Remove setAuthToken from client.ts (XSS vulnerability)
+    - Add routers/auth.py for session management
+    - Add session validation middleware to server.py
+    - Cookies: httpOnly=True, secure=True, samesite=lax
+    - Session duration: 24 hours with automatic expiration
+    
+    SECURITY: Fixes critical XSS token theft vulnerability
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 3d7bd57bc086651707ae12e7e6b1673d29f37f23
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 16:43:43 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 16:43:43 2026 +0300
+
+    fix: add missing 'data' variable name in loadWorkflow
+    
+    - Line 110: 'const data: any = res.data' (was 'const  any')
+    - Fixes TypeScript error TS2304: Cannot find name 'data'
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 8a5760e715df95b1374c5f548b7de6164360d3af
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 16:33:39 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 16:33:39 2026 +0300
+
+    fix: TypeScript build errors
+    
+    - IOSNode.tsx: Add isConnecting, onStartConnection, onCompleteConnection props
+    - WorkspacePage.tsx: Fix 'data' variable declaration in loadWorkflow
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit b4ced30272a60f512c78568c61a3753c1f7a8032
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 16:25:24 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 16:25:24 2026 +0300
+
+    feat: workspace editor critical fixes
+    
+    1. Workflow: Refresh list after save, add name input in header
+    2. Node validation: Prevent duplicate names/content
+    3. Node list panel: Show created/available nodes
+    4. Right-click menu: Fixed node creation
+    5. Edge connections: Click port to start, click target to complete
+    6. Connection visualization: Dashed line during connection
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 894f1032e9342e690fd7167144d9e7d14685064f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 16:02:51 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 16:02:51 2026 +0300
+
+    fix: add missing variable name 'data' in loadWorkflow
+    
+    - Line 100: 'const data: any = res.data' (was missing 'data:')
+    - Fixes TypeScript error TS2304: Cannot find name 'data'
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit f96c7babb480e5446fe575d6520f65f2f67080e4
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 15:51:35 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 15:51:35 2026 +0300
+
+    fix: TypeScript build errors
+    
+    - useCanvasEngine.ts: Remove self-import of NodeData/EdgeData
+    - WorkspacePage.tsx: Add missing colon in type annotation (const  any)
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit d18bde44cbde8a313747300d5e2162b20fabb401
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 15:43:31 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 15:43:31 2026 +0300
+
+    fix: workspace editor critical functionality
+    
+    1. Custom node: add title field, close button (X), proper state
+    2. Project persistence: fix localStorage load/save order
+    3. Right-click menu: properly creates nodes via onNodesChange
+    4. New Workflow: clear state + console log for debugging
+    5. Node dragging: fix by passing setNodes to useCanvasEngine
+    6. Node deletion: properly update parent state
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit df7ef9cf4032a40754f60b00b217c4ba28939db6
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 14:47:05 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 14:47:05 2026 +0300
+
+    fix: add missing colon in type annotation (const data: any)
+    
+    - Line 95: const data: any = res.data
+    - TypeScript was failing because colon was missing
+    - Fixes build error in Docker
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 3f97b7c6c4c46b26e80df5255d68a4b9292e05b6
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 14:33:00 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 14:33:00 2026 +0300
+
+    fix: remove duplicate debug panel from WorkspacePage (already in IOSCanvas)
+    
+    - Debug panel with scale/pan belongs in IOSCanvas.tsx where the hook is
+    - WorkspacePage doesn't have access to scale/pan variables
+    - Fixes TypeScript build error
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 0d7e76f95bd33432d40d5364a0da49d5fe79632a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 14:20:04 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 14:20:04 2026 +0300
+
+    fix: 7 workspace issues + test isolation
+    
+    1. Persist selected project in localStorage
+    2. Fix double-click node creation (proper event handling)
+    3. Fix workflow save button (error handling + logging)
+    4. Add custom node modal with prompt editor
+    5. Fix test isolation (TEST_DATABASE_URL + unique names)
+    6. Prevent duplicate project names (400 error)
+    7. Fix debug info color (bronze instead of blue)
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit ac5393df2a48adb1778fbd620bf9d44108917e39
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 13:56:34 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 13:56:34 2026 +0300
+
+    fix: mock db module where imported in routers
+    
+    - Patch routers.projects.db.create_project (not repositories.*)
+    - Patch routers.projects.db.get_projects (not repositories.*)
+    - Patch routers.artifacts.db.get_artifacts (not repositories.*)
+    - Mock where functions are USED, not where DEFINED
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit b17751dd08ab570fa399c931fd338dcc92ff77da
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 06:46:30 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 06:46:30 2026 +0300
+
+    fix: TypeScript errors in WorkspacePage
+    
+    - Fix error.error instead of error.message (openapi-fetch type)
+    - Add type guards with filter() for API responses
+    - Add type assertions for node/edge mapping
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit af7e7ce22700be92af9da668fa6241fd9ffd513a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 06:42:21 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 06:42:21 2026 +0300
+
+    feat: add project selector to workspace + real error messages
+    
+    - Add project dropdown in sidebar
+    - Load workflows per project
+    - Show real API errors in alerts
+    - Add loading state for save
+    - Disable buttons when no project selected
+    - Console logging for debugging
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 6ec6a1c955c59f00573cd6a89b65726c1684d081
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 06:26:35 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 06:26:35 2026 +0300
+
+    fix: double-click node creation + cleanup script
+    
+    - Fix pointer-events on viewport (none) and nodes (auto)
+    - Add debug info overlay for coordinates
+    - Add cleanup_test_data.py script for test data removal
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit e33970b96ec3b901748ad0f2c3fc1f83f54d938e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 06:16:07 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 06:16:07 2026 +0300
+
+    feat: workflow sidebar with load/select/delete
+    
+    - Add sidebar with workflow list
+    - Load workflow on select
+    - Create new workflow button
+    - Update/Delete workflow buttons
+    - Show current workflow name in header
+    - Auto-refresh list after save
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 4238db45a60bd5fb866a7cda372725e881b8e9aa
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 06:12:04 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 06:12:04 2026 +0300
+
+    fix: double-click to add nodes + context menu
+    
+    - Fix double-click handler with preventDefault/stopPropagation
+    - Add pointer-events: none to SVG elements
+    - Add right-click context menu for node type selection
+    - Show available node types: Idea, Business Req, Code Gen
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 5739bf515b0427246b123bb513ceed37dc3f8746
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 06:00:14 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 06:00:14 2026 +0300
+
+    fix: TypeScript import errors in workspace components
+    
+    - Fix ThemeEffects path in ChatInterface.tsx
+    - Use 'import type' for NodeData/EdgeData (verbatimModuleSyntax)
+    - Fix wheel handler signature in IOSCanvas.tsx
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 224153d1f733f4026a82e22bed4d65109edd42b0
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 05:50:40 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 05:50:40 2026 +0300
+
+    feat: workspace editor with drag-and-drop nodes
+    
+    - Split App.tsx into ChatInterface and WorkspacePage
+    - Add useCanvasEngine hook for canvas state
+    - Add IOSNode, IOSCanvas components
+    - Double-click to add nodes, drag to move
+    - Save workflow to API
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 2ceaa3ac709e14223bfc8e8792a5ab548b7a0b34
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 05:25:33 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 05:25:33 2026 +0300
+
+    fix: optimize Docker image with multi-stage build
+    
+    - Use node:20-alpine for frontend build (Stage 1)
+    - Use python:3.10-slim for runtime (Stage 2)
+    - Copy only built static files, not node_modules
+    - Reduce image size from ~325MB to ~55MB
+    - Update .dockerignore to exclude local node_modules
+
+commit eb079f41c38ac34714a8ee2d08bcdd5219529b6a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 04:59:51 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 04:59:51 2026 +0300
+
+    feat: add React Router and separate Workspace page
+    
+    - Wrap app in BrowserRouter
+    - Extract ChatInterface component for legacy UI
+    - Add WorkspacePage with IOSShell component
+    - Configure routes: / (chat), /workspace (iOS), /workspace.html (redirect)
+
+commit 3b45c968db670dd6122c9bfdf429958b1cabcfc5
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 04:18:49 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 04:18:49 2026 +0300
+
+    fix: frontend API client baseUrl and workspace.html
+    
+    - Set baseUrl to empty string in client.ts (was '/api')
+    - Add workspace.html to public/ for iOS prototype
+    - Update App.tsx with project create/delete handlers
+    - Update vite.config.ts with proxy rewrite
+    
+    Fixes double /api/api/ bug in production
+
+commit 311e994ce9d3b351b2f80e192d41da55303732ef
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 24 03:26:07 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 24 03:26:07 2026 +0300
+
+    fix: unified Docker build with frontend static serving and TypeScript fixes
+    
+    ## Summary
+    Complete Docker build pipeline fix for production deployment with React
+    frontend bundled and served through FastAPI static files.
+    
+    ## Changes
+    ### Docker & Deployment
+    - Dockerfile - Multi-stage build with Node.js for frontend compilation
+    - .dockerignore - Exclude node_modules, build artifacts, venv
+    - server.py - Conditional static file mounting for Docker/development
+    
+    ### Frontend Type Safety
+    - frontend/src/api/client.ts - Added missing API endpoints (models, modes,
+      artifactTypes, artifacts, messages)
+    - frontend/src/hooks/useProjectData.ts - Proper type mapping with non-null
+      assertions for API responses
+    
+    ## Technical Details
+    ### TypeScript Resolution
+    openapi-typescript generates optional fields (id?: string), but store expects
+    required fields (id: string). Solution: map with non-null assertions.
+    
+    ### Static File Serving
+    FastAPI serves built frontend from /static directory only in production.
+    Development uses Vite dev server on port 5173.
+    
+    ## Testing
+    - [x] Docker build completes without errors
+    - [x] Frontend accessible at http://localhost:8000/
+    - [x] API endpoints respond correctly
+    - [x] All pytest tests pass
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 1094dc8fe02e585d1c26509789dbe4c91f276b0a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 23 21:05:10 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 23 21:05:10 2026 +0300
+
+    feat(frontend): migrate from vanilla JS to React+Vite+TypeScript
+    
+    BREAKING CHANGE: Replaces vanilla JavaScript frontend with React application.
+    
+    ## Summary
+    Complete frontend migration from vanilla JS (5 files) to modern React stack
+    with TypeScript, Vite, Tailwind CSS, and Zustand state management.
+    
+    ## Changes
+    ### Removed (vanilla JS frontend)
+    - api.js - Legacy API client
+    - main.js - Main application logic (21KB)
+    - simpleMode.js - Simple mode workflow handler
+    - state.js - Global state management
+    - ui.js - UI rendering functions (17KB)
+    - index.html - Legacy HTML entry point
+    - manifest.json - Legacy manifest
+    
+    ### Added (React frontend)
+    - frontend/src/api/ - Typed API client (openapi-fetch)
+    - frontend/src/hooks/ - Custom React hooks
+      - useStreaming.ts - LLM streaming with local state
+      - useSendMessage.ts - Message handling logic
+      - useProjectData.ts - Project data management
+      - useNotifications.ts - Notification system
+    - frontend/src/store/ - Zustand state management
+    - frontend/src/components/ - React components (placeholder)
+    - frontend/src/styles/ - Tailwind + CRT effects
+    - frontend/src/assets/ - Static assets
+    - Configuration files (vite, tailwind, tsconfig, eslint)
+    
+    ### Modified (backend compatibility)
+    - repositories/base.py - Added Transaction.fetch() methods
+    - routers/artifacts.py - Fixed datetime serialization
+    - repositories/artifact_type_repository.py - Fixed transaction usage
+    
+    ## Technical Stack
+    - Framework: React 18 + TypeScript + Vite
+    - Styling: Tailwind CSS 3.4 + custom CRT effects
+    - State: Zustand with persist middleware
+    - API: openapi-fetch with auto-generated types
+    - Bundle: ~150KB initial (lazy-loaded workflow)
+    
+    ## Migration Notes
+    - Old vanilla frontend preserved in branch 'mvp' for rollback
+    - API contracts unchanged - backward compatible
+    - Database migrations required (artifact_types table)
+    - All 87 existing tests pass
+    
+    ## Testing
+    - [x] TypeScript compilation (tsc --noEmit)
+    - [x] Vite build (vite build --report)
+    - [x] Backend API integration (curl tests)
+    - [x] Existing pytest suite (87 tests)
+    
+    ## Rollback
+    To revert: git checkout mvp
+    
+    Co-authored-by: MRAK-OS Team <team@mrak-os.dev>
+
+commit 729aeb00b1b214655a212ae60cbd2a99036c522f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 20:15:44 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 20:15:44 2026 +0300
+
+    fix(use-cases,router,test): remove orchestrator from clarification module and fix tests
+    
+    - Update use cases to use prompt_service and type_to_mode instead of orchestrator
+    - Update router clarification to use services and new use cases
+    - Adjust tests to mock prompt_service instead of non-existent orch
+    - Fix test_logic.py: correct model field name in GenerateArtifactRequest
+
+commit 62a528f842e6cf2e9f658048f0c3560a08f344b0
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 19:34:58 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 19:34:58 2026 +0300
+
+    feat(use-cases): implement use cases for complex operations and restructure project
+    
+    - Add use_cases package with StartClarificationUseCase, AddMessageUseCase,
+      GenerateArtifactUseCase, SaveArtifactPackageUseCase, ExecuteWorkflowStepUseCase
+    - Create routers package splitting server.py into separate modules
+    - Extract Pydantic models to schemas.py to resolve circular imports
+    - Add domain classes: ConversationStateSynthesizer, WorkflowGraph
+    - Create utils/hash.py for compute_content_hash utility
+    - Update prompt_service and workflow_engine to delegate to new components
+    - Add comprehensive tests for all use cases
+    - Update existing tests to work with new structure
+    - All 93 tests pass
+
+commit a065a16b09f5f85f275637a1194a85db799be14b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 16:14:12 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 16:14:12 2026 +0300
+
+    refactor(artifact): extract artifact generators into separate classes
+    
+    - Create generators/ package with base and specialized generators for business requirements, req engineering, functional requirements
+    - Refactor ArtifactService to delegate to generators
+    - Update tests to mock repository functions at correct import paths
+    - All tests pass (57 passed)
+
+commit 1dd7a82faccbef022e1f80949bc58cf650070777
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 15:39:00 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 15:39:00 2026 +0300
+
+    refactor(db): implement transaction context manager and replace conn parameter with tx
+    
+    - Add Transaction class and transaction() factory in repositories/base.py
+    - Remove optional conn parameter from all repository functions; add optional tx parameter
+    - Update repository functions to use tx.conn when provided, otherwise create new connection
+    - Modify artifact_service, session_service, workflow_engine to use async with transaction()
+    - Update server.py endpoints to use transaction blocks for write operations
+    - Adjust tests: add tx fixture, use ANY for tx assertions, fix mock targets
+    - All tests pass (57 passed)
+
+commit fd4fff005eec37a930052e8ea520dcb8ff722e9b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 14:31:30 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 14:31:30 2026 +0300
+
+    test: update imports to repositories after db refactor
+
+commit 65b7dd09e1ed4053906175d23e5e9bc0bd2143d2
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 10:07:35 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 10:07:35 2026 +0300
+
+    fix(orchestrator): pass artifact_service to WorkflowEngine constructor
+
+commit b360908df7a2a04cc4dbaa82861be1bab3e76ed4
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 09:20:35 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 09:20:35 2026 +0300
+
+    feat(advanced): integrate clarification sessions into advanced mode
+    
+    - Add requiresClarification check and session management in main.js
+    - Store current session ID in state
+    - Add complete-clarification button and handler
+    - Add UI function renderClarificationHistory
+    - Update api.js with session endpoints
+
+commit 8814bee868fafadfafafdb2a5a3cdec54f44444a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 09:12:36 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 09:12:36 2026 +0300
+
+    fix(frontend): add fetchMessages and make apiFetch available via api object
+    
+    - Add fetchMessages method to api.js
+    - Expose apiFetch as api.apiFetch to avoid undefined errors
+    - Replace direct apiFetch calls in main.js and simpleMode.js with api.apiFetch
+
+commit 22b3c4f2c700be2eb1e9614a6f8f7897df92a2a5
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 09:04:22 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 09:04:22 2026 +0300
+
+    fix(migrations): cast UUID literals in default workflow migration
+
+commit 6c2e9676551da0b1c41c0437cbd701c9825d73d2
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 08:51:41 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 08:51:41 2026 +0300
+
+    fix(tests): correct prompt_service method call and test data
+    
+    - Use groq_client.create_completion instead of client.chat.completions.create
+    - Adjust mocks in prompt_service tests to match synchronous call
+    - Provide valid list of requirements in artifact_service test
+
+commit 90e0d772fb8e3df2f59c41e7d0bbd8ad4aa79f50
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 08:42:29 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 08:42:29 2026 +0300
+
+    test(validation): add unit tests for JSON validation
+    
+    - Test validate_json_output for success, missing fields, wrong types
+    - Ensure unknown types always pass validation
+
+commit d4ad87301d1651d842e29e143c7191e43e9e12a9
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 08:40:14 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 08:40:14 2026 +0300
+
+    feat(validation): add JSON validation and automatic retry for artifact generation
+    
+    - Create validation.py with validate_json_output and ValidationError
+    - Add retry logic with exponential backoff to artifact_service methods
+    - Return HTTP 422 on validation errors in server.py endpoints
+
+commit 63523d089b876ad0b462902be66675248184e2fd
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 08:33:14 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 08:33:14 2026 +0300
+
+    refactor(artifacts,workflow): extract ArtifactService and add WorkflowEngine stub
+    
+    - Move artifact generation logic from artifact_generator.py to new ArtifactService
+    - Update orchestrator to use ArtifactService and remove old generator
+    - Add empty WorkflowEngine as placeholder for future tasks
+    - Keep backward compatibility via delegation
+
+commit a0bb549314ad0217102a4165cab8438196faf71f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 08:26:29 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 08:26:29 2026 +0300
+
+    refactor(session): extract SessionService and replace direct db calls
+    
+    - Create SessionService with methods for clarification sessions
+    - Replace all db.xxx calls in server.py with session_service.xxx
+    - Keep backward compatibility, no functional changes
+
+commit c9bc2748bbd87e73eee3451ecbbce3b38f14d48f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 08:02:53 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 08:12:34 2026 +0300
+
+    feat(services): add placeholder service files for future refactoring
+    
+    - Create PromptService, ArtifactService, SessionService, WorkflowEngine skeletons
+    - Prepare for incremental decomposition of MrakOrchestrator
+
+commit 64e63524af7e3648ed54c2383a3236eadce1d963
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 07:47:16 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 07:47:16 2026 +0300
+
+    test: add connection reuse in db functions and fix clarification tests
+    
+    - Add optional  parameter to all db.py functions for transaction reuse
+    - Rewrite test_clarification.py to use sync client and mock LLM calls
+    - Fix test_db_workflow.py to pass shared connection
+    - All 26 tests now pass
+
+commit bb33fe8cf175048cb0edfac9bac665ab67b6af62
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 06:53:54 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 06:53:54 2026 +0300
+
+    feat(api): add workflow management endpoints
+    
+    - Add Pydantic models: WorkflowCreate, WorkflowUpdate, WorkflowNodeCreate, WorkflowNodeUpdate, WorkflowEdgeCreate
+    - Implement CRUD endpoints for workflows, nodes, edges
+    - Integrate with db.py functions from TASK-002
+
+commit 071cca688c2eeedb3592413d389ffef098bc957d
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 06:45:56 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 06:45:56 2026 +0300
+
+    feat(db): add CRUD functions for workflows, nodes, and edges
+    
+    - Add create_workflow, get_workflow, list_workflows, update_workflow, delete_workflow
+    - Add create_workflow_node, get_workflow_nodes, update_workflow_node, delete_workflow_node
+    - Add create_workflow_edge, get_workflow_edges, delete_workflow_edge
+
+commit 0d6d765ced53378755de2deb2d84e60a1ee97d4b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 06:41:27 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 06:41:27 2026 +0300
+
+    feat(db): add workflow tables for configurable pipelines
+    
+    - Create tables: workflows, workflow_nodes, workflow_edges
+    - Add indexes and foreign key constraints
+    - Prepare for workflow engine implementation
+
+commit 9338252172398bccbc2ca01ec39d17798ee983aa
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sun Feb 22 04:28:20 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sun Feb 22 04:28:20 2026 +0300
+
+    feat(clarification): integrate State Synthesizer for context management
+    
+    - Add 02sum_STATE_SYNTHESIZER prompt mode for conversation state analysis
+    - Implement synthesize_conversation_state method in orchestrator
+    - Modify /start and /message endpoints to store and use context_summary (JSON)
+    - Pass summarized state + recent messages to LLM instead of full history
+    - Update /api/modes to include 02sum_STATE_SYNTHESIZER
+    - Bump context retention, resolve token limit issue
+
+commit 8d425c48662141d1330187e3acd32deee20764c5
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 23:49:19 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 23:49:19 2026 +0300
+
+    fix(api): remove reference to non-existent model field in add_message
+
+commit 9b3a2833f747153f980966a91e5c03c78e5a4408
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 23:35:41 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 23:35:41 2026 +0300
+
+    fix(db): add missing datetime import for clarification sessions
+    
+    - Import datetime module to fix NameError in add_message_to_session
+    - Resolves Internal Server Error on /api/clarification/start
+
+commit 5f7fe19bfb6eb4fbacc87a081b3cf09eacb4e24d
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 23:27:41 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 23:27:41 2026 +0300
+
+    feat(api): implement clarification session endpoints
+    
+    - Add POST /api/clarification/start to create session and generate first message
+    - Add POST /api/clarification/{session_id}/message to continue dialogue
+    - Add GET /api/clarification/{session_id} to retrieve session state
+    - Add POST /api/clarification/{session_id}/complete to mark session as completed
+    - Add GET /api/projects/{project_id}/clarification/active to list active sessions
+    - Add get_chat_completion method to orchestrator for non‑streaming LLM calls
+    - Update server.py with Pydantic models and response serialization
+
+commit 266f03e1dae165ab8f45650e27cadff49f1f86df
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 23:18:29 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 23:18:29 2026 +0300
+
+    feat(db): add clarification_sessions table and related functions
+    
+    - Create new table clarification_sessions with proper indexes and foreign keys
+    - Add db.py functions: create_clarification_session, get_clarification_session, update_clarification_session, add_message_to_session, list_active_sessions_for_project
+    - Remove deprecated migrate.py
+    - Add migration script migrations/add_clarification_sessions.py
+    - Update .gitignore to exclude backup SQL files
+
+commit a2a3fa8454534482069a6bc9145448b2ebe99928
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 22:49:57 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 22:49:57 2026 +0300
+
+    fix: resolve critical UI/UX bugs, synchronize modes, add message history
+    
+    - Fix 'state is not initialized' error by moving subscription before restore
+    - Style notifications to match app design
+    - Improve 'Next' button: open existing artifacts or generate new ones
+    - Add endpoint /api/projects/{id}/messages to load chat history
+    - Fix generate button to return full artifact content
+    - Ensure parent selector updates instantly on type change
+    - Persist all UI selections in localStorage
+    - Add placeholder for empty chat area
+
+commit 648f713de938e9f0838dbca7acd98415324f6311
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 22:20:33 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 22:20:33 2026 +0300
+
+    fix: resolve critical UI/UX bugs, synchronize modes, add message history
+    
+    - Fix 'state is not initialized' error by moving subscription before restore
+    - Style notifications to match app design
+    - Improve 'Next' button: open existing artifacts or generate new ones
+    - Add endpoint /api/projects/{id}/messages to load chat history
+    - Fix generate button to return full artifact content
+    - Ensure parent selector updates instantly on type change
+    - Persist all UI selections in localStorage
+    - Add placeholder for empty chat area
+
+commit e79d7e9230d156a40f6a310fc54931b2e8265fda
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 21:27:57 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 21:27:57 2026 +0300
+
+    fix: resolve UI/UX and workflow issues in simple/advanced modes
+    
+    - Fix simple mode to use last validated artifact for stage detection
+    - Synchronize modes: after saving/validating, update parents and progress
+    - Add instant parent refresh on artifact type change
+    - Persist UI state (project, model, mode, selections) in localStorage
+    - Style notifications to match app design
+    - Hide empty messages area, add placeholder
+    - Improve modal: Save button disabled until changes, add Confirm button
+    - Fix next step logic to not skip uncompleted stages
+    - Ensure artifact type selection updates parent list immediately
+    - Fix project switch to reset selections and load correct artifacts
+
+commit 4752aefbbbab55397e4091fdb536134b970012dd
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 20:09:23 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 20:09:23 2026 +0300
+
+    fix: resolve UI/UX and API issues in simple mode and artifact generation
+    
+    - Fix /api/modes endpoint (remove 'self' parameter) to return correct list
+    - Improve error handling in /api/generate_artifact with detailed logging
+    - Update simple mode to use latest artifacts regardless of status
+    - Refresh parent selector after artifact save without page reload
+    - Align artifact types in workflow mapping (BusinessIdea, etc.)
+    - Ensure multiple modes appear in selector after fix
+
+commit de16be008153edbbd63b51f6fd87ef3efed65b77
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 19:05:20 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 19:05:20 2026 +0300
+
+    fix: resolve UI/UX bugs, add missing endpoints, improve workflow
+
+commit 8f25ae09c5f3ec62120db5507d54f27447efbb30
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 18:20:53 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 18:20:53 2026 +0300
+
+    feat: add workflow endpoints for simple mode, restore all prompts and methods
+
+commit da470b08b31cb49a9e1b25766f65cb3da71446ec
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 17:49:35 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 17:49:35 2026 +0300
+
+    feat: add simple mode with progress bar and next button, modular code
+
+commit de9717e4966c4828e38a001c98f2a9ad2451bbb0
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 15:26:55 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 15:26:55 2026 +0300
+
+    feat(ui): extract css, load modes dynamically from backend
+
+commit c4636518f3feb50110b798da8b5d6c5251f8d5c5
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 04:43:41 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 04:43:41 2026 +0300
+
+    fix: delete deprecated generate checkbox
+
+commit 3639ef189f2ec1bbe9568c0e5ea7689e8289b65b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 04:33:51 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 04:33:51 2026 +0300
+
+    refactor: extract JS from index.html to main.js
+
+commit 32c0d365c2e617a52c671a63cf6fed562207afd5
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 04:28:40 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 04:28:40 2026 +0300
+
+    fix: remove duplicate delete endpoints in server.py
+
+commit c375c04cce800cf7d149339d7953c5cbce53177f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 04:26:11 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 04:26:11 2026 +0300
+
+    fix: correct delete buttons handlers and error display
+
+commit a81d40b5830f821e844a9f7de1955be76eeea302
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 04:10:00 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 04:10:00 2026 +0300
+
+    feat: add delete buttons for projects and artifacts in UI
+
+commit 884dace7769deaa1e1ab2c9ad95096de44cb0eda
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 03:58:08 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 03:58:08 2026 +0300
+
+    feat: add delete buttons for projects and artifacts in UI
+
+commit fa2de954234408a0fa75942de6704a947739c4ea
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 02:41:13 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 02:41:13 2026 +0300
+
+    Empty commit to test webhook
+
+commit 90aae5303f0d149f4eb6e12dbee03ccfc0abc866
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 02:38:57 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 02:38:57 2026 +0300
+
+    Empty commit to test webhook
+
+commit 9c17f82402692af8626acde6c7e6506fd7f7048b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Sat Feb 21 02:08:23 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Sat Feb 21 02:08:23 2026 +0300
+
+    chore: clean up repo and update ignore files
+
+commit 6ddfbbd738cb66461979eee8a84a0b0f7bc6881e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 17:47:51 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 17:47:51 2026 +0300
+
+    ci: add pre-commit hook to backup database
+
+commit d5dfa6c6ebdcc04c9a3b197dd1dea0839355a0e7
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 17:42:48 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 17:42:48 2026 +0300
+
+    fix: remove init_db, use get_connection() for safety, update test mocks to target db module after refactor
+
+commit c6fd2703b9a6d93b4fbadebd70e1568ba4ebd68a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 17:16:26 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 17:16:26 2026 +0300
+
+    fix: correct variable order in updateGenerateButton and ensure generation rules
+
+commit 3de4fdfa7586f94e4ebe03f43397242b8eaafdd9
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 16:54:16 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 16:54:16 2026 +0300
+
+    fix: fix redeclaration of variable in ui.js
+
+commit dfd44f21e6b3d9cb4ce6ab841f14fae2ba22a5dd
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 16:34:02 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 16:34:02 2026 +0300
+
+    refactor: unify prompt ordering and update orchestrator, HTML select
+
+commit a9e66154b4725af56c80298179ad20fef07e6d7c
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 09:31:06 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 09:31:06 2026 +0300
+
+    fix: restore save and send button handlers
+
+commit 3501ded4c2ff034708ae567b42544861996b4c54
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 09:00:46 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 09:00:46 2026 +0300
+
+    fix: complete frontend rebuild with diagnostics, remove duplicate declarations
+
+commit 1be65af3686d003469fc85c2972bb647f21df884
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 08:49:22 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 08:49:22 2026 +0300
+
+    diagnostics: full logging across all frontend modules + fix state export
+
+commit 2fefa9df7bea07397c2f47acda38b0fae578d1e9
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 08:47:08 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 08:47:08 2026 +0300
+
+    fix: correct export of setCurrentProjectId in state.js
+
+commit d8753491ca9706a4eed326ab8012fb28531f1c07
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 00:55:57 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 00:55:57 2026 +0300
+
+    diagnostics: add logs to all remaining modules
+
+commit 4979b816276c61a176840bf0d16a2821f27418be
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 00:37:43 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 00:37:43 2026 +0300
+
+    fix: sync artifact handlers with existing IIFE logic
+
+commit 2f0dfd537531e1b077cabee9bc457d67a609b8cc
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 00:30:01 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 00:30:01 2026 +0300
+
+    fix: global event delegation and button visibility logic
+
+commit 92fbcbe18ccccba48d07fdecf3027dc921f6179f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 00:19:46 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 00:19:46 2026 +0300
+
+    fix: hard-bind state to DOM and fix generate button listeners
+
+commit 666aa9a19b0c5695b7d68ee953f12296e3ba6f2d
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 00:12:36 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 00:12:36 2026 +0300
+
+    fix: use exact groq models structure and log raw data
+
+commit 144751885b4aca56eefde99086680fc5136e06d4
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 00:09:42 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 00:09:42 2026 +0300
+
+    fix: full model list from groq and project selection link
+
+commit 22fc76c519f49ae66392e4919e1d32c8a3a80d4c
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Fri Feb 20 00:05:15 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Fri Feb 20 00:05:15 2026 +0300
+
+    fix: connect project selection to state and allow all generations
+
+commit 435d4d76f4de11b9ae725f8e7c9691fa81102d08
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 23:59:57 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 23:59:57 2026 +0300
+
+    final: force models into UI before API call 1771534797
+
+commit 89507522660b5744e7afc7a67a1ddad73d0a864a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 23:49:43 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 23:49:43 2026 +0300
+
+    FORCE FIX: hardcoded models in HTML and removed utils dependency 1771534183
+
+commit 28f4322582f5e8a21815d455c8d2270e06a0c9f5
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 23:40:46 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 23:40:46 2026 +0300
+
+    fix: prevent sending 'loading models' string to API and set default model
+
+commit 79694d12a9b3407a227a3ea771c2ff697e928b61
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 23:34:16 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 23:34:16 2026 +0300
+
+    fix: define global utils and fix ReferenceError in artifact handlers
+
+commit 34325dda8eab68145469b321b8651e7ec10df129
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 23:28:28 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 23:28:28 2026 +0300
+
+    fix: restore missing state methods for compatibility with projectHandlers
+
+commit 0e01176c02f0da8b8249613473fb2129dc866805
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 23:22:43 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 23:22:43 2026 +0300
+
+    fix: restore business requirements generation button and event listeners
+
+commit 8d6246d3dba3404f9524af6ff22f3ba56aca715a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 22:53:52 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 22:53:52 2026 +0300
+
+    fix: restore all frontend files to working state
+
+commit 608082333a42abfae16963d674f2cc7df3f41eff
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 22:50:32 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 22:50:32 2026 +0300
+
+    fix: restore renderers.js with actual functions
+
+commit 9617022d6ba17c03d39e0506c107ef6a58580c91
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 22:37:15 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 22:37:15 2026 +0300
+
+    fix: remove debug logs from state.js
+
+commit 76083ffe38c6e9ff52e1e367658ae98e2de919d9
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 22:33:26 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 22:33:26 2026 +0300
+
+    fix: remove debug logs that broke state.js
+
+commit 119f88c44190abcc90d8c553ddd23d3e3db597bd
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 22:20:48 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 22:20:48 2026 +0300
+
+    fix: add missing Optional import
+
+commit 93862f41961aa4c6972f57b880da053b53d1e83e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 22:18:29 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 22:18:29 2026 +0300
+
+    fix: remove init_db() and startup schema creation – database is now managed externally
+
+commit 34d376b03b3998f4baa4fe6ba27355e21c23d191
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 21:37:28 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 21:37:28 2026 +0300
+
+    chore: finalize project structure after refactoring, add gitignore rules
+
+commit c3b8358e466dde2c98ec4d07240a632f366628ae
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 21:34:13 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 21:34:13 2026 +0300
+
+    refactor: finalize project restructuring after frontend/backend modularization
+
+commit 92be876fc810d4ea3e719319384b3519872f6ddb
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 21:32:35 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 21:32:35 2026 +0300
+
+    fix: add project root to sys.path to allow app module imports
+
+commit 71585707ebcd76a2a2635418ae6a611bc4da0a40
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 21:25:09 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 21:25:09 2026 +0300
+
+    refactor(frontend): split ui.js into renderers, notifications, modals
+
+commit 144e7d86aacedd45c88e24fe295510780d5ab465
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 21:19:36 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 21:19:36 2026 +0300
+
+    refactor(frontend): split handlers.js into modules
+
+commit 2c0f4225d68900d3beced9e316f8975b41c0bfde
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 21:05:18 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 21:05:18 2026 +0300
+
+    fix: add missing typing imports in server.py and schemas.py
+
+commit 16db911edbead21c45daaeda298aab0511181b07
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 20:58:31 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 20:58:31 2026 +0300
+
+    refactor: move JS to js/ folder, extract CSS to styles.css
+
+commit 1e86336b6a47b885323bdde136fdf14787ed0c55
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 17:17:40 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 17:17:40 2026 +0300
+
+    fix: ensure state.js has correct rules and add debug logging for generate button
+
+commit 084b05ab68fa4a2ffd33b5e127dcc12ff24f7e44
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 17:08:22 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 17:08:22 2026 +0300
+
+    fix: prevent duplicate artifacts, filter parents to latest version, add existing content to prompts, add save lock
+
+commit 3061c611e5f8caf7bf128f77f0d8dc44583de85d
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 16:41:51 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 16:41:51 2026 +0300
+
+    fix: final fixes for duplicate packages, parent filtering, UUID for requirements, and functional reqs
+
+commit b5095d2f89ddb616b96ead5b3d71ddece5655eed
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 16:15:02 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 16:15:02 2026 +0300
+
+    feat: add functional requirements generation, improve token usage, update rules
+
+commit 30642f6ca420d42b151bd8ade67510d0cbb0b135
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 16:12:40 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 16:12:40 2026 +0300
+
+    fix: improve modal UX, ensure functional req rule, update prompts instructions
+
+commit fcc9b11e52d25ce53e78e685d6a3efa2f969e512
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 15:23:06 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 15:23:06 2026 +0300
+
+    fix: final fixes for req engineering analysis modal and save handling
+
+commit 43a0bb59b8d4226f2270ba4f39e7e58cb7781469
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 12:50:00 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 12:50:00 2026 +0300
+
+    feat: add functional requirements generation and improve req eng analysis display
+
+commit 46f84d181bb8ccb3ab74b9dd8517b090a8807a67
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 12:29:47 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 12:29:47 2026 +0300
+
+    fix: correct server.py syntax and complete req engineering analysis method
+
+commit fe7ab6e4334cf879e1df755fc0a13609f33812d3
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 12:13:35 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 12:13:35 2026 +0300
+
+    feat: universal artifact generation with rules and cache
+
+commit 63417acdb3096e757b89da4c5f373fa9dcedba0f
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 12:01:48 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 12:01:48 2026 +0300
+
+    fix: add client cache to persist requirement package after save
+
+commit 6dc6e300b3847751dd84fc08dac3b0d7e883b026
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 11:53:46 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 11:53:46 2026 +0300
+
+    fix: rename regenerate button to 'Добавить ещё' and fix save handler
+
+commit d98e4b777a4b32ed4db7cf0f57e02b67eac57add
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 10:56:06 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 10:56:06 2026 +0300
+
+    refactor: remove client cache, always query server for latest package on generate
+
+commit d8489c493b39fd649f04fac22e53c2ada76cf358
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 10:41:01 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 10:41:01 2026 +0300
+
+    feat: add package cache to ensure correct button behavior after first generation
+
+commit 42337c731e358505386b637f8bbe56ff79686563
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 10:33:08 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 10:33:08 2026 +0300
+
+    fix: preserve selected parent artifact across reloads
+
+commit 2f8fe48d2e08afb44c2e726c6e4f8b6168d1f4c5
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 10:24:44 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 10:24:44 2026 +0300
+
+    fix: convert version to string and handle int conversion safely
+
+commit eecc26d972685c646fd9edcc583e84884e908f1a
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 10:13:20 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 10:13:20 2026 +0300
+
+    fix: add existing_requirements parameter to orchestrator's generate_business_requirements
+
+commit 0581cbee8e82cd59f2b08c6b698a758d073adc3b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 10:09:39 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 10:09:39 2026 +0300
+
+    fix: ensure content is deserialized to dict in all retrieval functions
+
+commit f33580a8a3304db3599658a8d1f708fb3ab531c0
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 09:39:27 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 09:47:15 2026 +0300
+
+    feat: intelligent requirement button checks for existing package
+
+commit b3d34179363e76028fb971ce3b9b66d39a1960b3
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 09:30:26 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 09:30:26 2026 +0300
+
+    feat: add traceability and incremental generation for requirement packages
+
+commit f682b4b773cf3478f39bcc3e8fd5c0f2e7c440b9
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 09:20:09 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 09:20:09 2026 +0300
+
+    feat: store business requirements as packages, update save endpoint and UI
+
+commit c0452dcbe4f2bcf2ea2ce05fd9f44c1bd33f162b
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 08:57:18 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 08:57:18 2026 +0300
+
+    feat: filter parent artifacts based on selected type
+
+commit 73d458f398ea7e80dc1e06e3314f633467a90422
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 08:07:30 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 08:35:49 2026 +0300
+
+    refactor(frontend): modularize frontend code
+
+commit a0758bd0da3c00754eddce9b3d200a9687f901bd
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 05:18:40 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 05:18:40 2026 +0300
+
+    feat: preview business requirements before saving
+    
+    Details:
+    - generate_business_requirements now returns requirements without saving
+    - New endpoint /api/save_business_requirements to save after review
+    - Frontend modal for editing and confirmation
+    - Added regenerate button and delete per requirement
+
+commit 84cc2316a091500d12b5848738d5bd39a97199cc
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 04:56:21 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 04:56:21 2026 +0300
+
+    fix: add missing json import in logic.py
+
+commit 57eec5f28c6da69f51f274f2f08371683cbf95b9
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 04:46:06 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 04:46:06 2026 +0300
+
+    fix: add missing POST endpoint for business requirements generation
+
+commit 12f1daffe97a23abc5ac2da775dbc951bfa74ee6
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 04:39:31 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 04:39:31 2026 +0300
+
+    feat: add business requirements generation from product council analysis
+    
+    Details:
+    - New method generate_business_requirements in orchestrator
+    - New endpoint /api/generate_business_requirements
+    - Frontend button to generate BRs from selected analysis
+    - Parent type detection and button visibility
+
+commit 1b95d55b38db1ebd35ec70e04cec63e371694f17
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 03:59:02 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 03:59:02 2026 +0300
+
+    feat: add artifact management with generation and parent-child relationships
+    
+    Details:
+    - Add parent_id to artifacts table for hierarchical relationships
+    - New endpoints: /api/artifact (POST) and /api/projects/{id}/artifacts (GET)
+    - Artifact generation based on type-to-mode mapping in orchestrator
+    - Extended frontend with artifact type selector, parent selector, generate checkbox
+    - Save manual artifacts or trigger LLM generation
+
+commit da913273356d3060d4590229d01821fa97ec4ad6
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 03:28:45 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 03:28:45 2026 +0300
+
+    fix: convert datetime to string in get_projects for JSON serialization
+
+commit 8ab53823498194d058e07c9bb7b2c643663d6472
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 03:22:52 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 03:22:52 2026 +0300
+
+    fix: convert UUID to string in get_projects for JSON serialization
+
+commit e6e29658fe3cfecd7ec324145672fe6e12da1696
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Thu Feb 19 01:58:08 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Thu Feb 19 03:17:32 2026 +0300
+
+    feat(persistence): add database layer with project indexing and versioned artifacts
+    
+    Details:
+    - Integrate PostgreSQL for artifact storage (Neon.tech)
+    - Add index_project.py to scan and save files as CodeFile artifacts
+    - Implement content hashing to detect changes and update versions
+    - Provide migrate.py for schema migrations
+    - Update .gitignore to exclude new files from commits
+
+commit 10b7b8b3e57dcf1ea2ed677a3bffbcf01174ff0e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 18 22:15:05 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 18 22:15:05 2026 +0300
+
+    chore: split requirements, remove test deps from prod image
+
+commit ae41cdd15f02550b908d4ecab91f819e92559fbe
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 18 21:51:14 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 18 21:51:14 2026 +0300
+
+    chore: clean up ignored files and remove cached ones
+
+commit c116a253334d52d3a6047ac66878907edc88c6e0
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Wed Feb 18 09:44:27 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Wed Feb 18 20:41:12 2026 +0300
+
+    feat: add artifact_output mode to force strict output format of llm responses
+
+commit 969812d6a49515056025cc0fb31992140339c935
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 17 19:18:46 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 17 19:18:46 2026 +0300
+
+    feat(toolbar): add reusable MessageToolbar component with Copy, Edit, Regenerate and Share actions
+
+commit 064c1e3b249fa07500787aaebeb796fab2715168
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 17 12:49:49 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 17 12:49:49 2026 +0300
+
+    fix(core): restore system prompt fetching and enhance server stability
+    
+    - Fixed GITHUB_TOKEN environment variable mapping in MrakOrchestrator.
+    - Corrected mode_map keys to align with frontend selectors and .env variables.
+    - Added robust error handling and logging in server.py for failed prompt fetches.
+    - Optimized FastAPI streaming to notify users of configuration errors.
+    - Refactored logic.py to remove redundant comments and industrialize code structure.
+
+commit 46105cfbfe342163429a3c625240d567e7d36b20
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 17 12:13:26 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 17 12:13:26 2026 +0300
+
+    feat(ui): synchronize mode selector with backend orchestrator
+    
+    - Updated 'mode-select' to match the new MrakOrchestrator mode map.
+    - Added new specialized modes: INTEGRATION_PLAN, PROMPT_COUNCIL, ALGO_COUNCIL, FULL_CODE_GEN, REQ_COUNCIL, and SELF_ANALYSIS_FACTORY.
+    - Deprecated and removed legacy '05_ARCHITECT' mode to ensure system consistency.
+    - Maintained industrial UI/UX standards and JetBrains Mono styling.
+
+commit 1ded2d05119484b4c36013a8b1b5decd50c26d84
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Tue Feb 17 11:42:43 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Tue Feb 17 11:42:43 2026 +0300
+
+    feat(logic): overhaul industrial processing pipeline
+    
+    - Refactored `logic.py` to support dynamic mode selection and
+      environment‑based GitHub URL mapping.
+    - Optimized streaming orchestrator integration and added comprehensive
+      error handling.
+    - Introduced .dockerignore to exclude unnecessary files from Docker
+      builds, improving image size and build speed.
+    - Updated documentation comments to reflect new workflow.
+    
+    BREAKING CHANGE: The orchestrator now requires the `MODE` environment
+    variable to be set; previous default behavior has been removed.
+
+commit 7a2b99c8724613ebb778ed9e0860b2f2d3241574
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 22:14:13 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 22:14:13 2026 +0300
+
+    fix: restore full industrial logic and stable streaming
+
+commit 49c62a546c85e8dba26a1971b8ef55c7854ea205
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 21:59:49 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 21:59:49 2026 +0300
+
+    refactor: use official raw HTTP request for models list and restore full UI
+
+commit efa58da23e29d1bffcea0fe4ffb48809d33e3adc
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 21:00:07 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 21:00:07 2026 +0300
+
+    test: add suite for orchestrator and configure pre-commit hooks
+    
+    Quality Assurance:
+    - Added pytest suite for PII filtering and stream metadata validation.
+    - Configured pre-commit hooks: black (formatting) and pytest (logic validation).
+    - Implemented mock-based testing for Groq SDK integration.
+
+commit d53d1c0ea452881399f546ca4408543ad299dab4
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 20:23:26 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 20:23:26 2026 +0300
+
+    feat: implement multi-mode orchestrator and prompt-engineering module
+    
+    Architecture updates:
+    - Migrated to dynamic mode selection system (Mode-Ops).
+    - Added MOD_06: PROMPT_ENGINEER for localized artifact optimization.
+    - Refactored logic.py to support environment-based GitHub URL mapping.
+    - Updated UI with mode-selection interface and optimized streaming logic.
+
+commit 1760b3c9b62c6dbe19dc8a89dc0ebdfbe4fa5b0e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 19:46:11 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 19:46:11 2026 +0300
+
+    fix: new ui interface 2.0
+
+commit c4919361932d975856cc90eb58705f60c120328e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 19:39:59 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 19:39:59 2026 +0300
+
+    fix: new ui interface
+
+commit 8ca778519436475dcd5d1518b55bf8dcc6a3f2d8
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 19:32:38 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 19:32:38 2026 +0300
+
+    feat: migrate to FastAPI, fix port 8000, remove streamlit secrets dependency
+
+commit 9e04779d2a87e94a809b3a0d9b0845a0c6d48737
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 19:13:03 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 19:13:03 2026 +0300
+
+    fix(ui): remove direct st.secrets call to prevent crash on Render
+
+commit 3faa67f09b29096c2c0b26c58dc190a6110c230e
+Author:     clean1ines <gurovsky90@gmail.com>
+AuthorDate: Mon Feb 16 18:16:09 2026 +0300
+Commit:     clean1ines <gurovsky90@gmail.com>
+CommitDate: Mon Feb 16 18:16:09 2026 +0300
+
+    feat(core): implement streaming orchestrator with Llama-3.3-70B
+    
+    - Added MrakOrchestrator with httpx transport optimization
+    - Integrated streaming response handling in Streamlit UI
+    - Implemented PII filter for API keys and emails
+    - Added Docker configuration and keep-alive service for Render deployment
+    - Refactored tests to support generator-based logic

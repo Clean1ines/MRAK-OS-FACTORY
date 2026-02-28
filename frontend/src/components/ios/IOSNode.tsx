@@ -1,4 +1,3 @@
-// frontend/src/components/ios/IOSNode.tsx
 import React from 'react';
 
 interface IOSNodeProps {
@@ -11,25 +10,13 @@ interface IOSNodeProps {
   };
   isSelected: boolean;
   isConnecting?: boolean;
-  onDragStart: (nodeId: string, e: React.MouseEvent) => void;
+  onDragStart: (nodeId: string, e: React.MouseEvent | React.TouchEvent, element: HTMLDivElement) => void;
   onDelete: (nodeId: string) => void;
   onStartConnection?: (nodeId: string) => void;
   onCompleteConnection?: (targetNodeId: string) => void;
 }
 
-const arePropsEqual = (prev: IOSNodeProps, next: IOSNodeProps): boolean => {
-  return (
-    prev.node.node_id === next.node.node_id &&
-    prev.node.prompt_key === next.node.prompt_key &&
-    prev.node.position_x === next.node.position_x &&
-    prev.node.position_y === next.node.position_y &&
-    JSON.stringify(prev.node.config) === JSON.stringify(next.node.config) &&
-    prev.isSelected === next.isSelected &&
-    prev.isConnecting === next.isConnecting
-  );
-};
-
-export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
+export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
   node,
   isSelected,
   isConnecting = false,
@@ -37,8 +24,7 @@ export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
   onDelete,
   onStartConnection,
   onCompleteConnection,
-}) => {
-  // #ADDED: safe preview text
+}, ref) => {
   const previewText = (() => {
     const customPrompt = node.config?.custom_prompt;
     if (customPrompt == null) return null;
@@ -55,9 +41,12 @@ export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
 
   return (
     <div
+      ref={ref}
+      // 🔥 transition только для opacity и визуальных эффектов (не для позиции!)
       className={`
-        absolute min-w-[220px] max-w-[280px] p-4 rounded-lg
-        backdrop-blur-md border transition-all duration-300
+        absolute min-w-[220px] max-w-[280px] p-4 rounded-lg backdrop-blur-md border
+        transition-[opacity,transform,border-color,box-shadow,ring-color,background-color] duration-200
+        will-change-transform
         ${isSelected
           ? 'border-[var(--bronze-base)] shadow-[0_0_25px_var(--bronze-glow)]'
           : 'border-[var(--ios-border)] shadow-[var(--shadow-node)]'
@@ -65,25 +54,26 @@ export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
         ${isConnecting ? 'ring-2 ring-[var(--bronze-base)] ring-offset-2 ring-offset-black' : ''}
       `}
       style={{
-        left: node.position_x,
-        top: node.position_y,
+        // 🔥 transform вместо left/top для GPU-ускорения
+        transform: `translate3d(${node.position_x}px, ${node.position_y}px, 0)`,
         background: 'linear-gradient(145deg, rgba(30,30,32,0.9), rgba(20,20,22,0.95))',
+        // 🔥 Явно указываем какие свойства анимировать (позиция — нет)
+        transitionProperty: 'opacity, border-color, box-shadow, ring-color, background-color',
       }}
-      onMouseDown={(e) => onDragStart(node.node_id, e)}
+      onMouseDown={(e) => onDragStart(node.node_id, e, e.currentTarget)}
+      onTouchStart={(e) => onDragStart(node.node_id, e, e.currentTarget)}
+      // 🔥 Отключаем стандартные touch-жесты браузера
+      onTouchMove={(e) => e.preventDefault()}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--ios-border)]">
+      <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--ios-border)] pointer-events-none">
         <span className="text-[10px] text-[var(--bronze-base)] uppercase tracking-wider font-bold">
           {node.prompt_key}
         </span>
-        <div className="flex items-center gap-1">
-          {/* Connection port */}
+        <div className="flex items-center gap-1 pointer-events-auto">
           {onStartConnection && onCompleteConnection && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartConnection(node.node_id);
-              }}
+              onClick={(e) => { e.stopPropagation(); onStartConnection(node.node_id); }}
               className="w-4 h-4 rounded-full bg-[var(--bronze-dim)] hover:bg-[var(--bronze-base)] transition-colors flex items-center justify-center"
               title="Start connection"
             >
@@ -93,12 +83,8 @@ export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
               </svg>
             </button>
           )}
-          {/* Delete button */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(node.node_id);
-            }}
+            onClick={(e) => { e.stopPropagation(); onDelete(node.node_id); }}
             className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors"
           >
             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -110,37 +96,30 @@ export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
       </div>
 
       {/* Title */}
-      <div className="text-sm font-semibold text-[var(--text-main)] mb-2">
+      <div className="text-sm font-semibold text-[var(--text-main)] mb-2 pointer-events-none">
         {node.prompt_key.replace(/_/g, ' ')}
       </div>
 
-      {/* Connection target zone */}
       {onCompleteConnection && (
         <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onCompleteConnection(node.node_id);
-          }}
+          onClick={(e) => { e.stopPropagation(); onCompleteConnection(node.node_id); }}
           className="mt-2 pt-2 border-t border-[var(--ios-border)] text-[9px] text-[var(--text-muted)] hover:text-[var(--bronze-bright)] cursor-pointer transition-colors"
         >
           ⚡ Click to connect
         </div>
       )}
 
-      {/* Status */}
-      <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] mt-2">
+      <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] mt-2 pointer-events-none">
         <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-success)] animate-pulse" />
         Ready
       </div>
 
-      {/* Custom prompt preview */}
       {previewText && (
-        <div className="mt-2 p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-[9px] text-[var(--text-secondary)] font-mono max-h-16 overflow-hidden">
+        <div className="mt-2 p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-[9px] text-[var(--text-secondary)] font-mono max-h-16 overflow-hidden pointer-events-none">
           {previewText}
         </div>
       )}
     </div>
   );
-}, arePropsEqual);
-
+});
 IOSNode.displayName = 'IOSNode';

@@ -3,6 +3,12 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Load environment variables from .env.test if present
+if [ -f .env.test ]; then
+    echo "📦 Loading .env.test for e2e tests"
+    export $(grep -v '^#' .env.test | xargs)
+fi
+
 FE_PORT=5173
 BE_PORT=8000
 
@@ -16,7 +22,12 @@ echo "🎭 [2/4] Starting backend..."
 # Start test database first
 echo "🎭 Starting test database..."
 bash scripts/ensure_test_db.sh
+# Apply migrations
+echo "🔄 Applying database migrations..."
+python migrations/run_all.py
+# Explicitly set DATABASE_URL and MASTER_KEY for backend
 export DATABASE_URL="postgresql://test:test123@localhost:5433/mrak_test"
+export MASTER_KEY="localtestkey12345678"
 python -m uvicorn server:app --host 127.0.0.1 --port $BE_PORT > /tmp/be.log 2>&1 &
 BE_PID=$!
 sleep 2
@@ -26,7 +37,7 @@ npm run dev:frontend -- --port $FE_PORT --host 127.0.0.1 --open false > /tmp/fe.
 FE_PID=$!
 
 echo "🎭 [4/4] Waiting for servers to start..."
-# Проверяем, что порты открыты (не ждём HTTP-ответа)
+# Check that ports are open
 for i in $(seq 1 30); do
   if nc -z 127.0.0.1 $BE_PORT 2>/dev/null; then
     echo "✅ Backend is listening on port $BE_PORT"
@@ -53,7 +64,7 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-# Дополнительная пауза для полной инициализации приложений
+# Additional wait for full initialization
 sleep 3
 
 echo "🎭 Running tests..."

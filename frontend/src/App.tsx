@@ -1,5 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
 import { ChatInterface } from './components/ChatInterface';
 import { WorkspacePage } from './components/ios/WorkspacePage';
 import { AuthGuard } from './components/auth/AuthGuard';
@@ -50,36 +52,36 @@ class ErrorBoundary extends React.Component<
 function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Главная страница с сайдбаром проектов и чатом */}
-          <Route
-            path="/"
-            element={
-              <AuthGuard>
-                <ProtectedLayout />
-              </AuthGuard>
-            }
-          >
-            <Route index element={<ChatInterface />} />
-          </Route>
+            <Route
+              path="/"
+              element={
+                <AuthGuard>
+                  <ProtectedLayout />
+                </AuthGuard>
+              }
+            >
+              <Route index element={<ChatInterface />} />
+            </Route>
 
-          {/* Workspace — отдельная страница без общего сайдбара */}
-          <Route
-            path="/workspace"
-            element={
-              <AuthGuard>
-                <WorkspacePage />
-              </AuthGuard>
-            }
-          />
+            <Route
+              path="/workspace"
+              element={
+                <AuthGuard>
+                  <WorkspacePage />
+                </AuthGuard>
+              }
+            />
 
-          <Route path="/workspace.html" element={<Navigate to="/workspace" replace />} />
-        </Routes>
-      </BrowserRouter>
-      <Toast />
+            <Route path="/workspace.html" element={<Navigate to="/workspace" replace />} />
+          </Routes>
+        </BrowserRouter>
+        <Toast />
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 }

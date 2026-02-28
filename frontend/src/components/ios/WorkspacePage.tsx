@@ -61,20 +61,6 @@ export const WorkspacePage: React.FC = () => {
     loadProjects();
   }, []);
 
-  // При изменении selectedProjectId загружаем воркфлоу
-  useEffect(() => {
-    if (selectedProjectId) {
-      workflowsHook.loadWorkflows();
-    }
-  }, [selectedProjectId, workflowsHook.loadWorkflows]);
-
-  // Загрузка конкретного воркфлоу при выборе
-  useEffect(() => {
-    if (workflowsHook.currentWorkflowId) {
-      workflowsHook.loadWorkflow(workflowsHook.currentWorkflowId);
-    }
-  }, [workflowsHook.currentWorkflowId, workflowsHook.loadWorkflow]);
-
   const hamburgerWidth = 40;
   const currentProject = projects.find(p => p.id === selectedProjectId);
 

@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { client } from '../api/client';
 import toast from 'react-hot-toast';
 import type { NodeData, EdgeData } from './useCanvasEngine';
@@ -42,12 +43,106 @@ interface WorkflowDetail {
   edges: WorkflowEdge[];
 }
 
+const fetchWorkflows = async (projectId: string | null): Promise<WorkflowSummary[]> => {
+  if (!projectId) return [];
+  const response = (await client.GET('/api/workflows')) as {
+    data?: WorkflowSummary[];
+    error?: unknown;
+  };
+  if (response.error) throw response.error;
+  return response.data || [];
+};
+
+const fetchWorkflowDetail = async (id: string): Promise<WorkflowDetail> => {
+  const r = await client.GET('/api/workflows/{workflow_id}', {
+    params: { path: { workflow_id: id } }
+  });
+  if (r.error) throw r.error;
+  return r.data as WorkflowDetail;
+};
+
+const createWorkflowApi = async (params: {
+  name: string;
+  description: string;
+  projectId: string;
+}): Promise<WorkflowSummary> => {
+  const token = sessionStorage.getItem('mrak_session_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch('/api/workflows', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      name: params.name,
+      description: params.description,
+      project_id: params.projectId,
+    }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+};
+
+const saveWorkflowApi = async (params: {
+  id?: string;
+  name: string;
+  description: string;
+  projectId: string;
+  nodes: NodeData[];
+  edges: EdgeData[];
+}) => {
+  const token = sessionStorage.getItem('mrak_session_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const url = params.id ? `/api/workflows/${params.id}` : '/api/workflows';
+  const method = params.id ? 'PUT' : 'POST';
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: JSON.stringify({
+      name: params.name,
+      description: params.description,
+      project_id: params.projectId,
+      nodes: params.nodes.map(n => ({
+        node_id: n.node_id,
+        prompt_key: n.prompt_key,
+        position_x: n.position_x,
+        position_y: n.position_y,
+        config: n.config,
+      })),
+      edges: params.edges.map(e => ({
+        source_node: e.source_node,
+        target_node: e.target_node,
+      })),
+    }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+};
+
+const deleteWorkflowApi = async (id: string) => {
+  const r = await client.DELETE('/api/workflows/{workflow_id}', {
+    params: { path: { workflow_id: id } }
+  });
+  if (r.error) throw r.error;
+  return id;
+};
+
 export const useWorkflows = (selectedProjectId: string | null) => {
+  const queryClient = useQueryClient();
+
   const [nodes, setNodes] = useState<NodeData[]>([]);
   const [edges, setEdges] = useState<EdgeData[]>([]);
   const [workflowName, setWorkflowName] = useState('');
   const [currentWorkflowId, setCurrentWorkflowId] = useState<string | null>(null);
-  const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [showNodeModal, setShowNodeModal] = useState(false);
   const [showNodeList, setShowNodeList] = useState(false);
@@ -63,58 +158,96 @@ export const useWorkflows = (selectedProjectId: string | null) => {
   // Для создания кастомной ноды
   const [newNodePosition, setNewNodePosition] = useState<{ x: number; y: number } | null>(null);
 
-  const loadWorkflows = useCallback(async () => {
-    if (!selectedProjectId) return;
-    try {
-      const response = (await client.GET('/api/workflows')) as {
-        data?: WorkflowSummary[];
-        error?: unknown;
-      };
-      if (response.error) {
-        console.error('Failed to load workflows:', response.error);
-        return;
-      }
-      if (response.data && Array.isArray(response.data)) {
-        setWorkflows(response.data);
-      } else {
-        setWorkflows([]);
-      }
-    } catch (e) {
-      console.error('Error loading workflows:', e);
-    }
-  }, [selectedProjectId]);
+  // Запрос списка воркфлоу
+  const {
+    data: workflows = [],
+    isLoading: isLoadingWorkflows,
+    error: workflowsError,
+  } = useQuery({
+    queryKey: ['workflows', selectedProjectId],
+    queryFn: () => fetchWorkflows(selectedProjectId),
+    enabled: !!selectedProjectId,
+  });
 
-  const loadWorkflow = useCallback(async (id: string) => {
-    try {
-      const r = await client.GET('/api/workflows/{workflow_id}', {
-        params: { path: { workflow_id: id } }
-      });
-      if (r.error) {
-        console.error('Failed to load workflow:', r.error);
-        return;
-      }
-      const detail = r.data as WorkflowDetail;
-      if (detail) {
-        setNodes((detail.nodes || []).map((n: WorkflowNode) => ({
-          id: n.node_id || crypto.randomUUID(),
-          node_id: n.node_id!,
-          prompt_key: n.prompt_key || 'UNKNOWN',
-          position_x: n.position_x || 100,
-          position_y: n.position_y || 100,
-          config: n.config || {}
-        })));
-        setEdges((detail.edges || []).map((e: WorkflowEdge) => ({
-          id: e.id || crypto.randomUUID(),
-          source_node: e.source_node!,
-          target_node: e.target_node!
-        })));
-        setCurrentWorkflowId(id);
-        setWorkflowName(detail.workflow?.name || '');
-      }
-    } catch (e) {
-      console.error('Error loading workflow:', e);
+  // Запрос деталей текущего воркфлоу
+  const {
+    data: workflowDetail,
+    isLoading: isLoadingDetail,
+  } = useQuery({
+    queryKey: ['workflow', currentWorkflowId],
+    queryFn: () => fetchWorkflowDetail(currentWorkflowId!),
+    enabled: !!currentWorkflowId,
+  });
+
+  // Эффект для обновления nodes/edges при загрузке деталей
+  useEffect(() => {
+    if (workflowDetail) {
+      setNodes((workflowDetail.nodes || []).map((n: WorkflowNode) => ({
+        id: n.node_id || crypto.randomUUID(),
+        node_id: n.node_id!,
+        prompt_key: n.prompt_key || 'UNKNOWN',
+        position_x: n.position_x || 100,
+        position_y: n.position_y || 100,
+        config: n.config || {}
+      })));
+      setEdges((workflowDetail.edges || []).map((e: WorkflowEdge) => ({
+        id: e.id || crypto.randomUUID(),
+        source_node: e.source_node!,
+        target_node: e.target_node!
+      })));
+      setWorkflowName(workflowDetail.workflow?.name || '');
+    } else {
+      setNodes([]);
+      setEdges([]);
+      setWorkflowName('');
     }
-  }, []);
+  }, [workflowDetail]);
+
+  // Мутация создания воркфлоу (просто имя, без нод)
+  const createWorkflowMutation = useMutation({
+    mutationFn: createWorkflowApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflows', selectedProjectId] });
+      toast.success('Workflow created');
+      setShowCreateWorkflowModal(false);
+      setNewWorkflowName('');
+      setNewWorkflowDescription('');
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast.error('Failed to create workflow');
+    },
+  });
+
+  // Мутация сохранения (с нодами и рёбрами)
+  const saveWorkflowMutation = useMutation({
+    mutationFn: saveWorkflowApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflows', selectedProjectId] });
+      toast.success(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
+    },
+    onError: (err: unknown) => {
+      console.error('Save error:', err);
+      toast.error('❌ Ошибка при сохранении: ' + (err instanceof Error ? err.message : String(err)));
+    },
+  });
+
+  // Мутация удаления
+  const deleteWorkflowMutation = useMutation({
+    mutationFn: deleteWorkflowApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflows', selectedProjectId] });
+      setNodes([]);
+      setEdges([]);
+      setCurrentWorkflowId(null);
+      setWorkflowName('New Workflow');
+      toast.success('✅ Удалено');
+    },
+    onError: (err: unknown) => {
+      console.error('Delete error:', err);
+      toast.error('❌ Ошибка при удалении');
+    },
+  });
 
   const handleSave = useCallback(async () => {
     if (!workflowName.trim() || !selectedProjectId) {
@@ -127,75 +260,29 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     }
     setLoading(true);
     try {
-      const url = currentWorkflowId
-        ? `/api/workflows/${currentWorkflowId}`
-        : '/api/workflows';
-      const token = sessionStorage.getItem('mrak_session_token');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      const res = await fetch(url, {
-        method: currentWorkflowId ? 'PUT' : 'POST',
-        headers,
-        body: JSON.stringify({
-          name: workflowName,
-          description: 'Created in workspace editor',
-          project_id: selectedProjectId,
-          nodes: nodes.map(n => ({
-            node_id: n.node_id,
-            prompt_key: n.prompt_key,
-            position_x: n.position_x,
-            position_y: n.position_y,
-            config: n.config
-          })),
-          edges: edges.map(e => ({
-            source_node: e.source_node,
-            target_node: e.target_node
-          }))
-        })
+      await saveWorkflowMutation.mutateAsync({
+        id: currentWorkflowId || undefined,
+        name: workflowName,
+        description: 'Created in workspace editor',
+        projectId: selectedProjectId,
+        nodes,
+        edges,
       });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${res.status}`);
-      }
-      await loadWorkflows();
-      toast.success(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
       return true;
-    } catch (e: unknown) {
-      console.error('Save error:', e);
-      toast.error('❌ Ошибка при сохранении: ' + (e instanceof Error ? e.message : String(e)));
-      return false;
     } finally {
       setLoading(false);
     }
-  }, [workflowName, selectedProjectId, currentWorkflowId, nodes, edges, loadWorkflows]);
+  }, [workflowName, selectedProjectId, currentWorkflowId, nodes, edges, saveWorkflowMutation]);
 
   const handleDelete = useCallback(async () => {
     if (!currentWorkflowId || !confirm(`Удалить "${workflowName}"?`)) return false;
     try {
-      const r = await client.DELETE('/api/workflows/{workflow_id}', {
-        params: { path: { workflow_id: currentWorkflowId } }
-      });
-      if (r.error) {
-        console.error('Delete error:', r.error);
-        return false;
-      }
-      setNodes([]);
-      setEdges([]);
-      setCurrentWorkflowId(null);
-      setWorkflowName('New Workflow');
-      await loadWorkflows();
-      toast.success('✅ Удалено');
+      await deleteWorkflowMutation.mutateAsync(currentWorkflowId);
       return true;
-    } catch (e: unknown) {
-      console.error('Delete exception:', e);
-      toast.error('❌ Ошибка при удалении');
+    } catch {
       return false;
     }
-  }, [currentWorkflowId, workflowName, loadWorkflows]);
+  }, [currentWorkflowId, workflowName, deleteWorkflowMutation]);
 
   const handleAddCustomNode = useCallback((x: number, y: number) => {
     setNewNodeTitle('');
@@ -241,49 +328,29 @@ export const useWorkflows = (selectedProjectId: string | null) => {
       toast.error('Name is required');
       return false;
     }
-    const token = sessionStorage.getItem('mrak_session_token');
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     try {
-      const response = await fetch('/api/workflows', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: newWorkflowName,
-          description: newWorkflowDescription,
-          project_id: selectedProjectId,
-        }),
+      await createWorkflowMutation.mutateAsync({
+        name: newWorkflowName,
+        description: newWorkflowDescription,
+        projectId: selectedProjectId,
       });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${response.status}`);
-      }
-      await loadWorkflows();
-      toast.success('Workflow created');
-      setShowCreateWorkflowModal(false);
-      setNewWorkflowName('');
-      setNewWorkflowDescription('');
       return true;
-    } catch (e: unknown) {
-      console.error(e);
-      toast.error('Failed to create workflow');
+    } catch {
       return false;
     }
-  }, [newWorkflowName, newWorkflowDescription, selectedProjectId, loadWorkflows]);
+  }, [newWorkflowName, newWorkflowDescription, selectedProjectId, createWorkflowMutation]);
 
   return {
+    // данные из query
+    workflows,
+    isLoadingWorkflows,
+    workflowsError,
     // состояния
     nodes,
     edges,
     workflowName,
     currentWorkflowId,
-    workflows,
-    loading,
+    loading: loading || isLoadingDetail || saveWorkflowMutation.isPending,
     showNodeModal,
     showNodeList,
     newNodePrompt,
@@ -307,13 +374,15 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     setEdges,
 
     // функции
-    loadWorkflows,
-    loadWorkflow,
     handleSave,
     handleDelete,
     handleAddCustomNode,
     confirmAddCustomNode,
     addNodeFromList,
     handleCreateWorkflow,
+
+    // статусы мутаций
+    isCreatingWorkflow: createWorkflowMutation.isPending,
+    isDeletingWorkflow: deleteWorkflowMutation.isPending,
   };
 };

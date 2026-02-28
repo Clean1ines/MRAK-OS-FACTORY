@@ -5,16 +5,15 @@ import { useNotification } from '../hooks/useNotifications';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { ChatMessage } from './ChatMessage';
 
-// Компонент расширяющегося textarea с ограничением по высоте и кнопкой отправки внутри
+// Компонент расширяющегося textarea с кнопкой отправки внутри (без disabled)
 const ExpandingTextarea: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onSend: () => void;
-  disabled: boolean;
   placeholder: string;
   isMobile: boolean;
-}> = ({ value, onChange, onKeyDown, onSend, disabled, placeholder, isMobile }) => {
+}> = ({ value, onChange, onKeyDown, onSend, placeholder, isMobile }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineHeight = 24; // приблизительная высота строки
   const maxRows = isMobile ? 5 : 15;
@@ -37,14 +36,13 @@ const ExpandingTextarea: React.FC<{
         onChange={onChange}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
-        disabled={disabled}
         rows={1}
         className="w-full bg-[var(--ios-glass)] border border-[var(--ios-border)] rounded-lg px-4 py-3 pr-16 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)] resize-none overflow-hidden"
         style={{ minHeight: '48px' }}
       />
       <button
         onClick={onSend}
-        disabled={disabled || !value.trim()}
+        disabled={!value.trim()}
         className="absolute bottom-2 right-2 px-3 py-1 text-xs font-semibold rounded bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
       >
         Send
@@ -62,7 +60,7 @@ export const ChatCanvas: React.FC = () => {
   const selectedModel = useAppStore(s => s.selectedModel);
   const showNotification = useNotification().showNotification;
 
-  const { startStream } = useStreaming(); // #CHANGED: removed unused isStreaming
+  const { startStream } = useStreaming();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
@@ -140,7 +138,6 @@ export const ChatCanvas: React.FC = () => {
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
           onSend={handleSend}
-          disabled={!currentProjectId}
           placeholder={currentProjectId ? "Type your message..." : "Select a project first"}
           isMobile={isMobile}
         />

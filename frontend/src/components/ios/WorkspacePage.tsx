@@ -1,87 +1,44 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
+import React, { useState, useEffect } from 'react';
+import { api, ProjectResponse } from '../../api/client';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
-import { client } from '../../api/client';
-import { api, ProjectResponse } from '../../api/client';
-import { validateWorkflowAcyclic } from '../../utils/graphUtils';
 import { NodeListPanel } from './NodeListPanel';
 import { NodeModal } from './NodeModal';
-import { useNodeValidation } from './useNodeValidation';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { HamburgerMenu } from '../layout/HamburgerMenu';
+import { useWorkflows } from '../../hooks/useWorkflows';
+import { useSelectedProject } from '../../hooks/useSelectedProject';
 
-declare global {
-  interface Window {
-    _newNodePosition?: { x: number; y: number };
-  }
-}
-
-interface WorkflowSummary {
-  id: string;
-  name: string;
-  description?: string;
-  is_default?: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
-
-interface WorkflowNode {
-  id: string;
-  workflow_id: string;
-  node_id: string;
-  prompt_key: string;
-  config?: Record<string, unknown>;
-  position_x: number;
-  position_y: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-interface WorkflowEdge {
-  id: string;
-  workflow_id: string;
-  source_node: string;
-  target_node: string;
-  source_output?: string;
-  target_input?: string;
-  created_at?: string;
-}
-
-interface WorkflowDetail {
-  workflow: WorkflowSummary;
-  nodes: WorkflowNode[];
-  edges: WorkflowEdge[];
-}
+// Простая модалка для создания воркфлоу
+const Modal: React.FC<{ isOpen: boolean; title: string; children: React.ReactNode }> = ({
+  isOpen,
+  title,
+  children,
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md bg-[var(--ios-glass-dark)] backdrop-blur-[var(--blur-std)] border border-[var(--ios-border)] rounded-2xl shadow-[var(--shadow-heavy)] p-6">
+        <h2 className="text-xl font-bold text-[var(--bronze-base)] mb-4">{title}</h2>
+        {children}
+      </div>
+    </div>
+  );
+};
 
 export const WorkspacePage: React.FC = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlProjectId = searchParams.get('projectId');
   const isMobile = useMediaQuery('(max-width: 768px)');
-
-  const [nodes, setNodes] = useState<NodeData[]>([]);
-  const [edges, setEdges] = useState<EdgeData[]>([]);
-  const [workflowName, setWorkflowName] = useState('');
-  const [currentWorkflowId, setCurrentWorkflowId] = useState<string | null>(null);
-  const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
-  const [loading, setLoading] = useState(false);
-  const [showNodeModal, setShowNodeModal] = useState(false);
-  const [showNodeList, setShowNodeList] = useState(false);
-  const [newNodePrompt, setNewNodePrompt] = useState('');
-  const [newNodeTitle, setNewNodeTitle] = useState('');
-  const { validateNodeUnique } = useNodeValidation(nodes);
+  const [userClosedSidebar, setUserClosedSidebar] = useState(false);
 
-  const isUpdatingUrl = useRef(false);
-  const isInitialized = useRef(false);
+  const { selectedProjectId } = useSelectedProject(projects);
+  const workflowsHook = useWorkflows(selectedProjectId);
 
-  useEffect(() => {
-    setSidebarOpen(!isMobile);
-  }, [isMobile]);
+  // Вычисляем состояние сайдбара
+  const sidebarOpen = !isMobile && !userClosedSidebar;
+
+  const handleCloseSidebar = () => setUserClosedSidebar(true);
+  const handleOpenSidebar = () => setUserClosedSidebar(false);
 
   // Загрузка проектов при монтировании
   useEffect(() => {
@@ -104,246 +61,21 @@ export const WorkspacePage: React.FC = () => {
     loadProjects();
   }, []);
 
-  // После загрузки проектов инициализируем выбранный проект
-  useEffect(() => {
-    if (projects.length === 0 || isInitialized.current) return;
-
-    let initialId: string | null = null;
-    if (urlProjectId && projects.some(p => p.id === urlProjectId)) {
-      initialId = urlProjectId;
-    } else {
-      const stored = localStorage.getItem('workspace_selected_project');
-      if (stored && projects.some(p => p.id === stored)) {
-        initialId = stored;
-      } else {
-        initialId = projects[0]?.id || null;
-      }
-    }
-
-    if (initialId) {
-      setSelectedProjectId(initialId);
-      // Обновляем URL без мерцания
-      if (searchParams.get('projectId') !== initialId) {
-        isUpdatingUrl.current = true;
-        setSearchParams({ projectId: initialId }, { replace: true });
-        setTimeout(() => { isUpdatingUrl.current = false; }, 100);
-      }
-    }
-    isInitialized.current = true;
-  }, [projects, urlProjectId, setSearchParams, searchParams]);
-
   // При изменении selectedProjectId загружаем воркфлоу
   useEffect(() => {
-    if (!selectedProjectId) return;
-    localStorage.setItem('workspace_selected_project', selectedProjectId);
-    const loadWorkflowsForProject = async () => {
-      try {
-        const response = (await client.GET('/api/workflows')) as {
-          data?: WorkflowSummary[];
-          error?: unknown;
-        };
-        if (response.error) {
-          console.error('Failed to load workflows:', response.error);
-          return;
-        }
-        if (response.data && Array.isArray(response.data)) {
-          setWorkflows(response.data);
-        } else {
-          setWorkflows([]);
-        }
-      } catch (e) {
-        console.error('Error loading workflows:', e);
-      }
-    };
-    loadWorkflowsForProject();
-  }, [selectedProjectId]);
-
-  // При изменении URL синхронизируем selectedProjectId, но не создаём цикл
-  useEffect(() => {
-    if (!urlProjectId || urlProjectId === selectedProjectId || isUpdatingUrl.current) return;
-    if (projects.some(p => p.id === urlProjectId)) {
-      setSelectedProjectId(urlProjectId);
+    if (selectedProjectId) {
+      workflowsHook.loadWorkflows();
     }
-  }, [urlProjectId, selectedProjectId, projects]);
+  }, [selectedProjectId, workflowsHook.loadWorkflows]);
 
   // Загрузка конкретного воркфлоу при выборе
   useEffect(() => {
-    if (!currentWorkflowId) {
-      setNodes([]);
-      setEdges([]);
-      setWorkflowName('');
-      return;
+    if (workflowsHook.currentWorkflowId) {
+      workflowsHook.loadWorkflow(workflowsHook.currentWorkflowId);
     }
-    const loadWorkflowDetail = async () => {
-      try {
-        const r = await client.GET('/api/workflows/{workflow_id}', {
-          params: { path: { workflow_id: currentWorkflowId } }
-        });
-        if (r.error) {
-          console.error('Failed to load workflow:', r.error);
-          return;
-        }
-        const detail = r.data as WorkflowDetail;
-        if (detail) {
-          setNodes((detail.nodes || []).map((n: WorkflowNode) => ({
-            id: n.node_id || crypto.randomUUID(),
-            node_id: n.node_id!,
-            prompt_key: n.prompt_key || 'UNKNOWN',
-            position_x: n.position_x || 100,
-            position_y: n.position_y || 100,
-            config: n.config || {}
-          })));
-          setEdges((detail.edges || []).map((e: WorkflowEdge) => ({
-            id: e.id || crypto.randomUUID(),
-            source_node: e.source_node!,
-            target_node: e.target_node!
-          })));
-          setWorkflowName(detail.workflow?.name || '');
-        }
-      } catch (e) {
-        console.error('Error loading workflow:', e);
-      }
-    };
-    loadWorkflowDetail();
-  }, [currentWorkflowId]);
-
-  const handleSave = async () => {
-    if (!workflowName.trim() || !selectedProjectId) {
-      toast.error('⚠️ Заполните обязательные поля');
-      return;
-    }
-    if (!validateWorkflowAcyclic(nodes, edges).valid) {
-      toast.error('⚠️ Обнаружен цикл – удалите круговые соединения');
-      return;
-    }
-    setLoading(true);
-    try {
-      const url = currentWorkflowId
-        ? `/api/workflows/${currentWorkflowId}`
-        : '/api/workflows';
-      const res = await fetch(url, {
-        method: currentWorkflowId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: workflowName,
-          description: 'Created in workspace editor',
-          project_id: selectedProjectId,
-          nodes: nodes.map(n => ({
-            node_id: n.node_id,
-            prompt_key: n.prompt_key,
-            position_x: n.position_x,
-            position_y: n.position_y,
-            config: n.config
-          })),
-          edges: edges.map(e => ({
-            source_node: e.source_node,
-            target_node: e.target_node
-          }))
-        })
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${res.status}`);
-      }
-      // Обновляем список воркфлоу после сохранения
-      const response = (await client.GET('/api/workflows')) as {
-        data?: WorkflowSummary[];
-        error?: unknown;
-      };
-      if (response.data && Array.isArray(response.data)) {
-        setWorkflows(response.data);
-      }
-      toast.success(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
-    } catch (e: unknown) {
-      console.error('Save error:', e);
-      toast.error('❌ Ошибка при сохранении: ' + (e instanceof Error ? e.message : String(e)));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!currentWorkflowId || !confirm(`Удалить "${workflowName}"?`)) return;
-    try {
-      const r = await client.DELETE('/api/workflows/{workflow_id}', {
-        params: { path: { workflow_id: currentWorkflowId } }
-      });
-      if (r.error) {
-        console.error('Delete error:', r.error);
-        return;
-      }
-      setNodes([]);
-      setEdges([]);
-      setCurrentWorkflowId(null);
-      setWorkflowName('New Workflow');
-      const response = (await client.GET('/api/workflows')) as {
-        data?: WorkflowSummary[];
-        error?: unknown;
-      };
-      if (response.data && Array.isArray(response.data)) {
-        setWorkflows(response.data);
-      }
-      toast.success('✅ Удалено');
-    } catch (e: unknown) {
-      console.error('Delete exception:', e);
-      toast.error('❌ Ошибка при удалении');
-    }
-  };
-
-  const handleAddCustomNode = (x: number, y: number) => {
-    setNewNodeTitle('');
-    setNewNodePrompt('');
-    setShowNodeModal(true);
-    window._newNodePosition = { x, y };
-  };
-
-  const confirmAddCustomNode = async () => {
-    if (!newNodePrompt.trim()) {
-      toast.error('Введите промпт');
-      return;
-    }
-    const title = newNodeTitle.trim() || 'CUSTOM_PROMPT';
-    const err = validateNodeUnique(title, newNodePrompt);
-    if (err) {
-      toast.error(`⚠️ ${err}`);
-      return;
-    }
-    const pos = window._newNodePosition;
-    if (pos) {
-      setNodes(prev => [...prev, {
-        id: crypto.randomUUID(),
-        node_id: crypto.randomUUID(),
-        prompt_key: title,
-        position_x: pos.x,
-        position_y: pos.y,
-        config: { custom_prompt: newNodePrompt }
-      }]);
-    }
-    setShowNodeModal(false);
-    setNewNodePrompt('');
-    setNewNodeTitle('');
-  };
-
-  const addNodeFromList = (node: NodeData) => {
-    setNodes(prev => [...prev, node]);
-    setShowNodeList(false);
-  };
-
-  const handleLogout = async () => {
-    try {
-      await api.auth.logout();
-      window.location.href = '/login';
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleCloseSidebar = () => setSidebarOpen(false);
-  const handleOpenSidebar = () => setSidebarOpen(true);
+  }, [workflowsHook.currentWorkflowId, workflowsHook.loadWorkflow]);
 
   const hamburgerWidth = 40;
-
-  // Найти текущий проект для отображения имени
   const currentProject = projects.find(p => p.id === selectedProjectId);
 
   return (
@@ -364,6 +96,7 @@ export const WorkspacePage: React.FC = () => {
                 onClick={handleCloseSidebar}
                 className="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
                 aria-label="Close sidebar"
+                data-testid="close-sidebar"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -372,7 +105,6 @@ export const WorkspacePage: React.FC = () => {
               </button>
             </div>
 
-            {/* Информация о текущем проекте (только для чтения) */}
             <div className="p-3 border-b border-[var(--ios-border)]">
               <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">
                 Current Project
@@ -387,20 +119,21 @@ export const WorkspacePage: React.FC = () => {
                 <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">
                   ⚠️ Select project on home page
                 </div>
-              ) : workflows.length === 0 ? (
+              ) : workflowsHook.workflows.length === 0 ? (
                 <div className="text-[10px] text-[var(--text-muted)] text-center py-4">
                   No workflows
                 </div>
               ) : (
-                workflows.map((wf) => (
+                workflowsHook.workflows.map((wf) => (
                   <button
                     key={wf.id}
-                    onClick={() => setCurrentWorkflowId(wf.id!)}
+                    onClick={() => workflowsHook.setCurrentWorkflowId(wf.id!)}
                     className={`w-full text-left px-3 py-2 rounded mb-1 text-xs ${
-                      currentWorkflowId === wf.id
+                      workflowsHook.currentWorkflowId === wf.id
                         ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]'
                         : 'text-[var(--text-secondary)] hover:bg-[var(--ios-glass-bright)]'
                     }`}
+                    data-testid="workflow-item"
                   >
                     <div className="font-semibold truncate">{wf.name}</div>
                     <div className="text-[9px] opacity-60 truncate">
@@ -413,15 +146,10 @@ export const WorkspacePage: React.FC = () => {
 
             <div className="p-3 border-t border-[var(--ios-border)] space-y-2">
               <button
-                onClick={() => {
-                  setNodes([]);
-                  setEdges([]);
-                  setCurrentWorkflowId(null);
-                  setWorkflowName('New Workflow');
-                  setShowNodeModal(true);
-                }}
+                onClick={() => workflowsHook.setShowCreateWorkflowModal(true)}
                 disabled={!selectedProjectId}
                 className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2 disabled:opacity-30"
+                data-testid="new-workflow-button"
               >
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="5" x2="12" y2="19" />
@@ -432,36 +160,47 @@ export const WorkspacePage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={handleSave}
-                  disabled={!selectedProjectId || !workflowName.trim() || loading}
+                  onClick={workflowsHook.handleSave}
+                  disabled={!selectedProjectId || !workflowsHook.workflowName.trim() || workflowsHook.loading}
                   className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
+                  data-testid="save-workflow"
                 >
                   Save
                 </button>
                 <button
-                  onClick={() => setShowNodeList(true)}
+                  onClick={() => workflowsHook.setShowNodeList(true)}
                   disabled={!selectedProjectId}
                   className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
+                  data-testid="nodes-button"
                 >
                   Nodes
                 </button>
                 <button
-                  onClick={handleDelete}
-                  disabled={!currentWorkflowId}
+                  onClick={workflowsHook.handleDelete}
+                  disabled={!workflowsHook.currentWorkflowId}
                   className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
+                  data-testid="delete-workflow"
                 >
                   Delete
                 </button>
                 <button
-                  onClick={handleLogout}
+                  onClick={async () => {
+                    try {
+                      await api.auth.logout();
+                      window.location.href = '/login';
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
                   className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors"
+                  data-testid="logout-button"
                 >
                   Logout
                 </button>
               </div>
 
               <div className="text-[9px] text-[var(--text-muted)] text-center pt-2">
-                {workflows.length} workflow{workflows.length !== 1 ? 's' : ''}
+                {workflowsHook.workflows.length} workflow{workflowsHook.workflows.length !== 1 ? 's' : ''}
               </div>
             </div>
           </aside>
@@ -472,36 +211,80 @@ export const WorkspacePage: React.FC = () => {
             <div style={{ width: !sidebarOpen ? hamburgerWidth : 0 }} className="transition-all" />
             <div className="flex-1 flex justify-center">
               <h2 className="text-sm font-semibold text-[var(--text-main)]">
-                {workflowName || 'Untitled Workflow'}
+                {workflowsHook.workflowName || 'Untitled Workflow'}
               </h2>
             </div>
             <div style={{ width: !sidebarOpen ? hamburgerWidth : 0 }} className="transition-all" />
           </div>
           <IOSCanvas
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={setNodes}
-            onEdgesChange={setEdges}
-            onAddCustomNode={handleAddCustomNode}
+            nodes={workflowsHook.nodes}
+            edges={workflowsHook.edges}
+            onNodesChange={workflowsHook.setNodes}
+            onEdgesChange={workflowsHook.setEdges}
+            onAddCustomNode={workflowsHook.handleAddCustomNode}
           />
         </div>
 
         <NodeListPanel
-          visible={showNodeList}
-          onClose={() => setShowNodeList(false)}
-          nodes={nodes}
-          onAddNode={addNodeFromList}
+          visible={workflowsHook.showNodeList}
+          onClose={() => workflowsHook.setShowNodeList(false)}
+          nodes={workflowsHook.nodes}
+          onAddNode={workflowsHook.addNodeFromList}
         />
         <NodeModal
-          visible={showNodeModal}
-          onClose={() => setShowNodeModal(false)}
-          title={newNodeTitle}
-          onTitleChange={setNewNodeTitle}
-          prompt={newNodePrompt}
-          onPromptChange={setNewNodePrompt}
-          onConfirm={confirmAddCustomNode}
-          validationError={newNodeTitle.trim() ? validateNodeUnique(newNodeTitle.trim(), newNodePrompt) : null}
+          visible={workflowsHook.showNodeModal}
+          onClose={() => workflowsHook.setShowNodeModal(false)}
+          title={workflowsHook.newNodeTitle}
+          onTitleChange={workflowsHook.setNewNodeTitle}
+          prompt={workflowsHook.newNodePrompt}
+          onPromptChange={workflowsHook.setNewNodePrompt}
+          onConfirm={workflowsHook.confirmAddCustomNode}
+          validationError={workflowsHook.newNodeTitle.trim() ? workflowsHook.validateNodeUnique(workflowsHook.newNodeTitle.trim(), workflowsHook.newNodePrompt) : null}
         />
+
+        <Modal isOpen={workflowsHook.showCreateWorkflowModal} title="Create New Workflow">
+          <form onSubmit={(e) => { e.preventDefault(); workflowsHook.handleCreateWorkflow(); }} className="space-y-4">
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
+                Workflow Name *
+              </label>
+              <input
+                type="text"
+                value={workflowsHook.newWorkflowName}
+                onChange={(e) => workflowsHook.setNewWorkflowName(e.target.value)}
+                required
+                className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
+                Description
+              </label>
+              <input
+                type="text"
+                value={workflowsHook.newWorkflowDescription}
+                onChange={(e) => workflowsHook.setNewWorkflowDescription(e.target.value)}
+                className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => workflowsHook.setShowCreateWorkflowModal(false)}
+                className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)] transition-colors"
+              >
+                Create
+              </button>
+            </div>
+          </form>
+        </Modal>
       </div>
     </IOSShell>
   );

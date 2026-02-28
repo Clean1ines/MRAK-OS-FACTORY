@@ -10,7 +10,7 @@ export const ChatInterface: React.FC = () => {
   const navigate = useNavigate();
   const { currentProjectId, models, selectedModel, setSelectedModel } = useAppStore();
   const { projects } = useProjects();
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  useMediaQuery('(max-width: 768px)'); // #CHANGED: we don't need the value, but hook must be called
 
   const currentProject = projects.find(p => p.id === currentProjectId);
 

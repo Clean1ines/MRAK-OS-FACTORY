@@ -1,43 +1,42 @@
+import json
 import os
-import httpx
 from pathlib import Path
 
 class PromptLoader:
     def __init__(self, gh_token):
         self.gh_token = gh_token
-        self.prompts_dir = Path(__file__).parent / "prompts"
+        self.base_dir = Path(__file__).parent
+        self.catalog = self._load_catalog()
+
+    def _load_catalog(self):
+        catalog_path = self.base_dir / "prompts" / "catalog.json"
+        if catalog_path.exists():
+            with open(catalog_path, "r") as f:
+                data = json.load(f)
+                return {item["id"]: item for item in data.get("prompts", [])}
+        return {}
 
     async def get_system_prompt(self, mode: str, mode_map: dict):
-        # Сначала пытаемся загрузить из локальной папки
-        local_path = self.prompts_dir / mode / f"{mode}.txt"
-        # Для 01-core особый путь: prompts/01-core/01-core-prompt.txt
-        if mode == "01_CORE":
-            local_path = self.prompts_dir / "01-core" / "01-core-prompt.txt"
+        """
+        Возвращает системный промпт для указанного режима.
+        Если промпт не найден локально, возвращает заглушку.
+        Никаких запросов к GitHub не производится.
+        """
+        # mode_map: например {"01_CORE": "01-core-prompt"}
+        prompt_id = mode_map.get(mode)
+        if not prompt_id:
+            return f"[Mode '{mode}' not implemented]"
 
-        if local_path.exists():
-            try:
-                return local_path.read_text().strip()
-            except Exception as e:
-                return f"System Error: Cannot read local prompt file: {e}"
+        # Ищем в каталоге
+        entry = self.catalog.get(prompt_id)
+        if not entry:
+            return f"[Prompt '{prompt_id}' not found in catalog]"
 
-        # Если локального файла нет, пробуем загрузить из GitHub
-        env_var = mode_map.get(mode, "SYSTEM_PROMPT_URL")
-        url = os.getenv(env_var)
+        file_path = self.base_dir / entry["file"]
+        if not file_path.exists():
+            return f"[Prompt file {file_path} not found]"
 
-        if not url:
-            return f"System Error: URL for mode {mode} not found in environment and local file missing."
-
-        headers = {
-            "Accept": "application/vnd.github.v3.raw",
-        }
-        if self.gh_token:
-            headers["Authorization"] = f"token {self.gh_token}"
-
-        async with httpx.AsyncClient() as c:
-            try:
-                r = await c.get(url, headers=headers, timeout=15)
-                if r.status_code == 200:
-                    return r.text.strip()
-                return f"Error fetching prompt: {r.status_code} for mode {mode}"
-            except Exception as e:
-                return f"Connection Error: {str(e)}"
+        try:
+            return file_path.read_text().strip()
+        except Exception as e:
+            return f"[Error reading prompt file: {e}]"

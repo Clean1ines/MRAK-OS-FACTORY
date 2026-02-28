@@ -1,5 +1,5 @@
 // frontend/src/constants/canvas.ts
-// ADDED: Named constants for canvas coordinate system
+// ADDED: Named constants for canvas coordinate system and UI dimensions
 
 /**
  * # Canvas Coordinate System Specification
@@ -87,6 +87,23 @@ export const NODE_CLICK_THRESHOLD = 5;
 /** Connection port size in pixels */
 export const CONNECTION_PORT_SIZE = 16;
 
+// ==================== UI DIMENSIONS ====================
+
+/** Width of the hamburger icon in pixels (used for offset calculations) */
+export const SIDEBAR_HAMBURGER_WIDTH = 40;
+
+/** Line height used in expanding textarea (pixels) */
+export const TEXTAREA_LINE_HEIGHT = 24;
+
+/** Maximum number of rows for textarea on desktop */
+export const TEXTAREA_MAX_ROWS_DESKTOP = 15;
+
+/** Maximum number of rows for textarea on mobile */
+export const TEXTAREA_MAX_ROWS_MOBILE = 5;
+
+/** Minimum height of textarea in pixels */
+export const TEXTAREA_MIN_HEIGHT = 48;
+
 // Export all constants as a single object for convenience
 export const CANVAS_CONSTANTS = {
   NODE_HALF_WIDTH,
@@ -102,4 +119,9 @@ export const CANVAS_CONSTANTS = {
   PAN_MODIFIER_KEY,
   NODE_CLICK_THRESHOLD,
   CONNECTION_PORT_SIZE,
+  SIDEBAR_HAMBURGER_WIDTH,
+  TEXTAREA_LINE_HEIGHT,
+  TEXTAREA_MAX_ROWS_DESKTOP,
+  TEXTAREA_MAX_ROWS_MOBILE,
+  TEXTAREA_MIN_HEIGHT,
 } as const;

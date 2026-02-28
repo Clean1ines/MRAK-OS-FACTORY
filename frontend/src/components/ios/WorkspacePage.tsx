@@ -8,23 +8,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { HamburgerMenu } from '../layout/HamburgerMenu';
 import { useWorkflows } from '../../hooks/useWorkflows';
 import { useSelectedProject } from '../../hooks/useSelectedProject';
-
-// Простая модалка для создания воркфлоу
-const Modal: React.FC<{ isOpen: boolean; title: string; children: React.ReactNode }> = ({
-  isOpen,
-  title,
-  children,
-}) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md bg-[var(--ios-glass-dark)] backdrop-blur-[var(--blur-std)] border border-[var(--ios-border)] rounded-2xl shadow-[var(--shadow-heavy)] p-6">
-        <h2 className="text-xl font-bold text-[var(--bronze-base)] mb-4">{title}</h2>
-        {children}
-      </div>
-    </div>
-  );
-};
+import { CreateWorkflowModal } from './CreateWorkflowModal';
 
 export const WorkspacePage: React.FC = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -34,13 +18,11 @@ export const WorkspacePage: React.FC = () => {
   const { selectedProjectId } = useSelectedProject(projects);
   const workflowsHook = useWorkflows(selectedProjectId);
 
-  // Вычисляем состояние сайдбара
   const sidebarOpen = !isMobile && !userClosedSidebar;
 
   const handleCloseSidebar = () => setUserClosedSidebar(true);
   const handleOpenSidebar = () => setUserClosedSidebar(false);
 
-  // Загрузка проектов при монтировании
   useEffect(() => {
     const loadProjects = async () => {
       try {
@@ -228,49 +210,14 @@ export const WorkspacePage: React.FC = () => {
           validationError={workflowsHook.newNodeTitle.trim() ? workflowsHook.validateNodeUnique(workflowsHook.newNodeTitle.trim(), workflowsHook.newNodePrompt) : null}
         />
 
-        <Modal isOpen={workflowsHook.showCreateWorkflowModal} title="Create New Workflow">
-          <form onSubmit={(e) => { e.preventDefault(); workflowsHook.handleCreateWorkflow(); }} className="space-y-4">
-            <div>
-              <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
-                Workflow Name *
-              </label>
-              <input
-                type="text"
-                value={workflowsHook.newWorkflowName}
-                onChange={(e) => workflowsHook.setNewWorkflowName(e.target.value)}
-                required
-                className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
-                Description
-              </label>
-              <input
-                type="text"
-                value={workflowsHook.newWorkflowDescription}
-                onChange={(e) => workflowsHook.setNewWorkflowDescription(e.target.value)}
-                className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => workflowsHook.setShowCreateWorkflowModal(false)}
-                className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)] transition-colors"
-              >
-                Create
-              </button>
-            </div>
-          </form>
-        </Modal>
+        <CreateWorkflowModal
+          isOpen={workflowsHook.showCreateWorkflowModal}
+          onClose={() => workflowsHook.setShowCreateWorkflowModal(false)}
+          onCreate={async (name, description) => {
+            await workflowsHook.handleCreateWorkflow(name, description);
+          }}
+          isPending={workflowsHook.isCreatingWorkflow}
+        />
       </div>
     </IOSShell>
   );

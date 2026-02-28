@@ -152,8 +152,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
 
   // Состояния для создания воркфлоу
   const [showCreateWorkflowModal, setShowCreateWorkflowModal] = useState(false);
-  const [newWorkflowName, setNewWorkflowName] = useState('');
-  const [newWorkflowDescription, setNewWorkflowDescription] = useState('');
 
   // Для создания кастомной ноды
   const [newNodePosition, setNewNodePosition] = useState<{ x: number; y: number } | null>(null);
@@ -210,8 +208,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
       queryClient.invalidateQueries({ queryKey: ['workflows', selectedProjectId] });
       toast.success('Workflow created');
       setShowCreateWorkflowModal(false);
-      setNewWorkflowName('');
-      setNewWorkflowDescription('');
     },
     onError: (err: unknown) => {
       console.error(err);
@@ -323,22 +319,23 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     setShowNodeList(false);
   }, []);
 
-  const handleCreateWorkflow = useCallback(async () => {
-    if (!newWorkflowName.trim() || !selectedProjectId) {
+  // #CHANGED: принимает аргументы, не использует внутренние состояния
+  const handleCreateWorkflow = useCallback(async (name: string, description: string) => {
+    if (!name.trim() || !selectedProjectId) {
       toast.error('Name is required');
       return false;
     }
     try {
       await createWorkflowMutation.mutateAsync({
-        name: newWorkflowName,
-        description: newWorkflowDescription,
+        name,
+        description,
         projectId: selectedProjectId,
       });
       return true;
     } catch {
       return false;
     }
-  }, [newWorkflowName, newWorkflowDescription, selectedProjectId, createWorkflowMutation]);
+  }, [selectedProjectId, createWorkflowMutation]);
 
   return {
     // данные из query
@@ -356,8 +353,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     newNodePrompt,
     newNodeTitle,
     showCreateWorkflowModal,
-    newWorkflowName,
-    newWorkflowDescription,
     validateNodeUnique,
 
     // сеттеры
@@ -365,8 +360,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     setCurrentWorkflowId,
     setShowNodeList,
     setShowCreateWorkflowModal,
-    setNewWorkflowName,
-    setNewWorkflowDescription,
     setShowNodeModal,
     setNewNodePrompt,
     setNewNodeTitle,

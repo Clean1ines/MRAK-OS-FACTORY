@@ -44,7 +44,8 @@ fi
 # Запуск сервера и проверка health endpoint
 echo "🚀 Starting server container for health check..."
 # #ADDED: Set dummy env vars to allow server to start (if possible)
-CONTAINER_ID=$(docker run -d -e GROQ_API_KEY=dummy -e DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy -e MASTER_KEY=dummykey123 -p 8000:8000 mrak-os-prod)
+CONTAINER_ID=$(docker run -d -e GROQ_API_KEY=dummy -e DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy -p 8000:8000 mrak-os-prod)
+sleep 5
 
 # Проверяем, что контейнер жив
 if ! docker ps --filter "id=$CONTAINER_ID" --format '{{.Status}}' | grep -q "Up"; then

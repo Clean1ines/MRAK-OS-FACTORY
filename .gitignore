@@ -7,12 +7,6 @@ __pycache__/
 venv/
 .venv/
 .pytest_cache/
-project_dump.txt
-generate_tree.py
-
-
-dump_project.py
-# Служебные директории и скрипты
 .mypy_cache/
 .ruff_cache/
 
@@ -52,23 +46,38 @@ scripts/*
 *.sql
 project_dump.txt
 backups/
-
-# Сгенерированные артефакты требований
-MRAK_*.json
-epic_details/
-docs/
-
-# Локальные конфиги и базы данных (уже есть backups/)
 *.db
 *.sqlite3
 
-# IDE (если используешь)
+# Generated
+MRAK_*.json
+epic_details/
+docs/
+tree_output.txt
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-tree_output.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
 smee.log
-epic_detailer.py
-node_modules
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Migrations
+migrations/*.sql
+!migrations/.gitkeep
+test-results/
+frontend/test-results/
+frontend/playwright-report/

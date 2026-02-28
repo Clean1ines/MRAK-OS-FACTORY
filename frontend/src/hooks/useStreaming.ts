@@ -10,7 +10,8 @@ export const useStreaming = () => {
       callbacks: {
         onChunk: (chunk: string) => void;
         onFinish: (fullText: string) => void;
-        onError?: (err: any) => void;
+        // #CHANGED: any -> unknown
+        onError?: (err: unknown) => void;
       }
     ) => {
       setIsStreaming(true);

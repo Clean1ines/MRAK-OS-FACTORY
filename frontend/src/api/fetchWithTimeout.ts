@@ -5,6 +5,12 @@ interface FetchWithTimeoutOptions extends RequestInit {
   timeout?: number; // milliseconds, default 30000
 }
 
+// #ADDED: Extended Request interface to store timeout and controller
+interface ExtendedRequest extends Request {
+  _timeoutId?: ReturnType<typeof setTimeout>;
+  _controller?: AbortController;
+}
+
 export class TimeoutError extends Error {
   constructor(message: string) {
     super(message);
@@ -17,7 +23,7 @@ export async function fetchWithTimeout(
   options: FetchWithTimeoutOptions = {}
 ): Promise<Response> {
   const { timeout = 30000, ...fetchOptions } = options;
-  
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
@@ -47,17 +53,19 @@ export function createTimeoutMiddleware(timeout: number = 30000) {
       const timeoutId = setTimeout(() => {
         controller.abort();
       }, timeout);
-      
+
       // Store timeoutId on request for cleanup
-      (request as any)._timeoutId = timeoutId;
-      (request as any)._controller = controller;
-      
+      const extRequest = request as ExtendedRequest;
+      extRequest._timeoutId = timeoutId;
+      extRequest._controller = controller;
+
       return request;
     },
     onResponse({ request, response }: { request: Request; response: Response }) {
       // Cleanup timeout
-      if ((request as any)._timeoutId) {
-        clearTimeout((request as any)._timeoutId);
+      const extRequest = request as ExtendedRequest;
+      if (extRequest._timeoutId) {
+        clearTimeout(extRequest._timeoutId);
       }
       return response;
     },

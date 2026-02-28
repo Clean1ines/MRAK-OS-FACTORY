@@ -7,6 +7,11 @@ interface AnalyzeRequestBody {
   project_id?: string;
 }
 
+// Функция для получения токена из sessionStorage
+const getSessionToken = (): string | null => {
+  return sessionStorage.getItem('mrak_session_token');
+};
+
 export const useStreaming = () => {
   const [isStreaming, setIsStreaming] = useState(false);
 
@@ -21,10 +26,18 @@ export const useStreaming = () => {
     ) => {
       setIsStreaming(true);
       try {
-        // Используем нативный fetch вместо openapi-fetch, так как streaming endpoint не типизирован корректно
+        // Получаем токен и добавляем в заголовки
+        const token = getSessionToken();
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch('/api/analyze', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(body),
         });
 

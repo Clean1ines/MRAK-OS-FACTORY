@@ -2,14 +2,10 @@ import uuid
 from typing import Optional, Dict, Any, List
 from .base import get_connection
 
-# Константа для владельца по умолчанию (временная, пока нет аутентификации)
 DEFAULT_OWNER_ID = "default-owner"
 
 async def get_projects(owner_id: Optional[str] = None, tx=None) -> List[Dict[str, Any]]:
-    """
-    Return all projects, optionally filtered by owner_id.
-    If owner_id is None, returns all projects (for backward compatibility).
-    """
+    """Return all projects, optionally filtered by owner_id."""
     if tx:
         conn = tx.conn
         close_conn = False
@@ -62,7 +58,7 @@ async def create_project(name: str, description: str = "", owner_id: str = DEFAU
             await conn.close()
 
 async def get_project(project_id: str, tx=None) -> Optional[Dict[str, Any]]:
-    """Return a project by ID."""
+    """Return a project by ID, including owner_id."""
     if tx:
         conn = tx.conn
         close_conn = False
@@ -153,7 +149,6 @@ async def update_project(project_id: str, name: str, description: str, owner_id:
             SET name = $1, description = $2, updated_at = NOW()
             WHERE id = $3 AND owner_id = $4
         ''', name, description, project_id, owner_id)
-        # asyncpg returns "UPDATE <count>"
         return result.split()[-1] != '0'
     finally:
         if close_conn:

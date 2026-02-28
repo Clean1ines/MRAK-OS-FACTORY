@@ -1,14 +1,8 @@
 # CHANGED: Added SET search_path after connection
 import os
 import asyncpg
-from dotenv import load_dotenv
-from pathlib import Path
 
-# Load .env from project root
-env_path = Path(__file__).parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
-
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://test:test123@localhost:5433/mrak_test")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mrak_user:mrak_pass@localhost:5432/mrak_db")
 
 print(f"🔍 BACKEND CONNECTING TO: {DATABASE_URL}") 
 

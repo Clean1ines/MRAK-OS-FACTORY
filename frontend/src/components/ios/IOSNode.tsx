@@ -1,4 +1,6 @@
 // frontend/src/components/ios/IOSNode.tsx
+// #CHANGED: Wrapped in React.memo with custom comparison for performance
+
 import React from 'react';
 
 interface IOSNodeProps {
@@ -7,7 +9,7 @@ interface IOSNodeProps {
     prompt_key: string;
     position_x: number;
     position_y: number;
-    config?: Record<string, unknown>;
+    config?: Record<string, any>;
   };
   isSelected: boolean;
   isConnecting?: boolean;
@@ -17,6 +19,7 @@ interface IOSNodeProps {
   onCompleteConnection?: (targetNodeId: string) => void;
 }
 
+// #ADDED: Custom comparison function for React.memo
 const arePropsEqual = (prev: IOSNodeProps, next: IOSNodeProps): boolean => {
   return (
     prev.node.node_id === next.node.node_id &&
@@ -26,6 +29,7 @@ const arePropsEqual = (prev: IOSNodeProps, next: IOSNodeProps): boolean => {
     JSON.stringify(prev.node.config) === JSON.stringify(next.node.config) &&
     prev.isSelected === next.isSelected &&
     prev.isConnecting === next.isConnecting
+    // Note: callbacks are not compared - they should be memoized in parent
   );
 };
 
@@ -38,28 +42,13 @@ export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
   onStartConnection,
   onCompleteConnection,
 }) => {
-  // #ADDED: safe preview text
-  const previewText = (() => {
-    const customPrompt = node.config?.custom_prompt;
-    if (customPrompt == null) return null;
-    if (typeof customPrompt === 'string') {
-      return customPrompt.length > 80 ? customPrompt.substring(0, 80) + '...' : customPrompt;
-    }
-    try {
-      const str = JSON.stringify(customPrompt);
-      return str.length > 80 ? str.substring(0, 80) + '...' : str;
-    } catch {
-      return String(customPrompt).substring(0, 80) + '...';
-    }
-  })();
-
   return (
     <div
       className={`
         absolute min-w-[220px] max-w-[280px] p-4 rounded-lg
         backdrop-blur-md border transition-all duration-300
-        ${isSelected
-          ? 'border-[var(--bronze-base)] shadow-[0_0_25px_var(--bronze-glow)]'
+        ${isSelected 
+          ? 'border-[var(--bronze-base)] shadow-[0_0_25px_var(--bronze-glow)]' 
           : 'border-[var(--ios-border)] shadow-[var(--shadow-node)]'
         }
         ${isConnecting ? 'ring-2 ring-[var(--bronze-base)] ring-offset-2 ring-offset-black' : ''}
@@ -134,13 +123,14 @@ export const IOSNode: React.FC<IOSNodeProps> = React.memo(({
       </div>
 
       {/* Custom prompt preview */}
-      {previewText && (
+      {node.config?.custom_prompt && (
         <div className="mt-2 p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-[9px] text-[var(--text-secondary)] font-mono max-h-16 overflow-hidden">
-          {previewText}
+          {node.config.custom_prompt.substring(0, 80)}...
         </div>
       )}
     </div>
   );
 }, arePropsEqual);
 
+// #ADDED: Display name for React DevTools
 IOSNode.displayName = 'IOSNode';

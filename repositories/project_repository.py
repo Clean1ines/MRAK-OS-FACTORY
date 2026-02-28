@@ -1,11 +1,10 @@
+# CHANGED: Remove conn parameter, add optional tx; handle connection creation
 import uuid
 from typing import Optional, Dict, Any, List
 from .base import get_connection
 
-DEFAULT_OWNER_ID = "default-owner"
-
-async def get_projects(owner_id: Optional[str] = None, tx=None) -> List[Dict[str, Any]]:
-    """Return all projects, optionally filtered by owner_id."""
+async def get_projects(tx=None) -> List[Dict[str, Any]]:
+    """Return all projects."""
     if tx:
         conn = tx.conn
         close_conn = False
@@ -13,19 +12,11 @@ async def get_projects(owner_id: Optional[str] = None, tx=None) -> List[Dict[str
         conn = await get_connection()
         close_conn = True
     try:
-        if owner_id:
-            rows = await conn.fetch('''
-                SELECT id, name, description, created_at, updated_at
-                FROM projects
-                WHERE owner_id = $1
-                ORDER BY created_at DESC
-            ''', owner_id)
-        else:
-            rows = await conn.fetch('''
-                SELECT id, name, description, created_at, updated_at
-                FROM projects
-                ORDER BY created_at DESC
-            ''')
+        rows = await conn.fetch('''
+            SELECT id, name, description, created_at, updated_at
+            FROM projects
+            ORDER BY created_at DESC
+        ''')
         projects = []
         for row in rows:
             proj = dict(row)
@@ -38,8 +29,8 @@ async def get_projects(owner_id: Optional[str] = None, tx=None) -> List[Dict[str
         if close_conn:
             await conn.close()
 
-async def create_project(name: str, description: str = "", owner_id: str = DEFAULT_OWNER_ID, tx=None) -> str:
-    """Create a new project for a given owner and return its ID."""
+async def create_project(name: str, description: str = "", tx=None) -> str:
+    """Create a new project and return its ID."""
     if tx:
         conn = tx.conn
         close_conn = False
@@ -49,16 +40,16 @@ async def create_project(name: str, description: str = "", owner_id: str = DEFAU
     try:
         project_id = str(uuid.uuid4())
         await conn.execute('''
-            INSERT INTO projects (id, name, description, owner_id)
-            VALUES ($1, $2, $3, $4)
-        ''', project_id, name, description, owner_id)
+            INSERT INTO projects (id, name, description)
+            VALUES ($1, $2, $3)
+        ''', project_id, name, description)
         return project_id
     finally:
         if close_conn:
             await conn.close()
 
 async def get_project(project_id: str, tx=None) -> Optional[Dict[str, Any]]:
-    """Return a project by ID, including owner_id."""
+    """Return a project by ID."""
     if tx:
         conn = tx.conn
         close_conn = False
@@ -88,68 +79,6 @@ async def delete_project(project_id: str, tx=None) -> None:
         close_conn = True
     try:
         await conn.execute('DELETE FROM projects WHERE id = $1', project_id)
-    finally:
-        if close_conn:
-            await conn.close()
-
-async def check_name_exists(name: str, owner_id: str, exclude_id: Optional[str] = None, tx=None) -> bool:
-    """
-    Check if a project with the given name exists for the given owner.
-
-    Args:
-        name: Project name.
-        owner_id: Owner identifier.
-        exclude_id: If provided, exclude this project ID from the check (for updates).
-        tx: Optional transaction.
-
-    Returns:
-        True if a project with the same name and owner exists (and not equal to exclude_id), else False.
-    """
-    if tx:
-        conn = tx.conn
-        close_conn = False
-    else:
-        conn = await get_connection()
-        close_conn = True
-    try:
-        if exclude_id:
-            query = "SELECT 1 FROM projects WHERE name = $1 AND owner_id = $2 AND id != $3 LIMIT 1"
-            result = await conn.fetchval(query, name, owner_id, exclude_id)
-        else:
-            query = "SELECT 1 FROM projects WHERE name = $1 AND owner_id = $2 LIMIT 1"
-            result = await conn.fetchval(query, name, owner_id)
-        return result is not None
-    finally:
-        if close_conn:
-            await conn.close()
-
-async def update_project(project_id: str, name: str, description: str, owner_id: str = DEFAULT_OWNER_ID, tx=None) -> bool:
-    """
-    Update an existing project.
-
-    Args:
-        project_id: ID of the project to update.
-        name: New name.
-        description: New description.
-        owner_id: Owner ID (should match the project's owner; used for consistency).
-        tx: Optional transaction.
-
-    Returns:
-        True if the project was updated, False if not found.
-    """
-    if tx:
-        conn = tx.conn
-        close_conn = False
-    else:
-        conn = await get_connection()
-        close_conn = True
-    try:
-        result = await conn.execute('''
-            UPDATE projects
-            SET name = $1, description = $2, updated_at = NOW()
-            WHERE id = $3 AND owner_id = $4
-        ''', name, description, project_id, owner_id)
-        return result.split()[-1] != '0'
     finally:
         if close_conn:
             await conn.close()

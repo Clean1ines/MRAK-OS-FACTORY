@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -25,13 +24,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, isStrea
     );
   }
 
-  // Преобразуем markdown в HTML и очищаем от потенциально опасного кода
-  const rawHtml = marked.parse(content) as string;
-  const cleanHtml = DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
-
   return (
     <div className="markdown-body" ref={ref}>
-      <div dangerouslySetInnerHTML={{ __html: cleanHtml }} />
+      <div dangerouslySetInnerHTML={{ __html: marked.parse(content) as string }} />
       {isStreaming && <span className="inline-block w-2 h-4 bg-cyan-400 animate-pulse ml-1" />}
     </div>
   );

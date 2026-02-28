@@ -1,9 +1,0 @@
-{
-  "short_name": "MRAK-OS",
-  "name": "MRAK-OS Factory",
-  "icons": [{ "src": "https://cdn-icons-png.flaticon.com/512/2091/2091584.png", "type": "image/png", "sizes": "512x512" }],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#0f172a",
-  "background_color": "#0f172a"
-}

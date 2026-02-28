@@ -1,57 +1,90 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAppStore } from '../store/useAppStore';
-import { useProjects } from '../hooks/useProjects';
-import { useMediaQuery } from '../hooks/useMediaQuery';
+// frontend/src/components/ChatInterface.tsx
+import React, { useEffect, useRef } from 'react';
 import { IOSShell } from './ios/IOSShell';
-import { ChatCanvas } from './ChatCanvas';
+import { client } from '../api/client';
+import type { components } from '../api/generated/schema';
+
+type Project = components['schemas']['Project'];
 
 export const ChatInterface: React.FC = () => {
-  const navigate = useNavigate();
-  const { currentProjectId, models, selectedModel, setSelectedModel } = useAppStore();
-  const { projects } = useProjects();
-  useMediaQuery('(max-width: 768px)');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [currentProject, setCurrentProject] = React.useState<Project | null>(null);
 
-  const currentProject = projects.find(p => p.id === currentProjectId);
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      const res = await client.GET('/api/projects');
+      if (res.data && res.data.length > 0) {
+        // Ensure id is defined before setting
+        const project = res.data[0];
+        if (project.id) {
+          setCurrentProject(project);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load projects:', e);
+    }
+  };
 
   return (
     <IOSShell>
-      <div className="flex h-full w-full min-w-0 overflow-hidden">
-        <main className="flex-1 flex flex-col w-full min-w-0 overflow-x-hidden">
-          <header
-            className="h-14 flex items-center justify-between px-6 border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]"
-            data-testid="main-header"
-          >
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <h1 className="text-lg font-bold text-[var(--bronze-base)] truncate">
-                {currentProject?.name || 'Select a project'}
-              </h1>
-              {models.length > 0 && (
-                <select
-                  value={selectedModel || ''}
-                  onChange={(e) => setSelectedModel(e.target.value || null)}
-                  className="bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-2 py-1 text-xs text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
-                >
-                  <option value="" disabled>Select model</option>
-                  {models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.id}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <button
-              onClick={() => navigate('/workspace')}
-              className="px-4 py-1.5 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors whitespace-nowrap ml-2"
-            >
-              Manage Workflows
-            </button>
-          </header>
+      <div className="flex h-full">
+        {/* Sidebar */}
+        <aside className="w-64 bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col">
+          <div className="p-4 border-b border-[var(--ios-border)]">
+            <h2 className="text-sm font-bold text-[var(--bronze-base)]">Projects</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2">
+            {currentProject ? (
+              <div className="p-2 text-xs text-[var(--text-main)]">
+                <div className="font-semibold">{currentProject.name}</div>
+                <div className="text-[var(--text-muted)]">{currentProject.description}</div>
+              </div>
+            ) : (
+              <div className="text-[10px] text-[var(--text-muted)] text-center py-4">
+                No project selected
+              </div>
+            )}
+          </div>
+        </aside>
 
-          <ChatCanvas />
+        {/* Main Chat */}
+        <main className="flex-1 flex flex-col">
+          <header className="h-14 flex items-center px-6 border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
+            <h1 className="text-lg font-bold text-[var(--bronze-base)]">
+              {currentProject?.name || 'Select a project'}
+            </h1>
+          </header>
+          
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="text-center text-[var(--text-muted)] py-8">
+              Start a conversation to begin crafting your project
+            </div>
+          </div>
+          
+          <div className="p-4 border-t border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Type your message..."
+                className="flex-1 bg-[var(--ios-glass)] border border-[var(--ios-border)] rounded px-4 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
+                disabled={!currentProject}
+              />
+              <button
+                className="px-4 py-2 text-xs font-semibold rounded bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)] transition-colors disabled:opacity-30"
+                disabled={!currentProject}
+              >
+                Send
+              </button>
+            </div>
+          </div>
         </main>
       </div>
+      
+      <div ref={messagesEndRef} />
     </IOSShell>
   );
 };

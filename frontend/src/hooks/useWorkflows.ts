@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { client } from '../api/client';
 import toast from 'react-hot-toast';
 import type { NodeData, EdgeData } from './useCanvasEngine';
-import { useNodeValidation } from '../components/ios/useNodeValidation';
 import { validateWorkflowAcyclic } from '../utils/graphUtils';
+import { useWorkflowCanvas } from './useWorkflowCanvas';
 
 interface WorkflowSummary {
   id: string;
@@ -139,22 +139,15 @@ const deleteWorkflowApi = async (id: string) => {
 export const useWorkflows = (selectedProjectId: string | null) => {
   const queryClient = useQueryClient();
 
-  const [nodes, setNodes] = useState<NodeData[]>([]);
-  const [edges, setEdges] = useState<EdgeData[]>([]);
-  const [workflowName, setWorkflowName] = useState('');
   const [currentWorkflowId, setCurrentWorkflowId] = useState<string | null>(null);
+  const [workflowName, setWorkflowName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showNodeModal, setShowNodeModal] = useState(false);
-  const [showNodeList, setShowNodeList] = useState(false);
-  const [newNodePrompt, setNewNodePrompt] = useState('');
-  const [newNodeTitle, setNewNodeTitle] = useState('');
-  const { validateNodeUnique } = useNodeValidation(nodes);
 
   // Состояния для создания воркфлоу
   const [showCreateWorkflowModal, setShowCreateWorkflowModal] = useState(false);
 
-  // Для создания кастомной ноды
-  const [newNodePosition, setNewNodePosition] = useState<{ x: number; y: number } | null>(null);
+  // Холст управляется отдельным хуком
+  const canvas = useWorkflowCanvas();
 
   // Запрос списка воркфлоу
   const {
@@ -177,28 +170,32 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     enabled: !!currentWorkflowId,
   });
 
-  // Эффект для обновления nodes/edges при загрузке деталей
+  // Эффект для обновления canvas при загрузке деталей
   useEffect(() => {
     if (workflowDetail) {
-      setNodes((workflowDetail.nodes || []).map((n: WorkflowNode) => ({
+      const nodes = (workflowDetail.nodes || []).map((n: WorkflowNode) => ({
         id: n.node_id || crypto.randomUUID(),
         node_id: n.node_id!,
         prompt_key: n.prompt_key || 'UNKNOWN',
         position_x: n.position_x || 100,
         position_y: n.position_y || 100,
         config: n.config || {}
-      })));
-      setEdges((workflowDetail.edges || []).map((e: WorkflowEdge) => ({
+      }));
+      const edges = (workflowDetail.edges || []).map((e: WorkflowEdge) => ({
         id: e.id || crypto.randomUUID(),
         source_node: e.source_node!,
         target_node: e.target_node!
-      })));
+      }));
+      // Обновляем состояние холста (setNodes/setEdges доступны из canvas)
+      canvas.setNodes(nodes);
+      canvas.setEdges(edges);
       setWorkflowName(workflowDetail.workflow?.name || '');
     } else {
-      setNodes([]);
-      setEdges([]);
+      canvas.setNodes([]);
+      canvas.setEdges([]);
       setWorkflowName('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowDetail]);
 
   // Мутация создания воркфлоу (просто имя, без нод)
@@ -233,8 +230,8 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     mutationFn: deleteWorkflowApi,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflows', selectedProjectId] });
-      setNodes([]);
-      setEdges([]);
+      canvas.setNodes([]);
+      canvas.setEdges([]);
       setCurrentWorkflowId(null);
       setWorkflowName('New Workflow');
       toast.success('✅ Удалено');
@@ -250,7 +247,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
       toast.error('⚠️ Заполните обязательные поля');
       return false;
     }
-    if (!validateWorkflowAcyclic(nodes, edges).valid) {
+    if (!validateWorkflowAcyclic(canvas.nodes, canvas.edges).valid) {
       toast.error('⚠️ Обнаружен цикл – удалите круговые соединения');
       return false;
     }
@@ -261,14 +258,14 @@ export const useWorkflows = (selectedProjectId: string | null) => {
         name: workflowName,
         description: 'Created in workspace editor',
         projectId: selectedProjectId,
-        nodes,
-        edges,
+        nodes: canvas.nodes,
+        edges: canvas.edges,
       });
       return true;
     } finally {
       setLoading(false);
     }
-  }, [workflowName, selectedProjectId, currentWorkflowId, nodes, edges, saveWorkflowMutation]);
+  }, [workflowName, selectedProjectId, currentWorkflowId, canvas.nodes, canvas.edges, saveWorkflowMutation]);
 
   const handleDelete = useCallback(async () => {
     if (!currentWorkflowId || !confirm(`Удалить "${workflowName}"?`)) return false;
@@ -280,46 +277,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     }
   }, [currentWorkflowId, workflowName, deleteWorkflowMutation]);
 
-  const handleAddCustomNode = useCallback((x: number, y: number) => {
-    setNewNodeTitle('');
-    setNewNodePrompt('');
-    setShowNodeModal(true);
-    setNewNodePosition({ x, y });
-  }, []);
-
-  const confirmAddCustomNode = useCallback(async () => {
-    if (!newNodePrompt.trim()) {
-      toast.error('Введите промпт');
-      return;
-    }
-    const title = newNodeTitle.trim() || 'CUSTOM_PROMPT';
-    const err = validateNodeUnique(title, newNodePrompt);
-    if (err) {
-      toast.error(`⚠️ ${err}`);
-      return;
-    }
-    if (newNodePosition) {
-      setNodes(prev => [...prev, {
-        id: crypto.randomUUID(),
-        node_id: crypto.randomUUID(),
-        prompt_key: title,
-        position_x: newNodePosition.x,
-        position_y: newNodePosition.y,
-        config: { custom_prompt: newNodePrompt }
-      }]);
-    }
-    setShowNodeModal(false);
-    setNewNodePrompt('');
-    setNewNodeTitle('');
-    setNewNodePosition(null);
-  }, [newNodePrompt, newNodeTitle, newNodePosition, validateNodeUnique]);
-
-  const addNodeFromList = useCallback((node: NodeData) => {
-    setNodes(prev => [...prev, node]);
-    setShowNodeList(false);
-  }, []);
-
-  // #CHANGED: принимает аргументы, не использует внутренние состояния
   const handleCreateWorkflow = useCallback(async (name: string, description: string) => {
     if (!name.trim() || !selectedProjectId) {
       toast.error('Name is required');
@@ -342,38 +299,21 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     workflows,
     isLoadingWorkflows,
     workflowsError,
+    // состояния из canvas
+    ...canvas,
     // состояния
-    nodes,
-    edges,
     workflowName,
     currentWorkflowId,
     loading: loading || isLoadingDetail || saveWorkflowMutation.isPending,
-    showNodeModal,
-    showNodeList,
-    newNodePrompt,
-    newNodeTitle,
     showCreateWorkflowModal,
-    validateNodeUnique,
-
     // сеттеры
     setWorkflowName,
     setCurrentWorkflowId,
-    setShowNodeList,
     setShowCreateWorkflowModal,
-    setShowNodeModal,
-    setNewNodePrompt,
-    setNewNodeTitle,
-    setNodes,
-    setEdges,
-
     // функции
     handleSave,
     handleDelete,
-    handleAddCustomNode,
-    confirmAddCustomNode,
-    addNodeFromList,
     handleCreateWorkflow,
-
     // статусы мутаций
     isCreatingWorkflow: createWorkflowMutation.isPending,
     isDeletingWorkflow: deleteWorkflowMutation.isPending,

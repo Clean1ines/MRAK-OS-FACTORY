@@ -4,6 +4,12 @@ import { useStreaming } from '../hooks/useStreaming';
 import { useNotification } from '../hooks/useNotifications';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { ChatMessage } from './ChatMessage';
+import {
+  TEXTAREA_LINE_HEIGHT,
+  TEXTAREA_MAX_ROWS_DESKTOP,
+  TEXTAREA_MAX_ROWS_MOBILE,
+  TEXTAREA_MIN_HEIGHT,
+} from '../constants/canvas';
 
 // Компонент расширяющегося textarea с кнопкой отправки внутри (без disabled)
 const ExpandingTextarea: React.FC<{
@@ -15,8 +21,8 @@ const ExpandingTextarea: React.FC<{
   isMobile: boolean;
 }> = ({ value, onChange, onKeyDown, onSend, placeholder, isMobile }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineHeight = 24; // приблизительная высота строки
-  const maxRows = isMobile ? 5 : 15;
+  const lineHeight = TEXTAREA_LINE_HEIGHT;
+  const maxRows = isMobile ? TEXTAREA_MAX_ROWS_MOBILE : TEXTAREA_MAX_ROWS_DESKTOP;
   const maxHeight = lineHeight * maxRows;
 
   useEffect(() => {
@@ -38,7 +44,7 @@ const ExpandingTextarea: React.FC<{
         placeholder={placeholder}
         rows={1}
         className="w-full bg-[var(--ios-glass)] border border-[var(--ios-border)] rounded-lg px-4 py-3 pr-16 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)] resize-none overflow-hidden"
-        style={{ minHeight: '48px' }}
+        style={{ minHeight: `${TEXTAREA_MIN_HEIGHT}px` }}
       />
       <button
         onClick={onSend}

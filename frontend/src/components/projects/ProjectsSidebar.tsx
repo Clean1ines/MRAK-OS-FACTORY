@@ -37,7 +37,6 @@ export const ProjectsSidebar: React.FC = () => {
     isDeleting,
   } = useProjects();
 
-  // Локальные состояния для редактирования
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
@@ -49,7 +48,6 @@ export const ProjectsSidebar: React.FC = () => {
     setIsSidebarOpen(!isMobile);
   }, [isMobile]);
 
-  // При открытии модалки редактирования заполняем поля
   const handleOpenEditModal = (project: Project) => {
     setEditName(project.name);
     setEditDescription(project.description);
@@ -90,7 +88,10 @@ export const ProjectsSidebar: React.FC = () => {
     : 'w-64 h-full';
 
   return (
-    <aside className={`${sidebarClasses} bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col text-[var(--text-main)]`}>
+    <aside
+      className={`${sidebarClasses} bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col text-[var(--text-main)]`}
+      data-testid="sidebar"
+    >
       <div className="flex justify-end p-2">
         <button
           onClick={handleCloseSidebar}
@@ -132,6 +133,7 @@ export const ProjectsSidebar: React.FC = () => {
                 : 'text-[var(--text-secondary)] hover:bg-[var(--ios-glass-bright)]'
             }`}
             onClick={() => handleProjectClick(project.id)}
+            data-testid="project-item"
           >
             <span className="truncate flex-1 text-sm">{project.name}</span>
             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>

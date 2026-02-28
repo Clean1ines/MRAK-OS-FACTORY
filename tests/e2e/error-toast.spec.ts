@@ -37,7 +37,7 @@ test.describe('Global Error Toast (400 Bad Request)', () => {
 
     // 4. Navigate to workspace
     await page.goto('/workspace');
-    await expect(page.locator('.flex-1.relative.overflow-hidden')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-testid="workspace-canvas"]')).toBeVisible({ timeout: 15000 });
 
     // 5. Trigger project creation via API client
     await page.evaluate(async () => {

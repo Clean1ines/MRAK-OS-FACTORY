@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, Project } from '../store/useAppStore';
 import { useNotification } from './useNotifications';
-import { api, getErrorMessage } from '../api/client';
+import { api, getErrorMessage, ProjectResponse } from '../api/client';
 
 interface CreateProjectParams {
   name: string;
@@ -14,15 +15,96 @@ interface UpdateProjectParams {
   description?: string;
 }
 
+const fetchProjects = async (): Promise<ProjectResponse[]> => {
+  const { data, error } = await api.projects.list();
+  if (error) throw error;
+  return data || [];
+};
+
 export const useProjects = () => {
-  const { projects, addProject, updateProject, removeProject } = useAppStore();
+  const queryClient = useQueryClient();
   const { showNotification } = useNotification();
+  const { addProject, updateProject, removeProject } = useAppStore();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
+
+  const {
+    data: projects = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['projects'],
+    queryFn: fetchProjects,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async ({ name, description = '' }: CreateProjectParams) => {
+      const { data, error } = await api.projects.create({ name, description });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data && data.id && data.name) {
+        addProject({
+          id: data.id,
+          name: data.name,
+          description: data.description || '',
+        });
+        queryClient.invalidateQueries({ queryKey: ['projects'] });
+        showNotification(`Project "${data.name}" created`, 'success');
+        setIsCreateOpen(false);
+      }
+    },
+    onError: (err: unknown) => {
+      const message = getErrorMessage(err);
+      showNotification(message, 'error');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, name, description = '' }: UpdateProjectParams) => {
+      const { data, error } = await api.projects.update(id, { name, description });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (data && data.id && data.name) {
+        updateProject(variables.id, { name: variables.name, description: variables.description || '' });
+        queryClient.invalidateQueries({ queryKey: ['projects'] });
+        showNotification(`Project updated`, 'success');
+        setIsEditOpen(false);
+        setEditingProject(null);
+      }
+    },
+    onError: (err: unknown) => {
+      const message = getErrorMessage(err);
+      showNotification(message, 'error');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await api.projects.delete(id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: (id) => {
+      removeProject(id);
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      showNotification('Project deleted', 'success');
+      setIsDeleteOpen(false);
+      setDeletingProject(null);
+    },
+    onError: (err: unknown) => {
+      const message = getErrorMessage(err);
+      showNotification(message, 'error');
+    },
+  });
 
   const validateName = (name: string): string | null => {
     if (!name.trim()) return 'Project name cannot be empty';
@@ -37,33 +119,14 @@ export const useProjects = () => {
         showNotification(validationError, 'error');
         return false;
       }
-
       try {
-        const { data, error } = await api.projects.create({ name, description });
-        if (error) {
-          const message = getErrorMessage(error);
-          showNotification(message, 'error');
-          return false;
-        }
-
-        if (data && data.id && data.name) {
-          addProject({
-            id: data.id,
-            name: data.name,
-            description: data.description || '',
-          });
-          showNotification(`Project "${name}" created`, 'success');
-          setIsCreateOpen(false);
-          return true;
-        }
-        return false;
-      } catch (err) {
-        const message = getErrorMessage(err);
-        showNotification(message, 'error');
+        await createMutation.mutateAsync({ name, description });
+        return true;
+      } catch {
         return false;
       }
     },
-    [addProject, showNotification]
+    [createMutation, showNotification]
   );
 
   const updateProjectHandler = useCallback(
@@ -73,54 +136,26 @@ export const useProjects = () => {
         showNotification(validationError, 'error');
         return false;
       }
-
       try {
-        const { data, error } = await api.projects.update(id, { name, description });
-        if (error) {
-          const message = getErrorMessage(error);
-          showNotification(message, 'error');
-          return false;
-        }
-
-        if (data && data.id && data.name) {
-          updateProject(id, { name, description });
-          showNotification(`Project updated`, 'success');
-          setIsEditOpen(false);
-          setEditingProject(null);
-          return true;
-        }
-        return false;
-      } catch (err) {
-        const message = getErrorMessage(err);
-        showNotification(message, 'error');
+        await updateMutation.mutateAsync({ id, name, description });
+        return true;
+      } catch {
         return false;
       }
     },
-    [updateProject, showNotification]
+    [updateMutation, showNotification]
   );
 
   const deleteProjectHandler = useCallback(
     async (id: string) => {
       try {
-        const { error } = await api.projects.delete(id);
-        if (error) {
-          const message = getErrorMessage(error);
-          showNotification(message, 'error');
-          return false;
-        }
-
-        removeProject(id);
-        showNotification('Project deleted', 'success');
-        setIsDeleteOpen(false);
-        setDeletingProject(null);
+        await deleteMutation.mutateAsync(id);
         return true;
-      } catch (err) {
-        const message = getErrorMessage(err);
-        showNotification(message, 'error');
+      } catch {
         return false;
       }
     },
-    [removeProject, showNotification]
+    [deleteMutation]
   );
 
   const openEditModal = useCallback((project: Project) => {
@@ -143,6 +178,9 @@ export const useProjects = () => {
 
   return {
     projects,
+    isLoading,
+    error,
+    refetch,
     isCreateOpen,
     isEditOpen,
     isDeleteOpen,
@@ -155,5 +193,8 @@ export const useProjects = () => {
     createProject,
     updateProject: updateProjectHandler,
     deleteProject: deleteProjectHandler,
+    isCreating: createMutation.isPending,
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
   };
 };

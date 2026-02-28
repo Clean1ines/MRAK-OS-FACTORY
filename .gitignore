@@ -1,35 +1,83 @@
-# .gitignore
-.env
-.streamlit/secrets.toml
-app.log
-system_prompt.txt
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 venv/
+.venv/
 .pytest_cache/
-project_dump.txt
-dump_project.py
-# Служебные директории и скрипты
 .mypy_cache/
-.streamlit/
-app.log
-project_dump.txt
+.ruff_cache/
+
+# Node.js
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Local scripts
+cleanup_neon_prod.py
+compare_schemas.sh
+sync_*.sh
+reset_test_db.sh
+run_all_tests.sh
+test_local.sh
+fix_*.sql
 check_db.py
-generate_tree.py
+dump_project.py
+epic_detailer.py
 index_project.py
-init_db.sql
+generate_tree.py
 keep_alive.py
-pytest.ini
-tests/__pycache__/
-
-# Служебные скрипты
-check_db.py
-generate_tree.py
-index_project.py
-init_db.sql
-backups/
-
-# Игнорируем временные файлы и бэкапы
+project_dump.txt
 tree_output.txt
-restore_last_backup.sh
-scripts/
+
+# Scripts
+scripts/*
+!scripts/e2e-run.sh
+!scripts/ensure_test_db.sh
+!scripts/verify_docker.sh
+
+# Backups
+*.sql
+project_dump.txt
 backups/
+*.db
+*.sqlite3
+
+# Generated
+MRAK_*.json
+epic_details/
+docs/
+tree_output.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+smee.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Migrations
+migrations/*.sql
+!migrations/.gitkeep
+test-results/
+frontend/test-results/
+frontend/playwright-report/

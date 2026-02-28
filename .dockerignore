@@ -1,38 +1,81 @@
-# Системные и временные файлы
-.git/
-.mypy_cache/
-.pytest_cache/
-__pycache__/
-venv/
-.env
-*.pyc
-*.log
-*.sql
-
-# Локальные скрипты и конфиги
-.pre-commit-config.yaml
-.streamlit/
-app.log
-check_db.py
-generate_tree.py
-index_project.py
-init_db.sql
-keep_alive.py
-project_dump.txt
-pytest.ini
-tests/
-
-# Артефакты сборки и документация
-*.md
-LICENSE
-requirements-dev.txt
-pytest.ini
-tests/
-__pycache__/
-*.pyc
-.mypy_cache/
-.pytest_cache/
-.env
+# Git
 .git
 .gitignore
-README.md
+
+# Python dev files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+venv/
+.venv/
+
+# Tests (exclude from Docker image)
+tests/
+pytest.ini
+conftest.py
+*.cover
+htmlcov/
+
+# Local dev scripts (CRITICAL: not for production)
+cleanup_neon_prod.py
+compare_schemas.sh
+sync_*.sh
+reset_test_db.sh
+run_all_tests.sh
+test_local.sh
+fix_*.sql
+check_db.py
+dump_project.py
+epic_detailer.py
+index_project.py
+generate_tree.py
+keep_alive.py
+project_dump.txt
+tree_output.txt
+scripts/
+
+# Dumps and backups
+*.sql
+project_dump.txt
+backups/
+*.db
+*.sqlite3
+MRAK_*.json
+epic_details/
+docs/
+
+# Logs
+*.log
+app.log
+
+# Environment files (SECURITY: never include secrets)
+.env
+.env.*
+!.env.example
+
+# Frontend dev (built inside Docker)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/src/**/__tests__/
+frontend/src/**/*.test.ts
+frontend/src/**/*.test.tsx
+frontend/src/test/
+frontend/vitest.config.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migrations (applied via CI/CD, not in image)
+migrations/

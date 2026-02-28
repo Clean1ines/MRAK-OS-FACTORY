@@ -89,7 +89,61 @@ async function fetchModels() {
     return apiFetch('/api/models');
 }
 
+// Режимы (промпты)
+async function fetchModes() {
+    return apiFetch('/api/modes');
+}
+
+// История сообщений
+async function fetchMessages(projectId) {
+    return apiFetch(`/api/projects/${projectId}/messages`);
+}
+
+// Сессии уточнения
+async function startClarification(projectId, targetArtifactType, model = null) {
+    return apiFetch('/api/clarification/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            project_id: projectId,
+            target_artifact_type: targetArtifactType,
+            model: model
+        })
+    });
+}
+
+async function sendClarificationMessage(sessionId, message) {
+    return apiFetch(`/api/clarification/${sessionId}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+    });
+}
+
+async function getClarificationSession(sessionId) {
+    return apiFetch(`/api/clarification/${sessionId}`);
+}
+
+async function completeClarificationSession(sessionId) {
+    return apiFetch(`/api/clarification/${sessionId}/complete`, { method: 'POST' });
+}
+
+async function fetchActiveClarificationSessions(projectId) {
+    return apiFetch(`/api/projects/${projectId}/clarification/active`);
+}
+
+// Типы артефактов
+async function fetchArtifactTypes() {
+    return apiFetch('/api/artifact-types');
+}
+
+async function fetchArtifactType(type) {
+    return apiFetch(`/api/artifact-types/${type}`);
+}
+
+// Экспортируем всё в глобальный объект api
 window.api = {
+    apiFetch,
     fetchProjects,
     createProject,
     fetchArtifacts,
@@ -97,7 +151,16 @@ window.api = {
     fetchLatestArtifact,
     generateArtifact,
     saveArtifactPackage,
-    fetchModels
+    fetchModels,
+    fetchModes,
+    fetchMessages,
+    startClarification,
+    sendClarificationMessage,
+    getClarificationSession,
+    completeClarificationSession,
+    fetchActiveClarificationSessions,
+    fetchArtifactTypes,
+    fetchArtifactType
 };
 
 console.log('[API] загрузка завершена, window.api определён:', !!window.api);

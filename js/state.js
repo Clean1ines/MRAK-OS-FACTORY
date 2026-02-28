@@ -9,6 +9,10 @@ const AppState = {
     currentArtifact: null,
     currentParentId: null,
     models: [],
+    // ADDED: текущая сессия уточнения в расширенном режиме
+    currentClarificationSessionId: null,
+    // ADDED: загруженные типы артефактов из БД
+    artifactTypes: [],
 };
 
 const listeners = [];
@@ -21,13 +25,17 @@ function notify() {
     listeners.forEach(fn => fn());
 }
 
-function getProjects() { console.log('[STATE] getProjects'); return AppState.projects; }
-function getCurrentProjectId() { console.log('[STATE] getCurrentProjectId'); return AppState.currentProjectId; }
-function getArtifacts() { console.log('[STATE] getArtifacts'); return AppState.artifacts; }
-function getParentData() { console.log('[STATE] getParentData'); return AppState.parentData; }
-function getCurrentArtifact() { console.log('[STATE] getCurrentArtifact'); return AppState.currentArtifact; }
-function getCurrentParentId() { console.log('[STATE] getCurrentParentId'); return AppState.currentParentId; }
-function getModels() { console.log('[STATE] getModels'); return AppState.models; }
+// Геттеры
+function getProjects() { return AppState.projects; }
+function getCurrentProjectId() { return AppState.currentProjectId; }
+function getArtifacts() { return AppState.artifacts; }
+function getParentData() { return AppState.parentData; }
+function getCurrentArtifact() { return AppState.currentArtifact; }
+function getCurrentParentId() { return AppState.currentParentId; }
+function getModels() { return AppState.models; }
+function getCurrentClarificationSessionId() { return AppState.currentClarificationSessionId; }
+// ADDED
+function getArtifactTypes() { return AppState.artifactTypes; }
 
 function setProjects(projects) { console.log('[STATE] setProjects', projects.length); AppState.projects = projects; notify(); }
 function setCurrentProjectId(id) { 
@@ -35,7 +43,8 @@ function setCurrentProjectId(id) {
     AppState.currentProjectId = id; 
     if (id) localStorage.setItem('selectedProjectId', id);
     else localStorage.removeItem('selectedProjectId');
-    notify(); 
+    AppState.currentClarificationSessionId = null;
+    notify();
 }
 function setArtifacts(artifacts) { 
     console.log('[STATE] setArtifacts', artifacts.length, artifacts[0]?.type); 
@@ -49,19 +58,46 @@ function setCurrentArtifact(artifact) { console.log('[STATE] setCurrentArtifact'
 function setCurrentParentId(id) { console.log('[STATE] setCurrentParentId', id); AppState.currentParentId = id; }
 function setModels(models) { console.log('[STATE] setModels', models.length); AppState.models = models; notify(); }
 
-const generationRules = {
-    "BusinessRequirementPackage": ["ProductCouncilAnalysis"],
-    "ReqEngineeringAnalysis": ["BusinessRequirementPackage"],
-    "FunctionalRequirementPackage": ["ReqEngineeringAnalysis"],
-};
-
-function canGenerate(childType, parentType) {
-    const allowed = generationRules[childType];
-    return allowed ? allowed.includes(parentType) : false;
+function setCurrentArtifact(artifact) {
+    AppState.currentArtifact = artifact;
+    notify();
 }
 
+function setCurrentParentId(id) {
+    AppState.currentParentId = id;
+}
+
+function setModels(models) {
+    AppState.models = models;
+    notify();
+}
+
+function setCurrentClarificationSessionId(id) {
+    AppState.currentClarificationSessionId = id;
+    notify();
+}
+
+// ADDED
+function setArtifactTypes(types) {
+    AppState.artifactTypes = types;
+    notify();
+}
+
+// Вспомогательные функции на основе загруженных типов
 function getAllowedParentTypes(childType) {
-    return generationRules[childType] || [];
+    const typeInfo = AppState.artifactTypes.find(t => t.type === childType);
+    return typeInfo ? typeInfo.allowed_parents : [];
+}
+
+function requiresClarification(artifactType) {
+    const typeInfo = AppState.artifactTypes.find(t => t.type === artifactType);
+    return typeInfo ? typeInfo.requires_clarification : false;
+}
+
+// Для обратной совместимости (пока данные не загружены)
+function canGenerate(childType, parentType) {
+    const allowed = getAllowedParentTypes(childType);
+    return allowed.includes(parentType);
 }
 
 let artifactCache = {};
@@ -82,6 +118,15 @@ function clearArtifactCache(parentId, childType) {
     }
 }
 
+function getLastArtifactByType(type, projectId = AppState.currentProjectId) {
+    if (!projectId) return null;
+    const filtered = AppState.artifacts.filter(a => a.type === type && a.status === 'VALIDATED');
+    if (filtered.length === 0) return null;
+    filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return filtered[0];
+}
+
+// Экспортируем в глобальную область
 window.state = {
     getProjects,
     setProjects,
@@ -96,11 +141,17 @@ window.state = {
     setCurrentParentId,
     getModels,
     setModels,
-    canGenerate,
+    getCurrentClarificationSessionId,
+    setCurrentClarificationSessionId,
+    getArtifactTypes,
+    setArtifactTypes,
     getAllowedParentTypes,
+    requiresClarification,
+    canGenerate,
     setArtifactCache,
     getArtifactCache,
     clearArtifactCache,
+    getLastArtifactByType,
     subscribe,
 };
 

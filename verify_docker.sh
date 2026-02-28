@@ -27,7 +27,7 @@ if ! docker run --rm mrak-os-prod pip check 2>&1; then
 fi
 echo "✅ pip check passed"
 
-# #CHANGED: Improved import verification – fail only on ModuleNotFoundError
+# Проверка импорта (пропускаем ошибки конфигурации)
 echo "🔍 Verifying imports (allowing config errors)..."
 IMPORT_OUTPUT=$(docker run --rm mrak-os-prod python -c "import server" 2>&1 || true)
 if echo "$IMPORT_OUTPUT" | grep -q "ModuleNotFoundError"; then
@@ -36,33 +36,49 @@ if echo "$IMPORT_OUTPUT" | grep -q "ModuleNotFoundError"; then
     exit 1
 elif echo "$IMPORT_OUTPUT" | grep -q "Traceback"; then
     echo "⚠️  Import succeeded but raised a configuration error (likely missing env vars)."
-    echo "   This is expected in CI without secrets. Proceeding with health check if possible."
+    echo "   This is expected in CI without secrets. Proceeding with health check."
 else
     echo "✅ Server imports cleanly"
 fi
 
-# Запуск сервера и проверка health endpoint
+# Запуск сервера с фиктивными переменными для проверки health
 echo "🚀 Starting server container for health check..."
-# #ADDED: Set dummy env vars to allow server to start (if possible)
-CONTAINER_ID=$(docker run -d -e GROQ_API_KEY=dummy -e DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy -e MASTER_KEY=dummykey123 -p 8000:8000 mrak-os-prod)
+CONTAINER_ID=$(docker run -d -p 8000:8000 \
+    -e DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" \
+    -e MASTER_KEY="dummykey12345678" \
+    -e GROQ_API_KEY="dummy_groq_key" \
+    mrak-os-prod)
 
-# Проверяем, что контейнер жив
-if ! docker ps --filter "id=$CONTAINER_ID" --format '{{.Status}}' | grep -q "Up"; then
-    echo "❌ Container failed to start"
-    docker logs "$CONTAINER_ID"
-    docker rm -f "$CONTAINER_ID" >/dev/null
-    exit 1
-fi
+# Ждём, пока контейнер начнёт слушать порт
+echo "⏳ Waiting for server to start..."
+for i in {1..10}; do
+    if docker logs "$CONTAINER_ID" 2>&1 | grep -q "Uvicorn running on"; then
+        echo "✅ Server is running"
+        break
+    fi
+    if [ $i -eq 10 ]; then
+        echo "❌ Server did not start within timeout"
+        docker logs "$CONTAINER_ID"
+        docker rm -f "$CONTAINER_ID" >/dev/null
+        exit 1
+    fi
+    sleep 2
+done
 
-# Делаем запрос к health endpoint
+# Дополнительная пауза для стабилизации
+sleep 2
+
+# Проверка health endpoint
 echo "🔍 Testing /health endpoint..."
-if ! curl -f http://localhost:8000/health >/dev/null 2>&1; then
-    echo "❌ Health check failed"
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || true)
+if [ "$HTTP_CODE" = "200" ]; then
+    echo "✅ Health check passed"
+else
+    echo "❌ Health check failed (HTTP $HTTP_CODE)"
     docker logs "$CONTAINER_ID"
     docker rm -f "$CONTAINER_ID" >/dev/null
     exit 1
 fi
-echo "✅ Health check passed"
 
 # Останавливаем и удаляем контейнер
 docker rm -f "$CONTAINER_ID" >/dev/null

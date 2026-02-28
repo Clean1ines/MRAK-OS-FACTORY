@@ -62,7 +62,7 @@ export const ChatCanvas: React.FC = () => {
   const selectedModel = useAppStore(s => s.selectedModel);
   const showNotification = useNotification().showNotification;
 
-  const { isStreaming, startStream } = useStreaming();
+  const { startStream } = useStreaming(); // #CHANGED: removed unused isStreaming
   const scrollRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
 

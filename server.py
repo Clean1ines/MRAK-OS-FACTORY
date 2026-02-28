@@ -15,6 +15,15 @@ import structlog
 from routers import projects, artifacts, clarification, workflows, modes, auth
 import db
 
+def validate_env():
+    required = ["DATABASE_URL", "MASTER_KEY"]
+    missing = [v for v in required if not os.getenv(v)]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+    if len(os.getenv("MASTER_KEY", "")) < 8:
+        raise RuntimeError("MASTER_KEY must be at least 8 characters")
+validate_env()
+
 # #CHANGED: Configure structlog for JSON output with correlation_id support
 # #FIX: inject_contextvars → merge_contextvars (structlog >= 22.1.0)
 structlog.configure(

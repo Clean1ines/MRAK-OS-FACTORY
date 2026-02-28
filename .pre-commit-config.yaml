@@ -75,6 +75,22 @@ repos:
   # Pre-push only hooks (slower checks)
   - repo: local
     hooks:
+      - id: env-check-backend
+        name: Check backend environment variables
+        entry: python scripts/check_env.py .env
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: db-connection-check
+        name: Check database connection
+        entry: python scripts/check_db_connection.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: docker-build-check
         name: Build Docker image (pre-push only)
         entry: bash verify_docker.sh

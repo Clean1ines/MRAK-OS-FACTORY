@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
@@ -76,128 +76,136 @@ export const WorkspacePage: React.FC = () => {
   const [newNodeTitle, setNewNodeTitle] = useState('');
   const { validateNodeUnique } = useNodeValidation(nodes);
 
+  const isUpdatingUrl = useRef(false);
+  const isInitialized = useRef(false);
+
   useEffect(() => {
     setSidebarOpen(!isMobile);
   }, [isMobile]);
 
-  const loadProjects = useCallback(async () => {
-    try {
-      const { data, error } = await api.projects.list();
-      if (error) {
-        console.error('Failed to load projects:', error);
-        return;
-      }
-      if (data && Array.isArray(data)) {
-        setProjects(data);
-        if (data.length > 0 && !selectedProjectId) {
-          if (urlProjectId && data.some(p => p.id === urlProjectId)) {
-            setSelectedProjectId(urlProjectId);
-          } else if (!urlProjectId && localStorage.getItem('workspace_selected_project')) {
-            const stored = localStorage.getItem('workspace_selected_project');
-            if (stored && data.some(p => p.id === stored)) {
-              setSelectedProjectId(stored);
-            } else {
-              setSelectedProjectId(data[0].id!);
-            }
-          } else if (!urlProjectId) {
-            setSelectedProjectId(data[0].id!);
-          }
+  // Загрузка проектов при монтировании
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        const { data, error } = await api.projects.list();
+        if (error) {
+          console.error('Failed to load projects:', error);
+          return;
         }
-      } else {
-        setProjects([]);
+        if (data && Array.isArray(data)) {
+          setProjects(data);
+        } else {
+          setProjects([]);
+        }
+      } catch (e) {
+        console.error('Error loading projects:', e);
       }
-    } catch (e: unknown) {
-      console.error('Error loading projects:', e);
-    }
-  }, [selectedProjectId, urlProjectId]);
-
-  const loadWorkflows = useCallback(async () => {
-    if (!selectedProjectId) return;
-    try {
-      const response = (await client.GET('/api/workflows')) as {
-        data?: WorkflowSummary[];
-        error?: unknown;
-      };
-      if (response.error) {
-        console.error('Failed to load workflows:', response.error);
-        return;
-      }
-      if (response.data && Array.isArray(response.data)) {
-        setWorkflows(response.data);
-      } else {
-        setWorkflows([]);
-      }
-    } catch (e: unknown) {
-      console.error('Error loading workflows:', e);
-    }
-  }, [selectedProjectId]);
-
-  const loadWorkflow = useCallback(async (id: string) => {
-    try {
-      const r = await client.GET('/api/workflows/{workflow_id}', {
-        params: { path: { workflow_id: id } }
-      });
-      if (r.error) {
-        console.error('Failed to load workflow:', r.error);
-        return;
-      }
-      const detail = r.data as WorkflowDetail;
-      if (detail) {
-        setNodes((detail.nodes || []).map((n: WorkflowNode) => ({
-          id: n.node_id || crypto.randomUUID(),
-          node_id: n.node_id!,
-          prompt_key: n.prompt_key || 'UNKNOWN',
-          position_x: n.position_x || 100,
-          position_y: n.position_y || 100,
-          config: n.config || {}
-        })));
-        setEdges((detail.edges || []).map((e: WorkflowEdge) => ({
-          id: e.id || crypto.randomUUID(),
-          source_node: e.source_node!,
-          target_node: e.target_node!
-        })));
-        setCurrentWorkflowId(id);
-        setWorkflowName(detail.workflow?.name || '');
-      }
-    } catch (e: unknown) {
-      console.error('Error loading workflow:', e);
-    }
+    };
+    loadProjects();
   }, []);
 
+  // После загрузки проектов инициализируем выбранный проект
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+    if (projects.length === 0 || isInitialized.current) return;
 
-  useEffect(() => {
-    if (selectedProjectId) {
-      localStorage.setItem('workspace_selected_project', selectedProjectId);
-      if (searchParams.get('projectId') !== selectedProjectId) {
-        setSearchParams({ projectId: selectedProjectId });
-      }
-      loadWorkflows();
-    }
-  }, [selectedProjectId, loadWorkflows, searchParams, setSearchParams]);
-
-  useEffect(() => {
-    if (urlProjectId && urlProjectId !== selectedProjectId) {
-      setSelectedProjectId(urlProjectId);
-    } else if (!urlProjectId && !selectedProjectId) {
-      const stored = localStorage.getItem('workspace_selected_project');
-      if (stored) {
-        setSelectedProjectId(stored);
-      }
-    }
-  }, [urlProjectId, selectedProjectId]);
-
-  useEffect(() => {
-    if (currentWorkflowId) {
-      loadWorkflow(currentWorkflowId);
+    let initialId: string | null = null;
+    if (urlProjectId && projects.some(p => p.id === urlProjectId)) {
+      initialId = urlProjectId;
     } else {
+      const stored = localStorage.getItem('workspace_selected_project');
+      if (stored && projects.some(p => p.id === stored)) {
+        initialId = stored;
+      } else {
+        initialId = projects[0]?.id || null;
+      }
+    }
+
+    if (initialId) {
+      setSelectedProjectId(initialId);
+      // Обновляем URL без мерцания
+      if (searchParams.get('projectId') !== initialId) {
+        isUpdatingUrl.current = true;
+        setSearchParams({ projectId: initialId }, { replace: true });
+        setTimeout(() => { isUpdatingUrl.current = false; }, 100);
+      }
+    }
+    isInitialized.current = true;
+  }, [projects, urlProjectId, setSearchParams, searchParams]);
+
+  // При изменении selectedProjectId загружаем воркфлоу
+  useEffect(() => {
+    if (!selectedProjectId) return;
+    localStorage.setItem('workspace_selected_project', selectedProjectId);
+    const loadWorkflowsForProject = async () => {
+      try {
+        const response = (await client.GET('/api/workflows')) as {
+          data?: WorkflowSummary[];
+          error?: unknown;
+        };
+        if (response.error) {
+          console.error('Failed to load workflows:', response.error);
+          return;
+        }
+        if (response.data && Array.isArray(response.data)) {
+          setWorkflows(response.data);
+        } else {
+          setWorkflows([]);
+        }
+      } catch (e) {
+        console.error('Error loading workflows:', e);
+      }
+    };
+    loadWorkflowsForProject();
+  }, [selectedProjectId]);
+
+  // При изменении URL синхронизируем selectedProjectId, но не создаём цикл
+  useEffect(() => {
+    if (!urlProjectId || urlProjectId === selectedProjectId || isUpdatingUrl.current) return;
+    if (projects.some(p => p.id === urlProjectId)) {
+      setSelectedProjectId(urlProjectId);
+    }
+  }, [urlProjectId, selectedProjectId, projects]);
+
+  // Загрузка конкретного воркфлоу при выборе
+  useEffect(() => {
+    if (!currentWorkflowId) {
       setNodes([]);
       setEdges([]);
       setWorkflowName('');
+      return;
     }
-  }, [currentWorkflowId, loadWorkflow]);
+    const loadWorkflowDetail = async () => {
+      try {
+        const r = await client.GET('/api/workflows/{workflow_id}', {
+          params: { path: { workflow_id: currentWorkflowId } }
+        });
+        if (r.error) {
+          console.error('Failed to load workflow:', r.error);
+          return;
+        }
+        const detail = r.data as WorkflowDetail;
+        if (detail) {
+          setNodes((detail.nodes || []).map((n: WorkflowNode) => ({
+            id: n.node_id || crypto.randomUUID(),
+            node_id: n.node_id!,
+            prompt_key: n.prompt_key || 'UNKNOWN',
+            position_x: n.position_x || 100,
+            position_y: n.position_y || 100,
+            config: n.config || {}
+          })));
+          setEdges((detail.edges || []).map((e: WorkflowEdge) => ({
+            id: e.id || crypto.randomUUID(),
+            source_node: e.source_node!,
+            target_node: e.target_node!
+          })));
+          setWorkflowName(detail.workflow?.name || '');
+        }
+      } catch (e) {
+        console.error('Error loading workflow:', e);
+      }
+    };
+    loadWorkflowDetail();
+  }, [currentWorkflowId]);
 
   const handleSave = async () => {
     if (!workflowName.trim() || !selectedProjectId) {
@@ -237,7 +245,14 @@ export const WorkspacePage: React.FC = () => {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP ${res.status}`);
       }
-      if (!currentWorkflowId) await loadWorkflows();
+      // Обновляем список воркфлоу после сохранения
+      const response = (await client.GET('/api/workflows')) as {
+        data?: WorkflowSummary[];
+        error?: unknown;
+      };
+      if (response.data && Array.isArray(response.data)) {
+        setWorkflows(response.data);
+      }
       toast.success(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
     } catch (e: unknown) {
       console.error('Save error:', e);
@@ -261,7 +276,13 @@ export const WorkspacePage: React.FC = () => {
       setEdges([]);
       setCurrentWorkflowId(null);
       setWorkflowName('New Workflow');
-      await loadWorkflows();
+      const response = (await client.GET('/api/workflows')) as {
+        data?: WorkflowSummary[];
+        error?: unknown;
+      };
+      if (response.data && Array.isArray(response.data)) {
+        setWorkflows(response.data);
+      }
       toast.success('✅ Удалено');
     } catch (e: unknown) {
       console.error('Delete exception:', e);
@@ -317,15 +338,13 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
-  const handleProjectChange = (projectId: string | null) => {
-    setSelectedProjectId(projectId);
-    setCurrentWorkflowId(null);
-  };
-
   const handleCloseSidebar = () => setSidebarOpen(false);
   const handleOpenSidebar = () => setSidebarOpen(true);
 
   const hamburgerWidth = 40;
+
+  // Найти текущий проект для отображения имени
+  const currentProject = projects.find(p => p.id === selectedProjectId);
 
   return (
     <IOSShell>
@@ -353,28 +372,20 @@ export const WorkspacePage: React.FC = () => {
               </button>
             </div>
 
+            {/* Информация о текущем проекте (только для чтения) */}
             <div className="p-3 border-b border-[var(--ios-border)]">
               <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">
-                Project
+                Current Project
               </label>
-              <select
-                value={selectedProjectId || ''}
-                onChange={(e) => handleProjectChange(e.target.value || null)}
-                className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
-              >
-                <option value="">-- Select Project --</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <div className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)]">
+                {currentProject?.name || '—'}
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
               {!selectedProjectId ? (
                 <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">
-                  ⚠️ Select project
+                  ⚠️ Select project on home page
                 </div>
               ) : workflows.length === 0 ? (
                 <div className="text-[10px] text-[var(--text-muted)] text-center py-4">

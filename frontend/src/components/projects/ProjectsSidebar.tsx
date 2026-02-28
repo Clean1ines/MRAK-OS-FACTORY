@@ -67,7 +67,6 @@ export const ProjectsSidebar: React.FC = () => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsSidebarOpen(!isMobile);
-    
   }, [isMobile]);
 
   const [newProjectName, setNewProjectName] = useState('');
@@ -131,6 +130,11 @@ export const ProjectsSidebar: React.FC = () => {
     navigate(`/workspace?projectId=${projectId}`);
   };
 
+  const handleProjectSelect = (projectId: string) => {
+    setCurrentProjectId(projectId);
+    navigate(`/workspace?projectId=${projectId}`);
+  };
+
   const handleCloseSidebar = () => setIsSidebarOpen(false);
   const handleOpenSidebar = () => setIsSidebarOpen(true);
 
@@ -164,7 +168,7 @@ export const ProjectsSidebar: React.FC = () => {
         </label>
         <select
           value={currentProjectId || ''}
-          onChange={(e) => setCurrentProjectId(e.target.value || null)}
+          onChange={(e) => handleProjectSelect(e.target.value)}
           className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
         >
           <option value="" disabled>Select a project</option>

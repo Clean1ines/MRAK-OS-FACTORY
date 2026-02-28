@@ -1,4 +1,3 @@
-# tests/test_api.py
 # #ADDED: Fixed mock paths to match actual imports in routers/projects.py
 # #ADDED: Added mocks for check_name_exists and transaction context manager
 
@@ -6,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock, MagicMock
 from server import app
+from repositories.project_repository import DEFAULT_OWNER_ID
 
 client = TestClient(app)
 
@@ -55,7 +55,9 @@ def test_projects_crud(
     data = response.json()
     assert data["id"] == "test-proj-id"
     assert data["name"] == "Test Project"
-    mock_check_name_exists.assert_called_once_with("Test Project")
+
+    # #CHANGED: check_name_exists now expects owner_id parameter
+    mock_check_name_exists.assert_called_once_with("Test Project", owner_id=DEFAULT_OWNER_ID)
     mock_create_project.assert_called_once()
 
     # Test list
@@ -65,19 +67,6 @@ def test_projects_crud(
     assert len(projects) == 1
     assert projects[0]["id"] == "test-proj-id"
 
-    # Test get artifacts (this endpoint uses a different module, not mocked here)
-    # We'll just call it – it should return 200 with empty list (if no artifacts)
-    # But we haven't mocked artifacts, so it might try to hit the DB. Let's skip or mock.
-    # For simplicity, we remove that part; it's not part of project CRUD anyway.
-    # Instead, we can add a separate test for artifacts.
-
     # Verify mocks were called as expected
     mock_get_projects.assert_called_once()
     mock_get_project.assert_called()
-
-
-# Optional: add a separate test for artifacts if needed
-# def test_get_artifacts():
-#     response = client.get("/api/projects/test-proj-id/artifacts")
-#     assert response.status_code == 200
-#     assert response.json() == []

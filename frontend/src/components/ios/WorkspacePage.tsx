@@ -9,6 +9,8 @@ import { HamburgerMenu } from '../layout/HamburgerMenu';
 import { useWorkflows } from '../../hooks/useWorkflows';
 import { useSelectedProject } from '../../hooks/useSelectedProject';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
+import { EditWorkflowModal } from './EditWorkflowModal';
+import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
 import { SIDEBAR_HAMBURGER_WIDTH } from '../../constants/canvas';
 
 export const WorkspacePage: React.FC = () => {
@@ -94,21 +96,43 @@ export const WorkspacePage: React.FC = () => {
                 </div>
               ) : (
                 workflowsHook.workflows.map((wf) => (
-                  <button
+                  <div
                     key={wf.id}
-                    onClick={() => workflowsHook.setCurrentWorkflowId(wf.id!)}
-                    className={`w-full text-left px-3 py-2 rounded mb-1 text-xs ${
+                    className={`w-full text-left px-3 py-2 rounded mb-1 text-xs flex items-center justify-between cursor-pointer ${
                       workflowsHook.currentWorkflowId === wf.id
                         ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]'
                         : 'text-[var(--text-secondary)] hover:bg-[var(--ios-glass-bright)]'
                     }`}
+                    onClick={() => workflowsHook.setCurrentWorkflowId(wf.id!)}
                     data-testid="workflow-item"
                   >
-                    <div className="font-semibold truncate">{wf.name}</div>
-                    <div className="text-[9px] opacity-60 truncate">
-                      {wf.description || 'No description'}
+                    <div className="flex-1">
+                      <div className="font-semibold truncate">{wf.name}</div>
+                      <div className="text-[9px] opacity-60 truncate">
+                        {wf.description || 'No description'}
+                      </div>
                     </div>
-                  </button>
+                    <div className="flex gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => workflowsHook.openEditModal(wf)}
+                        className="text-[var(--text-muted)] hover:text-[var(--bronze-base)] transition-colors p-1"
+                        title="Edit workflow"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M17 3L21 7L7 21H3V17L17 3Z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => workflowsHook.openDeleteModal(wf)}
+                        className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors p-1"
+                        title="Delete workflow"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 6H21M19 6V20C19 21.1046 18.1046 22 17 22H7C5.89543 22 5 21.1046 5 20V6M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 ))
               )}
             </div>
@@ -145,14 +169,6 @@ export const WorkspacePage: React.FC = () => {
                   Nodes
                 </button>
                 <button
-                  onClick={workflowsHook.handleDelete}
-                  disabled={!workflowsHook.currentWorkflowId}
-                  className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
-                  data-testid="delete-workflow"
-                >
-                  Delete
-                </button>
-                <button
                   onClick={async () => {
                     try {
                       await api.auth.logout();
@@ -178,7 +194,7 @@ export const WorkspacePage: React.FC = () => {
         <div className="flex-1 flex flex-col">
           <div className="h-12 flex items-center border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
             <div style={{ width: !sidebarOpen ? SIDEBAR_HAMBURGER_WIDTH : 0 }} className="transition-all" />
-            <div className="flex-1 flex justify-center">
+            <div className="flex-1 flex justify-center items-center">
               <h2 className="text-sm font-semibold text-[var(--text-main)]">
                 {workflowsHook.workflowName || 'Untitled Workflow'}
               </h2>
@@ -218,6 +234,37 @@ export const WorkspacePage: React.FC = () => {
             await workflowsHook.handleCreateWorkflow(name, description);
           }}
           isPending={workflowsHook.isCreatingWorkflow}
+        />
+
+        <EditWorkflowModal
+          isOpen={!!workflowsHook.editingWorkflow}
+          onClose={workflowsHook.closeEditModal}
+          initialName={workflowsHook.editingWorkflow?.name || ''}
+          initialDescription={workflowsHook.editingWorkflow?.description || ''}
+          onSave={async (name, description) => {
+            if (workflowsHook.editingWorkflow) {
+              await workflowsHook.updateWorkflowMetadata(
+                workflowsHook.editingWorkflow.id,
+                name,
+                description
+              );
+              workflowsHook.closeEditModal();
+            }
+          }}
+          isSaving={workflowsHook.loading}
+        />
+
+        <DeleteConfirmModal
+          isOpen={!!workflowsHook.deletingWorkflow}
+          onClose={workflowsHook.closeDeleteModal}
+          onConfirm={async () => {
+            if (workflowsHook.deletingWorkflow) {
+              await workflowsHook.handleDelete(workflowsHook.deletingWorkflow.id);
+            }
+          }}
+          itemName={workflowsHook.deletingWorkflow?.name || ''}
+          itemType="workflow"
+          isPending={workflowsHook.isDeletingWorkflow}
         />
       </div>
     </IOSShell>

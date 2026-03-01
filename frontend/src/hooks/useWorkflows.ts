@@ -42,7 +42,6 @@ interface WorkflowDetail {
   edges: WorkflowEdge[];
 }
 
-// используем fetch вместо client.GET для обхода проблем с типами
 const fetchWorkflows = async (projectId: string | null): Promise<WorkflowSummary[]> => {
   if (!projectId) return [];
   const token = sessionStorage.getItem('mrak_session_token');
@@ -158,7 +157,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
 
   const [showCreateWorkflowModal, setShowCreateWorkflowModal] = useState(false);
 
-  // состояния для редактирования/удаления конкретного воркфлоу
   const [editingWorkflow, setEditingWorkflow] = useState<{ id: string; name: string; description: string } | null>(null);
   const [deletingWorkflow, setDeletingWorkflow] = useState<{ id: string; name: string } | null>(null);
 
@@ -192,7 +190,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
         position_x: n.position_x || 100,
         position_y: n.position_y || 100,
         config: n.config || {},
-        recordId: n.id, // сохраняем record_id из БД
+        recordId: n.id,
       }));
       const edges = (workflowDetail.edges || []).map((e: WorkflowEdge) => ({
         id: e.id || crypto.randomUUID(),
@@ -259,7 +257,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     },
   });
 
-  // мутация создания узла
   const createNodeMutation = useMutation({
     mutationFn: async (params: {
       workflowId: string;
@@ -288,10 +285,9 @@ export const useWorkflows = (selectedProjectId: string | null) => {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP ${res.status}`);
       }
-      return res.json(); // { id: recordId }
+      return res.json();
     },
     onSuccess: (data, variables) => {
-      // обновляем локальный узел, добавляя recordId
       canvas.setNodes(prev =>
         prev.map(node =>
           node.node_id === variables.nodeId
@@ -304,6 +300,43 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     onError: (err: unknown) => {
       console.error(err);
       toast.error('Failed to create node');
+    },
+  });
+
+  const createEdgeMutation = useMutation({
+    mutationFn: async (params: {
+      workflowId: string;
+      sourceNode: string;
+      targetNode: string;
+      sourceOutput?: string;
+      targetInput?: string;
+    }) => {
+      const token = sessionStorage.getItem('mrak_session_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/workflows/${params.workflowId}/edges`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          source_node: params.sourceNode,
+          target_node: params.targetNode,
+          source_output: params.sourceOutput || 'output',
+          target_input: params.targetInput || 'input',
+        }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success('Edge created');
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast.error('Failed to create edge');
     },
   });
 
@@ -455,7 +488,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     return deleteNodeMutation.mutateAsync(recordId);
   }, [deleteNodeMutation]);
 
-  // обёртки для автоматического сохранения узлов
   const wrappedConfirmAddCustomNode = useCallback(async () => {
     if (!currentWorkflowId) {
       toast.error('No workflow selected');
@@ -472,7 +504,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
       positionX: newNode.position_x,
       positionY: newNode.position_y,
     });
-  }, [canvas, currentWorkflowId, createNodeMutation]); // CHANGED: added canvas
+  }, [canvas, currentWorkflowId, createNodeMutation]);
 
   const wrappedAddNodeFromList = useCallback(async (node: NodeData) => {
     if (!currentWorkflowId) {
@@ -488,7 +520,24 @@ export const useWorkflows = (selectedProjectId: string | null) => {
       positionX: node.position_x,
       positionY: node.position_y,
     });
-  }, [canvas, currentWorkflowId, createNodeMutation]); // CHANGED: added canvas
+  }, [canvas, currentWorkflowId, createNodeMutation]);
+
+  const wrappedHandleCompleteConnection = useCallback(async (targetNodeId: string) => {
+    if (!currentWorkflowId) {
+      toast.error('No workflow selected');
+      return;
+    }
+    const sourceNode = canvas.connectingNode;
+    if (!sourceNode) return;
+
+    canvas.handleCompleteConnection(targetNodeId);
+
+    await createEdgeMutation.mutateAsync({
+      workflowId: currentWorkflowId,
+      sourceNode,
+      targetNode: targetNodeId,
+    });
+  }, [canvas, currentWorkflowId, createEdgeMutation]);
 
   return {
     workflows,
@@ -497,6 +546,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     ...canvas,
     confirmAddCustomNode: wrappedConfirmAddCustomNode,
     addNodeFromList: wrappedAddNodeFromList,
+    handleCompleteConnection: wrappedHandleCompleteConnection,
     workflowName,
     workflowDescription,
     currentWorkflowId,
@@ -521,6 +571,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     isUpdatingNode: updateNodeMutation.isPending,
     isDeletingNode: deleteNodeMutation.isPending,
     isCreatingNode: createNodeMutation.isPending,
+    isCreatingEdge: createEdgeMutation.isPending,
     isCreatingWorkflow: createWorkflowMutation.isPending,
     isDeletingWorkflow: deleteWorkflowMutation.isPending,
   };

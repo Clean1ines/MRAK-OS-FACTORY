@@ -2,7 +2,7 @@
 // ADDED: Preview/Edit before import, exclude current workflow from list
 // ADDED: Clone on double-click, edit/delete buttons in created tab
 // ADDED: Duplicate check on import (same prompt_key and config)
-// FIXED: Removed unused state variables, made handlePreviewSave async
+// FIXED: Removed duplicate check from clone (created tab)
 
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
@@ -41,7 +41,7 @@ interface NodeSummary {
 // Center of canvas (in world coordinates) – adjust if needed
 const CANVAS_CENTER = { x: 600, y: 400 };
 
-// Проверка на дубликат: сравниваем prompt_key и config
+// Проверка на дубликат: сравниваем prompt_key и config (только для импорта)
 const isDuplicate = (nodes: NodeData[], promptKey: string, config: Record<string, unknown>): boolean => {
   return nodes.some(node => 
     node.prompt_key === promptKey && 
@@ -65,12 +65,9 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
   const [availableNodes, setAvailableNodes] = useState<NodeSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Состояние для предпросмотра/редактирования импортируемой ноды
   const [previewNode, setPreviewNode] = useState<NodeSummary | null>(null);
-  // Состояние для редактирования существующей ноды
   const [editingNode, setEditingNode] = useState<NodeData | null>(null);
 
-  // Сброс состояния при закрытии панели
   useEffect(() => {
     if (!visible) {
       setActiveTab('created');
@@ -117,7 +114,6 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
       const res = await fetch(`/api/workflows?project_id=${encodeURIComponent(projectId)}`, { headers });
       if (!res.ok) throw new Error('Failed to load workflows');
       const data = await res.json();
-      // Исключаем текущий воркфлоу из списка
       const filtered = currentWorkflowId
         ? data.filter((wf: WorkflowSummary) => wf.id !== currentWorkflowId)
         : data;
@@ -161,11 +157,9 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
   };
 
   const handleNodeSelect = (node: NodeSummary) => {
-    // Открываем предпросмотр для импорта
     setPreviewNode(node);
   };
 
-  // Сохранение импортированной ноды (после предпросмотра) с проверкой на дубликат
   const handlePreviewSave = async (promptKey: string, config: Record<string, unknown>) => {
     if (!previewNode) return;
 
@@ -187,13 +181,8 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
     setPreviewNode(null);
   };
 
-  // Клонирование ноды по двойному клику
   const handleNodeDoubleClick = (node: NodeData) => {
-    if (isDuplicate(nodes, node.prompt_key, node.config || {})) {
-      toast.error('A node with the same name and configuration already exists');
-      return;
-    }
-
+    // Клонируем без проверки на дубликат (можно иметь несколько одинаковых)
     onAddNode({
       id: crypto.randomUUID(),
       node_id: crypto.randomUUID(),
@@ -204,7 +193,6 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
     });
   };
 
-  // Редактирование существующей ноды
   const handleEditNode = (node: NodeData) => {
     setEditingNode(node);
   };
@@ -219,7 +207,6 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
     setEditingNode(null);
   };
 
-  // Удаление ноды
   const handleDeleteNode = (node: NodeData) => {
     if (onDeleteNode) {
       onDeleteNode(node.recordId || node.node_id, node.node_id);
@@ -418,7 +405,6 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
               ))
             )
           ) : (
-            // Import tab content
             importStep === 'idle' ? (
               <div className="text-center py-4">
                 <button
@@ -435,7 +421,6 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
         </div>
       </div>
 
-      {/* Модалка предпросмотра/редактирования для импорта */}
       <EditNodeModal
         isOpen={!!previewNode}
         onClose={() => setPreviewNode(null)}
@@ -445,7 +430,6 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
         isSaving={false}
       />
 
-      {/* Модалка редактирования существующей ноды */}
       <EditNodeModal
         isOpen={!!editingNode}
         onClose={() => setEditingNode(null)}

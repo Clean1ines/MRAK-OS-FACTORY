@@ -12,6 +12,7 @@ interface IOSCanvasProps {
   onAddCustomNode?: (x: number, y: number) => void;
   onEditNode?: (recordId: string, promptKey: string, config: Record<string, unknown>) => void;
   onRequestDeleteNode: (recordId: string | undefined, nodeId: string, name: string) => void;
+  onCompleteConnection?: (targetNodeId: string) => void; // ADDED
 }
 
 export const IOSCanvas: React.FC<IOSCanvasProps> = ({
@@ -22,6 +23,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   onAddCustomNode,
   onEditNode,
   onRequestDeleteNode,
+  onCompleteConnection, // ADDED
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
@@ -127,7 +129,12 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
       }
     }
     setConnectingNode(null);
-  }, [connectingNode, edges, onEdgesChange]);
+
+    // ADDED: вызываем внешний обработчик, если передан
+    if (onCompleteConnection) {
+      onCompleteConnection(targetNodeId);
+    }
+  }, [connectingNode, edges, onEdgesChange, onCompleteConnection]);
 
   const handleCloseMenu = useCallback(() => {
     setContextMenu(null);

@@ -12,7 +12,8 @@ interface DeleteConfirmModalProps {
 
 /**
  * Универсальная модалка подтверждения удаления.
- * Показывает сообщение с именем удаляемого объекта и кнопки Cancel/Delete.
+ * Показывает сообщение с именем удаляемого объекта и кнопку Delete.
+ * Кнопка Cancel наследуется от BaseModal.
  */
 export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   isOpen,
@@ -34,12 +35,6 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
         <span className="font-semibold text-[var(--bronze-base)]">"{itemName}"</span>? This action cannot be undone.
       </p>
       <div className="flex justify-end gap-2">
-        <button
-          onClick={onClose}
-          className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)] transition-colors"
-        >
-          Cancel
-        </button>
         <button
           onClick={handleConfirm}
           disabled={isPending}

@@ -1,5 +1,5 @@
-# CHANGED: Use tx fixture instead of conn parameter
 import pytest
+import uuid
 from db import (
     create_workflow, get_workflow, list_workflows, update_workflow, delete_workflow,
     create_workflow_node, get_workflow_nodes, update_workflow_node, delete_workflow_node,
@@ -8,20 +8,32 @@ from db import (
 
 pytestmark = pytest.mark.asyncio
 
-async def test_create_workflow(tx):  # CHANGED: db_connection -> tx
+async def test_create_workflow(tx):
+    # Создаём проект
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
     name = "Test WF"
     desc = "Description"
-    wf_id = await create_workflow(name, desc, is_default=False, tx=tx)
+    wf_id = await create_workflow(name, project_id, desc, is_default=False, tx=tx)
 
     wf = await get_workflow(wf_id, tx=tx)
     assert wf is not None
     assert wf["name"] == name
     assert wf["description"] == desc
     assert wf["is_default"] is False
+    assert wf["project_id"] == project_id
 
 async def test_list_workflows(tx):
-    await create_workflow("WF1", "", False, tx=tx)
-    await create_workflow("WF2", "", True, tx=tx)
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    await create_workflow("WF1", project_id, "", False, tx=tx)
+    await create_workflow("WF2", project_id, "", True, tx=tx)
 
     workflows = await list_workflows(tx=tx)
     names = [w["name"] for w in workflows]
@@ -29,7 +41,12 @@ async def test_list_workflows(tx):
     assert "WF2" in names
 
 async def test_update_workflow(tx):
-    wf_id = await create_workflow("Old", "Old desc", False, tx=tx)
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("Old", project_id, "Old desc", False, tx=tx)
     await update_workflow(wf_id, name="New", description="New desc", is_default=True, tx=tx)
 
     updated = await get_workflow(wf_id, tx=tx)
@@ -38,13 +55,23 @@ async def test_update_workflow(tx):
     assert updated["is_default"] is True
 
 async def test_delete_workflow(tx):
-    wf_id = await create_workflow("ToDelete", "", False, tx=tx)
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("ToDelete", project_id, "", False, tx=tx)
     await delete_workflow(wf_id, tx=tx)
     wf = await get_workflow(wf_id, tx=tx)
     assert wf is None
 
 async def test_create_workflow_node(tx):
-    wf_id = await create_workflow("Test WF", "", False, tx=tx)
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
     node_id = "node1"
     prompt_key = "02_IDEA_CLARIFIER"
     config = {"temp": 0.7}
@@ -63,7 +90,12 @@ async def test_create_workflow_node(tx):
     assert node["id"] == record_id
 
 async def test_update_workflow_node(tx):
-    wf_id = await create_workflow("Test WF", "", False, tx=tx)
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
     record_id = await create_workflow_node(wf_id, "node1", "02_IDEA_CLARIFIER", {}, 0, 0, tx=tx)
 
     await update_workflow_node(record_id, prompt_key="03_PRODUCT_COUNCIL", config={"key": "val"}, position_x=10, position_y=20, tx=tx)
@@ -76,7 +108,12 @@ async def test_update_workflow_node(tx):
     assert node["position_y"] == 20
 
 async def test_delete_workflow_node(tx):
-    wf_id = await create_workflow("Test WF", "", False, tx=tx)
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
     record_id = await create_workflow_node(wf_id, "node1", "02_IDEA_CLARIFIER", {}, 0, 0, tx=tx)
     await delete_workflow_node(record_id, tx=tx)
 
@@ -84,7 +121,12 @@ async def test_delete_workflow_node(tx):
     assert len(nodes) == 0
 
 async def test_create_workflow_edge(tx):
-    wf_id = await create_workflow("Test WF", "", False, tx=tx)
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
     await create_workflow_node(wf_id, "node1", "02_IDEA_CLARIFIER", {}, 0, 0, tx=tx)
     await create_workflow_node(wf_id, "node2", "03_PRODUCT_COUNCIL", {}, 100, 0, tx=tx)
 
@@ -99,7 +141,12 @@ async def test_create_workflow_edge(tx):
     assert edge["target_input"] == "input"
 
 async def test_delete_workflow_edge(tx):
-    wf_id = await create_workflow("Test WF", "", False, tx=tx)
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
     await create_workflow_node(wf_id, "node1", "02_IDEA_CLARIFIER", {}, 0, 0, tx=tx)
     await create_workflow_node(wf_id, "node2", "03_PRODUCT_COUNCIL", {}, 100, 0, tx=tx)
     edge_id = await create_workflow_edge(wf_id, "node1", "node2", tx=tx)

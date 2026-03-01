@@ -24,7 +24,6 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
   isSaving = false,
 }) => {
   const [promptKey, setPromptKey] = useState(initialPromptKey);
-  // Предполагаем, что в config лежит custom_prompt (как при создании)
   const [customPrompt, setCustomPrompt] = useState(
     typeof initialConfig.custom_prompt === 'string' ? initialConfig.custom_prompt : ''
   );
@@ -50,8 +49,6 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
       return;
     }
     setError('');
-    // Сохраняем custom_prompt в config, остальные поля конфига (если были) можно сохранить,
-    // но для простоты заменяем весь config на объект с custom_prompt
     const newConfig = { custom_prompt: customPrompt };
     await onSave(promptKey.trim(), newConfig);
     onClose();

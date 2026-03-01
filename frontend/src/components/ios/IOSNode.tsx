@@ -1,14 +1,10 @@
 import React, { useState } from 'react';
+import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
 
 interface IOSNodeProps {
-  node: {
-    node_id: string;
-    prompt_key: string;
-    position_x: number;
-    position_y: number;
-    config?: Record<string, unknown>;
-    recordId?: string;
-  };
+  node: NodeData;
+  nodes: NodeData[]; // ADDED: для поиска имени узла по ID
+  edges: EdgeData[];
   isSelected: boolean;
   isConnecting?: boolean;
   onDragStart: (nodeId: string, e: React.MouseEvent | React.TouchEvent, element: HTMLDivElement) => void;
@@ -16,10 +12,13 @@ interface IOSNodeProps {
   onCompleteConnection?: (targetNodeId: string) => void;
   onEdit?: (recordId: string, promptKey: string, config: Record<string, unknown>) => void;
   onRequestDelete: (recordId: string | undefined, nodeId: string, name: string) => void;
+  onRequestDeleteEdge?: (edgeId: string, sourceNode: string, targetNode: string) => void;
 }
 
 export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
   node,
+  nodes,
+  edges,
   isSelected,
   isConnecting = false,
   onDragStart,
@@ -27,8 +26,10 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
   onCompleteConnection,
   onEdit,
   onRequestDelete,
+  onRequestDeleteEdge,
 }, ref) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showEdgeMenu, setShowEdgeMenu] = useState(false);
 
   const previewText = (() => {
     const customPrompt = node.config?.custom_prompt;
@@ -44,6 +45,20 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
     }
   })();
 
+  // Находим все рёбра, связанные с этим узлом
+  const connectedEdges = edges.filter(e => e.source_node === node.node_id || e.target_node === node.node_id);
+  // Для каждого ребра определяем, с каким узлом оно связывает, и ищем его имя
+  const connections = connectedEdges.map(e => {
+    const otherNodeId = e.source_node === node.node_id ? e.target_node : e.source_node;
+    const otherNode = nodes.find(n => n.node_id === otherNodeId);
+    return {
+      edgeId: e.id,
+      otherNodeId,
+      otherNodeName: otherNode?.prompt_key || otherNodeId.substring(0, 6),
+      direction: e.source_node === node.node_id ? 'outgoing' : 'incoming',
+    };
+  });
+
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onEdit && node.recordId) {
@@ -54,6 +69,11 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onRequestDelete(node.recordId, node.node_id, node.prompt_key);
+  };
+
+  const toggleEdgeMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowEdgeMenu(!showEdgeMenu);
   };
 
   return (
@@ -84,6 +104,18 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
           {node.prompt_key}
         </span>
         <div className="flex items-center gap-1 pointer-events-auto">
+          {/* Кнопка для отображения списка рёбер (иконка минуса/удаления) */}
+          {connectedEdges.length > 0 && (
+            <button
+              onClick={toggleEdgeMenu}
+              className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors p-1"
+              title="Manage connections"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); setIsCollapsed(!isCollapsed); }}
             className="text-[var(--text-muted)] hover:text-[var(--bronze-base)] transition-colors p-1"
@@ -120,6 +152,40 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
           </button>
         </div>
       </div>
+
+      {/* Меню со списком связанных узлов */}
+      {showEdgeMenu && (
+        <div className="absolute left-0 mt-2 w-48 bg-[var(--ios-glass-dark)] backdrop-blur-md border border-[var(--ios-border)] rounded-lg shadow-lg z-10 p-2">
+          <div className="text-[10px] text-[var(--text-muted)] mb-2 px-2">Connected nodes</div>
+          {connections.length === 0 ? (
+            <div className="text-[10px] text-[var(--text-muted)] text-center py-2">No connections</div>
+          ) : (
+            connections.map(conn => (
+              <div key={conn.edgeId} className="flex items-center justify-between p-1 hover:bg-[var(--ios-glass-bright)] rounded">
+                <span className="text-xs text-[var(--text-main)] truncate">
+                  {conn.otherNodeName} {conn.direction === 'outgoing' ? '→' : '←'}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onRequestDeleteEdge) {
+                      onRequestDeleteEdge(conn.edgeId, node.node_id, conn.otherNodeId);
+                    }
+                    setShowEdgeMenu(false);
+                  }}
+                  className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors p-1"
+                  title="Delete edge"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {!isCollapsed && (
         <>

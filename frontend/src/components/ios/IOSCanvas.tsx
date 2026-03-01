@@ -12,7 +12,8 @@ interface IOSCanvasProps {
   onAddCustomNode?: (x: number, y: number) => void;
   onEditNode?: (recordId: string, promptKey: string, config: Record<string, unknown>) => void;
   onRequestDeleteNode: (recordId: string | undefined, nodeId: string, name: string) => void;
-  onCompleteConnection?: (targetNodeId: string) => void; // ADDED
+  onCompleteConnection?: (targetNodeId: string) => void;
+  onRequestDeleteEdge?: (edgeId: string, sourceNode: string, targetNode: string) => void;
 }
 
 export const IOSCanvas: React.FC<IOSCanvasProps> = ({
@@ -23,7 +24,8 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   onAddCustomNode,
   onEditNode,
   onRequestDeleteNode,
-  onCompleteConnection, // ADDED
+  onCompleteConnection,
+  onRequestDeleteEdge,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
@@ -130,7 +132,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     }
     setConnectingNode(null);
 
-    // ADDED: вызываем внешний обработчик, если передан
     if (onCompleteConnection) {
       onCompleteConnection(targetNodeId);
     }
@@ -245,6 +246,8 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
             <IOSNode
               key={node.id}
               node={node}
+              nodes={nodes} // ADDED: передаём все узлы для поиска имён
+              edges={edges}
               isSelected={selectedNode === node.node_id}
               isConnecting={connectingNode === node.node_id}
               onDragStart={handleNodeDragStart}
@@ -252,6 +255,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
               onCompleteConnection={handleCompleteConnection}
               onEdit={onEditNode}
               onRequestDelete={onRequestDeleteNode}
+              onRequestDeleteEdge={onRequestDeleteEdge}
             />
           ))}
         </div>

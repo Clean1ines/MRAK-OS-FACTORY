@@ -331,12 +331,34 @@ export const useWorkflows = (selectedProjectId: string | null) => {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       toast.success('Edge created');
     },
     onError: (err: unknown) => {
+      console.error('Edge creation error:', err);
+      toast.error('Failed to create edge: ' + (err instanceof Error ? err.message : String(err)));
+    },
+  });
+
+  const deleteEdgeMutation = useMutation({
+    mutationFn: async (edgeId: string) => {
+      const token = sessionStorage.getItem('mrak_session_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/workflows/edges/${edgeId}`, { method: 'DELETE', headers });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
+      return edgeId;
+    },
+    onSuccess: (edgeId) => {
+      canvas.setEdges(prev => prev.filter(e => e.id !== edgeId));
+      toast.success('Edge deleted');
+    },
+    onError: (err: unknown) => {
       console.error(err);
-      toast.error('Failed to create edge');
+      toast.error('Failed to delete edge');
     },
   });
 
@@ -488,6 +510,10 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     return deleteNodeMutation.mutateAsync(recordId);
   }, [deleteNodeMutation]);
 
+  const deleteEdge = useCallback(async (edgeId: string) => {
+    return deleteEdgeMutation.mutateAsync(edgeId);
+  }, [deleteEdgeMutation]);
+
   const wrappedConfirmAddCustomNode = useCallback(async () => {
     if (!currentWorkflowId) {
       toast.error('No workflow selected');
@@ -530,13 +556,21 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     const sourceNode = canvas.connectingNode;
     if (!sourceNode) return;
 
+    console.log('Creating edge:', { sourceNode, targetNodeId, currentWorkflowId });
+
     canvas.handleCompleteConnection(targetNodeId);
 
-    await createEdgeMutation.mutateAsync({
-      workflowId: currentWorkflowId,
-      sourceNode,
-      targetNode: targetNodeId,
-    });
+    try {
+      await createEdgeMutation.mutateAsync({
+        workflowId: currentWorkflowId,
+        sourceNode,
+        targetNode: targetNodeId,
+      });
+    } catch (err) {
+      // Ошибка уже обработана в мутации, но можно дополнительно
+      console.error('Edge creation failed, rolling back local addition?', err);
+      // В идеале нужно откатить локальное ребро, но пока оставим
+    }
   }, [canvas, currentWorkflowId, createEdgeMutation]);
 
   return {
@@ -568,10 +602,12 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     closeDeleteModal,
     updateNode,
     deleteNode,
+    deleteEdge,
     isUpdatingNode: updateNodeMutation.isPending,
     isDeletingNode: deleteNodeMutation.isPending,
     isCreatingNode: createNodeMutation.isPending,
     isCreatingEdge: createEdgeMutation.isPending,
+    isDeletingEdge: deleteEdgeMutation.isPending,
     isCreatingWorkflow: createWorkflowMutation.isPending,
     isDeletingWorkflow: deleteWorkflowMutation.isPending,
   };

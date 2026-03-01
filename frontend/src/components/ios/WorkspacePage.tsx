@@ -25,6 +25,8 @@ export const WorkspacePage: React.FC = () => {
 
   const [editingNode, setEditingNode] = useState<{ recordId: string; promptKey: string; config: Record<string, unknown> } | null>(null);
   const [deletingNode, setDeletingNode] = useState<{ recordId?: string; nodeId: string; name: string } | null>(null);
+  // ADDED: состояние для удаления ребра
+  const [deletingEdge, setDeletingEdge] = useState<{ edgeId: string; sourceNode: string; targetNode: string } | null>(null);
 
   const sidebarOpen = !isMobile && !userClosedSidebar;
 
@@ -67,6 +69,17 @@ export const WorkspacePage: React.FC = () => {
       toast.success('Node removed');
     }
     setDeletingNode(null);
+  };
+
+  // ADDED: обработчик для удаления ребра
+  const handleRequestDeleteEdge = (edgeId: string, sourceNode: string, targetNode: string) => {
+    setDeletingEdge({ edgeId, sourceNode, targetNode });
+  };
+
+  const confirmDeleteEdge = async () => {
+    if (!deletingEdge) return;
+    await workflowsHook.deleteEdge(deletingEdge.edgeId);
+    setDeletingEdge(null);
   };
 
   return (
@@ -222,7 +235,8 @@ export const WorkspacePage: React.FC = () => {
             onAddCustomNode={workflowsHook.handleAddCustomNode}
             onEditNode={(recordId, promptKey, config) => setEditingNode({ recordId, promptKey, config })}
             onRequestDeleteNode={handleRequestDeleteNode}
-            onCompleteConnection={workflowsHook.handleCompleteConnection} // используем обёрнутую версию
+            onCompleteConnection={workflowsHook.handleCompleteConnection}
+            onRequestDeleteEdge={handleRequestDeleteEdge} // ADDED
           />
         </div>
 
@@ -314,6 +328,16 @@ export const WorkspacePage: React.FC = () => {
           itemName={deletingNode?.name || ''}
           itemType="node"
           isPending={workflowsHook.isDeletingNode}
+        />
+
+        {/* ADDED: модалка для удаления ребра */}
+        <DeleteConfirmModal
+          isOpen={!!deletingEdge}
+          onClose={() => setDeletingEdge(null)}
+          onConfirm={confirmDeleteEdge}
+          itemName={`edge between ${deletingEdge?.sourceNode.substring(0,6)} and ${deletingEdge?.targetNode.substring(0,6)}`}
+          itemType="edge"
+          isPending={workflowsHook.isDeletingEdge}
         />
       </div>
     </IOSShell>

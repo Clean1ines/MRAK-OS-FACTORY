@@ -15,7 +15,7 @@ from repositories.session_repository import (
 from repositories.workflow_repository import (
     create_workflow, get_workflow, list_workflows, update_workflow, delete_workflow,
     create_workflow_node, get_workflow_nodes, update_workflow_node, delete_workflow_node,
-    create_workflow_edge, get_workflow_edges, delete_workflow_edge
+    create_workflow_edge, get_workflow_edges, delete_workflow_edge, sync_workflow_graph
 )
 from repositories.artifact_type_repository import (
     get_artifact_types, get_artifact_type, create_artifact_type,

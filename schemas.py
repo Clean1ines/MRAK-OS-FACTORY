@@ -1,4 +1,4 @@
-# schemas.py
+# CHANGED: Добавлены поля nodes и edges для передачи графа воркфлоу
 import re
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
@@ -96,14 +96,20 @@ class ClarificationSessionResponse(BaseModel):
     updated_at: str
 
 class WorkflowCreate(BaseModel):
+    """Схема создания воркфлоу с опциональным графом."""
     name: str
     description: str = ""
     is_default: bool = False
+    nodes: List["WorkflowNodeCreate"] = Field(default_factory=list, description="Начальные узлы графа")
+    edges: List["WorkflowEdgeCreate"] = Field(default_factory=list, description="Начальные рёбра графа")
 
 class WorkflowUpdate(BaseModel):
+    """Схема обновления воркфлоу. Поля nodes/edges могут отсутствовать (тогда граф не меняется)."""
     name: Optional[str] = None
     description: Optional[str] = None
     is_default: Optional[bool] = None
+    nodes: Optional[List["WorkflowNodeCreate"]] = Field(None, description="Полный новый набор узлов (если указан)")
+    edges: Optional[List["WorkflowEdgeCreate"]] = Field(None, description="Полный новый набор рёбер (если указан)")
 
 class WorkflowNodeCreate(BaseModel):
     node_id: str
@@ -136,3 +142,7 @@ class WorkflowDetailResponse(BaseModel):
     workflow: WorkflowResponse
     nodes: List[Dict[str, Any]]
     edges: List[Dict[str, Any]]
+
+# Для корректной работы forward references
+WorkflowCreate.update_forward_refs()
+WorkflowUpdate.update_forward_refs()

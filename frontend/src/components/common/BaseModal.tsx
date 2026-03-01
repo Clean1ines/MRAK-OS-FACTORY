@@ -20,7 +20,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 backdrop-blur-[2px]">
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[1100] p-4 backdrop-blur-[2px]">
       <div className="w-full max-w-md bg-[var(--ios-glass-dark)] backdrop-blur-[var(--blur-std)] border border-[var(--ios-border)] rounded-2xl shadow-[var(--shadow-heavy)] p-6">
         <h2 className="text-xl font-bold text-[var(--bronze-base)] mb-4">{title}</h2>
         {children}

@@ -2,6 +2,7 @@
 # CHANGED: Добавлена поддержка nodes/edges в create и update
 # CHANGED: Добавлен query-параметр project_id для list_workflows, project_id в create_workflow
 # ADDED: Принты для отладки
+# FIXED: Возврат словаря вместо JSONResponse для корректного статуса 201 (декоратор устанавливает статус)
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from typing import Optional
@@ -44,7 +45,8 @@ async def create_workflow(workflow: WorkflowCreate):
             print(f"   nodes: {len(nodes_data)}, edges: {len(edges_data)}")
             await db.sync_workflow_graph(wf_id, nodes_data, edges_data, tx)
     print(f"📤 POST /workflows created {wf_id}")
-    return JSONResponse(content={"id": wf_id})
+    # Возвращаем словарь, FastAPI автоматически установит статус 201 благодаря декоратору
+    return {"id": wf_id}
 
 @router.get("/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str):
@@ -111,7 +113,7 @@ async def create_workflow_node(workflow_id: str, node: WorkflowNodeCreate):
             workflow_id, node.node_id, node.prompt_key, node.config,
             node.position_x, node.position_y, tx=tx
         )
-    return JSONResponse(content={"id": record_id})
+    return {"id": record_id}  # возвращаем словарь для корректного статуса 201
 
 @router.put("/workflows/nodes/{node_record_id}")
 async def update_workflow_node(node_record_id: str, node_update: WorkflowNodeUpdate):
@@ -145,7 +147,7 @@ async def create_workflow_edge(workflow_id: str, edge: WorkflowEdgeCreate):
             workflow_id, edge.source_node, edge.target_node,
             edge.source_output, edge.target_input, tx=tx
         )
-    return JSONResponse(content={"id": edge_id})
+    return {"id": edge_id}  # возвращаем словарь для статуса 201
 
 @router.delete("/workflows/edges/{edge_record_id}")
 async def delete_workflow_edge(edge_record_id: str):

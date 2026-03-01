@@ -173,7 +173,6 @@ export const WorkspacePage: React.FC = () => {
               </button>
 
               <div className="grid grid-cols-2 gap-2">
-                {/* Кнопка Save удалена согласно заданию */}
                 <button
                   onClick={() => workflowsHook.setShowNodeList(true)}
                   disabled={!selectedProjectId}
@@ -231,6 +230,16 @@ export const WorkspacePage: React.FC = () => {
           onClose={() => workflowsHook.setShowNodeList(false)}
           nodes={workflowsHook.nodes}
           onAddNode={workflowsHook.addNodeFromList}
+          onUpdateNode={async (recordId, promptKey, config) => {
+            await workflowsHook.updateNode(recordId, promptKey, config);
+          }}
+          onDeleteNode={(recordId, nodeId) => {
+            const node = workflowsHook.nodes.find(n => n.node_id === nodeId);
+            if (node) {
+              handleRequestDeleteNode(recordId, nodeId, node.prompt_key);
+            }
+          }}
+          currentWorkflowId={workflowsHook.currentWorkflowId}
         />
         <NodeModal
           visible={workflowsHook.showNodeModal}

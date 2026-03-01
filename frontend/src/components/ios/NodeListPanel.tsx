@@ -1,109 +1,459 @@
 // frontend/src/components/ios/NodeListPanel.tsx
-// ADDED: Sidebar panel for node list management (SRP extraction)
+// ADDED: Preview/Edit before import, exclude current workflow from list
+// ADDED: Clone on double-click, edit/delete buttons in created tab
+// ADDED: Duplicate check on import (same prompt_key and config)
+// FIXED: Removed unused state variables, made handlePreviewSave async
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import type { NodeData } from '../../hooks/useCanvasEngine';
-import { hashPosition, avoidCollisions } from '../../utils/deterministicRandom';
+import { EditNodeModal } from './EditNodeModal';
 
 interface NodeListPanelProps {
   visible: boolean;
   onClose: () => void;
   nodes: NodeData[];
   onAddNode: (node: NodeData) => void;
+  onUpdateNode?: (recordId: string, promptKey: string, config: Record<string, unknown>) => Promise<void>;
+  onDeleteNode?: (recordId: string, nodeId: string) => void; // for deletion with confirmation (parent handles modal)
+  currentWorkflowId?: string | null; // to exclude current workflow from import list
 }
 
-type TabType = 'created' | 'available';
+type TabType = 'created' | 'import';
+type ImportStep = 'idle' | 'select-project' | 'select-workflow' | 'select-node';
+
+interface Project {
+  id: string;
+  name: string;
+}
+
+interface WorkflowSummary {
+  id: string;
+  name: string;
+}
+
+interface NodeSummary {
+  node_id: string;
+  prompt_key: string;
+  config?: Record<string, unknown>;
+}
+
+// Center of canvas (in world coordinates) – adjust if needed
+const CANVAS_CENTER = { x: 600, y: 400 };
+
+// Проверка на дубликат: сравниваем prompt_key и config
+const isDuplicate = (nodes: NodeData[], promptKey: string, config: Record<string, unknown>): boolean => {
+  return nodes.some(node => 
+    node.prompt_key === promptKey && 
+    JSON.stringify(node.config) === JSON.stringify(config)
+  );
+};
 
 export const NodeListPanel: React.FC<NodeListPanelProps> = ({
   visible,
   onClose,
   nodes,
   onAddNode,
+  onUpdateNode,
+  onDeleteNode,
+  currentWorkflowId,
 }) => {
-  const [activeTab, setActiveTab] = React.useState<TabType>('created');
+  const [activeTab, setActiveTab] = useState<TabType>('created');
+  const [importStep, setImportStep] = useState<ImportStep>('idle');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
+  const [availableNodes, setAvailableNodes] = useState<NodeSummary[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  if (!visible) return null;
+  // Состояние для предпросмотра/редактирования импортируемой ноды
+  const [previewNode, setPreviewNode] = useState<NodeSummary | null>(null);
+  // Состояние для редактирования существующей ноды
+  const [editingNode, setEditingNode] = useState<NodeData | null>(null);
 
-  const handleAddFromList = (type: string) => {
-    const basePos = hashPosition(type, 0, 1200, 800);
-    const existingPositions = nodes.map(n => ({ x: n.position_x, y: n.position_y }));
-    const finalPos = avoidCollisions(basePos, existingPositions);
-    
+  // Сброс состояния при закрытии панели
+  useEffect(() => {
+    if (!visible) {
+      setActiveTab('created');
+      setImportStep('idle');
+      setProjects([]);
+      setWorkflows([]);
+      setAvailableNodes([]);
+      setPreviewNode(null);
+      setEditingNode(null);
+    }
+  }, [visible]);
+
+  const handleImportClick = () => {
+    setActiveTab('import');
+    setImportStep('select-project');
+    loadProjects();
+  };
+
+  const loadProjects = async () => {
+    setLoading(true);
+    try {
+      const token = sessionStorage.getItem('mrak_session_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch('/api/projects', { headers });
+      if (!res.ok) throw new Error('Failed to load projects');
+      const data = await res.json();
+      setProjects(data);
+    } catch (err) {
+      toast.error('Ошибка загрузки проектов');
+      console.error(err);
+      setImportStep('idle');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadWorkflows = async (projectId: string) => {
+    setLoading(true);
+    try {
+      const token = sessionStorage.getItem('mrak_session_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/workflows?project_id=${encodeURIComponent(projectId)}`, { headers });
+      if (!res.ok) throw new Error('Failed to load workflows');
+      const data = await res.json();
+      // Исключаем текущий воркфлоу из списка
+      const filtered = currentWorkflowId
+        ? data.filter((wf: WorkflowSummary) => wf.id !== currentWorkflowId)
+        : data;
+      setWorkflows(filtered);
+    } catch (err) {
+      toast.error('Ошибка загрузки воркфлоу');
+      console.error(err);
+      setImportStep('select-project');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadNodes = async (workflowId: string) => {
+    setLoading(true);
+    try {
+      const token = sessionStorage.getItem('mrak_session_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/workflows/${workflowId}`, { headers });
+      if (!res.ok) throw new Error('Failed to load workflow details');
+      const data = await res.json();
+      setAvailableNodes(data.nodes || []);
+    } catch (err) {
+      toast.error('Ошибка загрузки узлов');
+      console.error(err);
+      setImportStep('select-workflow');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProjectSelect = (projectId: string) => {
+    setImportStep('select-workflow');
+    loadWorkflows(projectId);
+  };
+
+  const handleWorkflowSelect = (workflowId: string) => {
+    setImportStep('select-node');
+    loadNodes(workflowId);
+  };
+
+  const handleNodeSelect = (node: NodeSummary) => {
+    // Открываем предпросмотр для импорта
+    setPreviewNode(node);
+  };
+
+  // Сохранение импортированной ноды (после предпросмотра) с проверкой на дубликат
+  const handlePreviewSave = async (promptKey: string, config: Record<string, unknown>) => {
+    if (!previewNode) return;
+
+    if (isDuplicate(nodes, promptKey, config)) {
+      toast.error('A node with the same name and configuration already exists');
+      setPreviewNode(null);
+      return;
+    }
+
     onAddNode({
       id: crypto.randomUUID(),
       node_id: crypto.randomUUID(),
-      prompt_key: type,
-      position_x: finalPos.x,
-      position_y: finalPos.y,
-      config: {},
+      prompt_key: promptKey,
+      position_x: CANVAS_CENTER.x,
+      position_y: CANVAS_CENTER.y,
+      config: config,
+    });
+
+    setPreviewNode(null);
+  };
+
+  // Клонирование ноды по двойному клику
+  const handleNodeDoubleClick = (node: NodeData) => {
+    if (isDuplicate(nodes, node.prompt_key, node.config || {})) {
+      toast.error('A node with the same name and configuration already exists');
+      return;
+    }
+
+    onAddNode({
+      id: crypto.randomUUID(),
+      node_id: crypto.randomUUID(),
+      prompt_key: node.prompt_key,
+      position_x: CANVAS_CENTER.x,
+      position_y: CANVAS_CENTER.y,
+      config: node.config ? JSON.parse(JSON.stringify(node.config)) : {},
     });
   };
 
-  return (
-    <div className="absolute top-20 right-6 w-80 bg-[var(--ios-glass)] backdrop-blur-md border border-[var(--ios-border)] rounded-lg shadow-[var(--shadow-heavy)] z-[1000]">
-      <div className="flex items-center justify-between p-3 border-b border-[var(--ios-border)]">
-        <h3 className="text-sm font-bold text-[var(--bronze-base)]">Nodes</h3>
-        <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-      <div className="flex border-b border-[var(--ios-border)]">
-        <button
-          onClick={() => setActiveTab('created')}
-          className={`flex-1 px-3 py-2 text-xs font-semibold ${
-            activeTab === 'created' 
-              ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]' 
-              : 'text-[var(--text-muted)] hover:bg-[var(--ios-glass-bright)]'
-          }`}
-        >
-          Created ({nodes.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('available')}
-          className={`flex-1 px-3 py-2 text-xs font-semibold ${
-            activeTab === 'available' 
-              ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]' 
-              : 'text-[var(--text-muted)] hover:bg-[var(--ios-glass-bright)]'
-          }`}
-        >
-          Available
-        </button>
-      </div>
-      <div className="p-3 max-h-96 overflow-y-auto">
-        {activeTab === 'created' ? (
-          nodes.length === 0 ? (
-            <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No nodes yet</div>
-          ) : (
-            nodes.map(node => (
-              <div
-                key={node.node_id}
-                className="p-2 mb-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
-              >
-                <div className="font-semibold text-[var(--bronze-bright)]">{node.prompt_key}</div>
-                <div className="text-[9px] text-[var(--text-muted)] mt-1">
-                  Pos: {Math.round(node.position_x)}, {Math.round(node.position_y)}
-                </div>
-              </div>
-            ))
-          )
-        ) : (
+  // Редактирование существующей ноды
+  const handleEditNode = (node: NodeData) => {
+    setEditingNode(node);
+  };
+
+  const handleEditSave = async (promptKey: string, config: Record<string, unknown>) => {
+    if (!editingNode) return;
+    if (editingNode.recordId && onUpdateNode) {
+      await onUpdateNode(editingNode.recordId, promptKey, config);
+    } else {
+      toast.error('Cannot update unsaved node');
+    }
+    setEditingNode(null);
+  };
+
+  // Удаление ноды
+  const handleDeleteNode = (node: NodeData) => {
+    if (onDeleteNode) {
+      onDeleteNode(node.recordId || node.node_id, node.node_id);
+    }
+  };
+
+  const handleBack = () => {
+    if (importStep === 'select-workflow') {
+      setImportStep('select-project');
+      setWorkflows([]);
+    } else if (importStep === 'select-node') {
+      setImportStep('select-workflow');
+      setAvailableNodes([]);
+    } else if (importStep === 'select-project') {
+      setImportStep('idle');
+      setActiveTab('created');
+    }
+  };
+
+  if (!visible) return null;
+
+  const renderImportContent = () => {
+    if (loading) {
+      return (
+        <div className="text-center py-4">
+          <div className="inline-block w-4 h-4 border-2 border-[var(--bronze-base)] border-t-transparent rounded-full animate-spin" />
+          <p className="text-[10px] text-[var(--text-muted)] mt-2">Loading...</p>
+        </div>
+      );
+    }
+
+    switch (importStep) {
+      case 'select-project':
+        return (
           <div className="space-y-2">
-            {['IDEA_CLARIFIER', 'BUSINESS_REQ_GEN', 'CODE_GEN'].map(type => (
-              <div
-                key={type}
-                className="p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
-                onClick={() => handleAddFromList(type)}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={handleBack}
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--bronze-base)]"
               >
-                <div className="font-semibold text-[var(--bronze-bright)]">{type.replace(/_/g, ' ')}</div>
-                <div className="text-[9px] text-[var(--text-muted)] mt-1">Click to add</div>
-              </div>
-            ))}
+                ← Back
+              </button>
+              <span className="text-[9px] text-[var(--text-muted)]">Select project</span>
+            </div>
+            {projects.length === 0 ? (
+              <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No projects</div>
+            ) : (
+              projects.map((proj) => (
+                <div
+                  key={proj.id}
+                  className="p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
+                  onClick={() => handleProjectSelect(proj.id)}
+                >
+                  <div className="font-semibold text-[var(--bronze-bright)]">{proj.name}</div>
+                </div>
+              ))
+            )}
           </div>
-        )}
+        );
+
+      case 'select-workflow':
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={handleBack}
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--bronze-base)]"
+              >
+                ← Back
+              </button>
+              <span className="text-[9px] text-[var(--text-muted)]">Select workflow</span>
+            </div>
+            {workflows.length === 0 ? (
+              <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No other workflows</div>
+            ) : (
+              workflows.map((wf) => (
+                <div
+                  key={wf.id}
+                  className="p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
+                  onClick={() => handleWorkflowSelect(wf.id)}
+                >
+                  <div className="font-semibold text-[var(--bronze-bright)]">{wf.name}</div>
+                </div>
+              ))
+            )}
+          </div>
+        );
+
+      case 'select-node':
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={handleBack}
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--bronze-base)]"
+              >
+                ← Back
+              </button>
+              <span className="text-[9px] text-[var(--text-muted)]">Select node</span>
+            </div>
+            {availableNodes.length === 0 ? (
+              <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No nodes</div>
+            ) : (
+              availableNodes.map((node) => (
+                <div
+                  key={node.node_id}
+                  className="p-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
+                  onClick={() => handleNodeSelect(node)}
+                >
+                  <div className="font-semibold text-[var(--bronze-bright)]">{node.prompt_key}</div>
+                  <div className="text-[9px] text-[var(--text-muted)] mt-1">Click to preview</div>
+                </div>
+              ))
+            )}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <>
+      <div className="absolute top-20 right-6 w-80 bg-[var(--ios-glass)] backdrop-blur-md border border-[var(--ios-border)] rounded-lg shadow-[var(--shadow-heavy)] z-[1000]">
+        <div className="flex items-center justify-between p-3 border-b border-[var(--ios-border)]">
+          <h3 className="text-sm font-bold text-[var(--bronze-base)]">Nodes</h3>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex border-b border-[var(--ios-border)]">
+          <button
+            onClick={() => setActiveTab('created')}
+            className={`flex-1 px-3 py-2 text-xs font-semibold ${
+              activeTab === 'created' 
+                ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]' 
+                : 'text-[var(--text-muted)] hover:bg-[var(--ios-glass-bright)]'
+            }`}
+          >
+            Created ({nodes.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('import')}
+            className={`flex-1 px-3 py-2 text-xs font-semibold ${
+              activeTab === 'import' 
+                ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]' 
+                : 'text-[var(--text-muted)] hover:bg-[var(--ios-glass-bright)]'
+            }`}
+          >
+            Import
+          </button>
+        </div>
+        <div className="p-3 max-h-96 overflow-y-auto">
+          {activeTab === 'created' ? (
+            nodes.length === 0 ? (
+              <div className="text-[10px] text-[var(--text-muted)] text-center py-4">No nodes yet</div>
+            ) : (
+              nodes.map(node => (
+                <div
+                  key={node.node_id}
+                  className="p-2 mb-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
+                  onDoubleClick={() => handleNodeDoubleClick(node)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold text-[var(--bronze-bright)]">{node.prompt_key}</div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleEditNode(node); }}
+                        className="text-[var(--text-muted)] hover:text-[var(--bronze-base)] transition-colors p-1"
+                        title="Edit"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M17 3L21 7L7 21H3V17L17 3Z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteNode(node); }}
+                        className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors p-1"
+                        title="Delete"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[9px] text-[var(--text-muted)] mt-1">
+                    Pos: {Math.round(node.position_x)}, {Math.round(node.position_y)}
+                  </div>
+                </div>
+              ))
+            )
+          ) : (
+            // Import tab content
+            importStep === 'idle' ? (
+              <div className="text-center py-4">
+                <button
+                  onClick={handleImportClick}
+                  className="px-4 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors"
+                >
+                  Import node
+                </button>
+              </div>
+            ) : (
+              renderImportContent()
+            )
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Модалка предпросмотра/редактирования для импорта */}
+      <EditNodeModal
+        isOpen={!!previewNode}
+        onClose={() => setPreviewNode(null)}
+        initialPromptKey={previewNode?.prompt_key || ''}
+        initialConfig={previewNode?.config || {}}
+        onSave={handlePreviewSave}
+        isSaving={false}
+      />
+
+      {/* Модалка редактирования существующей ноды */}
+      <EditNodeModal
+        isOpen={!!editingNode}
+        onClose={() => setEditingNode(null)}
+        initialPromptKey={editingNode?.prompt_key || ''}
+        initialConfig={editingNode?.config || {}}
+        onSave={handleEditSave}
+        isSaving={false}
+      />
+    </>
   );
 };

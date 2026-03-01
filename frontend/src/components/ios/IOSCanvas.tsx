@@ -10,6 +10,8 @@ interface IOSCanvasProps {
   onNodesChange: (nodes: NodeData[]) => void;
   onEdgesChange: (edges: EdgeData[]) => void;
   onAddCustomNode?: (x: number, y: number) => void;
+  onEditNode?: (recordId: string, promptKey: string, config: Record<string, unknown>) => void;
+  onRequestDeleteNode: (recordId: string | undefined, nodeId: string, name: string) => void;
 }
 
 export const IOSCanvas: React.FC<IOSCanvasProps> = ({
@@ -18,6 +20,8 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   onNodesChange,
   onEdgesChange,
   onAddCustomNode,
+  onEditNode,
+  onRequestDeleteNode,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
@@ -98,6 +102,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
       position_x: adjX,
       position_y: adjY,
       config: {},
+      recordId: undefined,
     };
     onNodesChange([...nodes, newNode]);
     setContextMenu(null);
@@ -178,14 +183,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     );
   }, [connectingNode, nodes, pan, scale]);
 
-  const createDeleteHandler = useCallback((nodeId: string) => {
-    return () => {
-      onNodesChange(nodes.filter(n => n.node_id !== nodeId));
-      onEdgesChange(edges.filter(e => e.source_node !== nodeId && e.target_node !== nodeId));
-    };
-  }, [nodes, edges, onNodesChange, onEdgesChange]);
-
-  // 🔥 Touch handler для canvas pan
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       e.preventDefault();
@@ -239,14 +236,15 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
         <div style={{ pointerEvents: 'auto' }}>
           {nodes.map(node => (
             <IOSNode
-              key={node.node_id}
+              key={node.id}
               node={node}
               isSelected={selectedNode === node.node_id}
               isConnecting={connectingNode === node.node_id}
               onDragStart={handleNodeDragStart}
-              onDelete={createDeleteHandler(node.node_id)}
               onStartConnection={handleStartConnection}
               onCompleteConnection={handleCompleteConnection}
+              onEdit={onEditNode}
+              onRequestDelete={onRequestDeleteNode}
             />
           ))}
         </div>

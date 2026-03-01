@@ -15,6 +15,7 @@ export interface NodeData {
   position_x: number;
   position_y: number;
   config?: Record<string, unknown>;
+  recordId?: string; // ADDED: идентификатор записи в БД
 }
 
 export interface EdgeData {
@@ -55,22 +56,16 @@ export const useCanvasEngine = (
 
   const panRef = useRef(pan);
   const scaleRef = useRef(scale);
-  // CHANGED: Ref to access latest nodes without functional update pattern
   const nodesRef = useRef<NodeData[]>(nodes);
 
   useEffect(() => { panRef.current = pan; }, [pan]);
   useEffect(() => { scaleRef.current = scale; }, [scale]);
-  // ADDED: Keep nodesRef in sync with latest nodes prop
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
   const dragStartScreen = useRef({ x: 0, y: 0 });
   const dragStartWorld = useRef({ x: 0, y: 0 });
   const dragStartScale = useRef(1);
 
-  /**
-   * Effect: handles node dragging with mouse + touch support.
-   * Updates node position in world coordinates on every move event.
-   */
   useEffect(() => {
     if (!draggedNode) return;
 
@@ -79,11 +74,6 @@ export const useCanvasEngine = (
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'grabbing';
 
-    /**
-     * Extract client coordinates from MouseEvent or TouchEvent.
-     * @param {MouseEvent | TouchEvent} e - Input event
-     * @returns {{ x: number; y: number }} Client coordinates
-     */
     const getClientCoords = (e: MouseEvent | TouchEvent): { x: number; y: number } => {
       if ('touches' in e && e.touches.length > 0) {
         return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -92,10 +82,6 @@ export const useCanvasEngine = (
       return { x: mouseEvent.clientX, y: mouseEvent.clientY };
     };
 
-    /**
-     * Move handler: calculates new world position and updates state.
-     * @param {MouseEvent | TouchEvent} e - Move event
-     */
     const handleGlobalMove = (e: MouseEvent | TouchEvent): void => {
       e.preventDefault();
       const { x, y } = getClientCoords(e);
@@ -106,7 +92,6 @@ export const useCanvasEngine = (
       const newWorldX = dragStartWorld.current.x + deltaWorldX;
       const newWorldY = dragStartWorld.current.y + deltaWorldY;
 
-      // CHANGED: Use nodesRef + direct array instead of functional update
       const updatedNodes: NodeData[] = nodesRef.current.map((node: NodeData): NodeData =>
         node.node_id === draggedNode
           ? { ...node, position_x: newWorldX, position_y: newWorldY }
@@ -115,9 +100,6 @@ export const useCanvasEngine = (
       setNodes(updatedNodes);
     };
 
-    /**
-     * End handler: cleans up drag state and event listeners.
-     */
     const handleGlobalEnd = (): void => {
       setDraggedNode(null);
       document.body.style.userSelect = prevUserSelect;
@@ -128,7 +110,6 @@ export const useCanvasEngine = (
       window.removeEventListener('touchend', handleGlobalEnd);
     };
 
-    // CHANGED: Use EventListener type assertion + passive option via object spread for add, plain for remove
     const passiveOpts = { passive: false } as AddEventListenerOptions;
     window.addEventListener('mousemove', handleGlobalMove as EventListener, passiveOpts);
     window.addEventListener('mouseup', handleGlobalEnd);
@@ -143,13 +124,8 @@ export const useCanvasEngine = (
       document.body.style.userSelect = prevUserSelect;
       document.body.style.cursor = prevCursor;
     };
-  }, [draggedNode, setNodes]); // CHANGED: nodes not needed here due to nodesRef
+  }, [draggedNode, setNodes]);
 
-  /**
-   * Wheel handler: zooms canvas around cursor position.
-   * @param {React.WheelEvent} e - Wheel event
-   * @param {DOMRect} containerRect - Container bounding rect
-   */
   const handleWheel = useCallback((e: React.WheelEvent, containerRect: DOMRect): void => {
     e.preventDefault();
     const factor = Math.pow(ZOOM_FACTOR, -e.deltaY / ZOOM_SENSITIVITY);
@@ -169,10 +145,6 @@ export const useCanvasEngine = (
     scaleRef.current = newScale;
   }, []);
 
-  /**
-   * Pan start handler: initiates canvas panning with mouse or touch.
-   * @param {React.MouseEvent | React.TouchEvent} e - Start event
-   */
   const handlePanStart = useCallback((e: React.MouseEvent | React.TouchEvent): void => {
     const isMouse = 'button' in e;
     const button = isMouse ? (e as React.MouseEvent).button : -1;
@@ -221,11 +193,6 @@ export const useCanvasEngine = (
     }
   }, []);
 
-  /**
-   * Node drag start handler: initializes drag state for a node.
-   * @param {string} nodeId - ID of the node to drag
-   * @param {React.MouseEvent | React.TouchEvent} e - Start event
-   */
   const handleNodeDragStart = useCallback((nodeId: string, e: React.MouseEvent | React.TouchEvent): void => {
     e.stopPropagation();
     e.preventDefault();

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast'; // ADDED
 import { api, ProjectResponse } from '../../api/client';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
@@ -11,6 +12,7 @@ import { useSelectedProject } from '../../hooks/useSelectedProject';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
 import { EditWorkflowModal } from './EditWorkflowModal';
 import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
+import { EditNodeModal } from './EditNodeModal';
 import { SIDEBAR_HAMBURGER_WIDTH } from '../../constants/canvas';
 
 export const WorkspacePage: React.FC = () => {
@@ -20,6 +22,9 @@ export const WorkspacePage: React.FC = () => {
 
   const { selectedProjectId } = useSelectedProject(projects);
   const workflowsHook = useWorkflows(selectedProjectId);
+
+  const [editingNode, setEditingNode] = useState<{ recordId: string; promptKey: string; config: Record<string, unknown> } | null>(null);
+  const [deletingNode, setDeletingNode] = useState<{ recordId?: string; nodeId: string; name: string } | null>(null);
 
   const sidebarOpen = !isMobile && !userClosedSidebar;
 
@@ -47,6 +52,22 @@ export const WorkspacePage: React.FC = () => {
   }, []);
 
   const currentProject = projects.find(p => p.id === selectedProjectId);
+
+  const handleRequestDeleteNode = (recordId: string | undefined, nodeId: string, name: string) => {
+    setDeletingNode({ recordId, nodeId, name });
+  };
+
+  const confirmDeleteNode = async () => {
+    if (!deletingNode) return;
+    if (deletingNode.recordId) {
+      await workflowsHook.deleteNode(deletingNode.recordId);
+    } else {
+      workflowsHook.setNodes(prev => prev.filter(n => n.node_id !== deletingNode.nodeId));
+      workflowsHook.setEdges(prev => prev.filter(e => e.source_node !== deletingNode.nodeId && e.target_node !== deletingNode.nodeId));
+      toast.success('Node removed');
+    }
+    setDeletingNode(null);
+  };
 
   return (
     <IOSShell>
@@ -207,6 +228,8 @@ export const WorkspacePage: React.FC = () => {
             onNodesChange={workflowsHook.setNodes}
             onEdgesChange={workflowsHook.setEdges}
             onAddCustomNode={workflowsHook.handleAddCustomNode}
+            onEditNode={(recordId, promptKey, config) => setEditingNode({ recordId, promptKey, config })}
+            onRequestDeleteNode={handleRequestDeleteNode}
           />
         </div>
 
@@ -265,6 +288,29 @@ export const WorkspacePage: React.FC = () => {
           itemName={workflowsHook.deletingWorkflow?.name || ''}
           itemType="workflow"
           isPending={workflowsHook.isDeletingWorkflow}
+        />
+
+        <EditNodeModal
+          isOpen={!!editingNode}
+          onClose={() => setEditingNode(null)}
+          initialPromptKey={editingNode?.promptKey || ''}
+          initialConfig={editingNode?.config || {}}
+          onSave={async (promptKey, config) => {
+            if (editingNode) {
+              await workflowsHook.updateNode(editingNode.recordId, promptKey, config);
+              setEditingNode(null);
+            }
+          }}
+          isSaving={workflowsHook.isUpdatingNode}
+        />
+
+        <DeleteConfirmModal
+          isOpen={!!deletingNode}
+          onClose={() => setDeletingNode(null)}
+          onConfirm={confirmDeleteNode}
+          itemName={deletingNode?.name || ''}
+          itemType="node"
+          isPending={workflowsHook.isDeletingNode}
         />
       </div>
     </IOSShell>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import toast from 'react-hot-toast'; // ADDED
+import toast from 'react-hot-toast';
 import { api, ProjectResponse } from '../../api/client';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
@@ -173,14 +173,7 @@ export const WorkspacePage: React.FC = () => {
               </button>
 
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={workflowsHook.handleSave}
-                  disabled={!selectedProjectId || !workflowsHook.workflowName.trim() || workflowsHook.loading}
-                  className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
-                  data-testid="save-workflow"
-                >
-                  Save
-                </button>
+                {/* Кнопка Save удалена согласно заданию */}
                 <button
                   onClick={() => workflowsHook.setShowNodeList(true)}
                   disabled={!selectedProjectId}

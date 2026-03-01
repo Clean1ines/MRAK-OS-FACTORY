@@ -73,13 +73,6 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
             type="submit"
             disabled={isPending}
             className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--bronze-base)] text-black hover:bg-[var(--bronze-bright)] transition-colors disabled:opacity-30"

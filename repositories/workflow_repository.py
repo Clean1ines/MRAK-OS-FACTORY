@@ -1,5 +1,9 @@
 # CHANGED: Remove conn, add optional tx; handle connection
 # ADDED: sync_workflow_graph для синхронизации узлов и рёбер
+# CHANGED: Добавлен project_id в create_workflow и фильтрация в list_workflows
+# FIXED: Порядок аргументов в create_workflow (project_id сделан обязательным и перенесён перед необязательными)
+# FIXED: Преобразование UUID project_id в строку в get_workflow и list_workflows
+# ADDED: Подробное логирование через print для отладки проблемы с сохранением узлов
 import json
 import uuid
 from typing import Optional, Dict, Any, List
@@ -7,18 +11,14 @@ from .base import get_connection
 
 # ==================== WORKFLOWS ==================== #
 
-async def create_workflow(name: str, description: str = "", is_default: bool = False, tx=None) -> str:
-    """Создаёт новую запись воркфлоу.
-
-    Args:
-        name: Название воркфлоу.
-        description: Описание.
-        is_default: Флаг воркфлоу по умолчанию.
-        tx: Опциональный объект транзакции.
-
-    Returns:
-        Сгенерированный UUID воркфлоу.
-    """
+async def create_workflow(
+    name: str,
+    project_id: str,
+    description: str = "",
+    is_default: bool = False,
+    tx=None
+) -> str:
+    """Создаёт новую запись воркфлоу."""
     if tx:
         conn = tx.conn
         close_conn = False
@@ -28,9 +28,10 @@ async def create_workflow(name: str, description: str = "", is_default: bool = F
     try:
         workflow_id = str(uuid.uuid4())
         await conn.execute('''
-            INSERT INTO workflows (id, name, description, is_default)
-            VALUES ($1, $2, $3, $4)
-        ''', workflow_id, name, description, is_default)
+            INSERT INTO workflows (id, name, description, is_default, project_id)
+            VALUES ($1, $2, $3, $4, $5)
+        ''', workflow_id, name, description, is_default, project_id)
+        print(f"✅ [create_workflow] Created workflow {workflow_id} for project {project_id}")
         return workflow_id
     finally:
         if close_conn:
@@ -49,16 +50,19 @@ async def get_workflow(workflow_id: str, tx=None) -> Optional[Dict[str, Any]]:
         if row:
             wf = dict(row)
             wf['id'] = str(wf['id'])
+            wf['project_id'] = str(wf['project_id']) if wf['project_id'] else None
             wf['created_at'] = wf['created_at'].isoformat() if wf['created_at'] else None
             wf['updated_at'] = wf['updated_at'].isoformat() if wf['updated_at'] else None
+            print(f"✅ [get_workflow] Found workflow {workflow_id}")
             return wf
+        print(f"❌ [get_workflow] Workflow {workflow_id} not found")
         return None
     finally:
         if close_conn:
             await conn.close()
 
-async def list_workflows(tx=None) -> List[Dict[str, Any]]:
-    """Возвращает список всех воркфлоу, отсортированный по is_default и имени."""
+async def list_workflows(project_id: Optional[str] = None, tx=None) -> List[Dict[str, Any]]:
+    """Возвращает список воркфлоу. Если project_id передан, фильтрует по нему."""
     if tx:
         conn = tx.conn
         close_conn = False
@@ -66,14 +70,22 @@ async def list_workflows(tx=None) -> List[Dict[str, Any]]:
         conn = await get_connection()
         close_conn = True
     try:
-        rows = await conn.fetch('SELECT * FROM workflows ORDER BY is_default DESC, name')
+        if project_id:
+            rows = await conn.fetch(
+                'SELECT * FROM workflows WHERE project_id = $1 ORDER BY is_default DESC, name',
+                project_id
+            )
+        else:
+            rows = await conn.fetch('SELECT * FROM workflows ORDER BY is_default DESC, name')
         workflows = []
         for row in rows:
             wf = dict(row)
             wf['id'] = str(wf['id'])
+            wf['project_id'] = str(wf['project_id']) if wf['project_id'] else None
             wf['created_at'] = wf['created_at'].isoformat() if wf['created_at'] else None
             wf['updated_at'] = wf['updated_at'].isoformat() if wf['updated_at'] else None
             workflows.append(wf)
+        print(f"✅ [list_workflows] Found {len(workflows)} workflows for project {project_id}")
         return workflows
     finally:
         if close_conn:
@@ -102,6 +114,7 @@ async def update_workflow(workflow_id: str, tx=None, **kwargs) -> None:
         query = f"UPDATE workflows SET {', '.join(set_clauses)} WHERE id = ${idx}"
         values.append(workflow_id)
         await conn.execute(query, *values)
+        print(f"✅ [update_workflow] Updated workflow {workflow_id} with {kwargs}")
     finally:
         if close_conn:
             await conn.close()
@@ -116,6 +129,7 @@ async def delete_workflow(workflow_id: str, tx=None) -> None:
         close_conn = True
     try:
         await conn.execute('DELETE FROM workflows WHERE id = $1', workflow_id)
+        print(f"✅ [delete_workflow] Deleted workflow {workflow_id}")
     finally:
         if close_conn:
             await conn.close()
@@ -140,11 +154,16 @@ async def create_workflow_node(
         close_conn = True
     try:
         record_id = str(uuid.uuid4())
+        config_json = json.dumps(config)
         await conn.execute('''
             INSERT INTO workflow_nodes (id, workflow_id, node_id, prompt_key, config, position_x, position_y)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ''', record_id, workflow_id, node_id, prompt_key, json.dumps(config), position_x, position_y)
+        ''', record_id, workflow_id, node_id, prompt_key, config_json, position_x, position_y)
+        print(f"✅ [create_workflow_node] Created node {node_id} with record_id {record_id} in workflow {workflow_id}")
         return record_id
+    except Exception as e:
+        print(f"❌ [create_workflow_node] Error creating node {node_id}: {e}")
+        raise
     finally:
         if close_conn:
             await conn.close()
@@ -168,6 +187,7 @@ async def get_workflow_nodes(workflow_id: str, tx=None) -> List[Dict[str, Any]]:
             node['created_at'] = node['created_at'].isoformat() if node['created_at'] else None
             node['updated_at'] = node['updated_at'].isoformat() if node['updated_at'] else None
             nodes.append(node)
+        print(f"✅ [get_workflow_nodes] Retrieved {len(nodes)} nodes for workflow {workflow_id}")
         return nodes
     finally:
         if close_conn:
@@ -199,6 +219,7 @@ async def update_workflow_node(node_record_id: str, tx=None, **kwargs) -> None:
         query = f"UPDATE workflow_nodes SET {', '.join(set_clauses)} WHERE id = ${idx}"
         values.append(node_record_id)
         await conn.execute(query, *values)
+        print(f"✅ [update_workflow_node] Updated node {node_record_id} with {kwargs}")
     finally:
         if close_conn:
             await conn.close()
@@ -213,6 +234,7 @@ async def delete_workflow_node(node_record_id: str, tx=None) -> None:
         close_conn = True
     try:
         await conn.execute('DELETE FROM workflow_nodes WHERE id = $1', node_record_id)
+        print(f"✅ [delete_workflow_node] Deleted node {node_record_id}")
     finally:
         if close_conn:
             await conn.close()
@@ -240,7 +262,11 @@ async def create_workflow_edge(
             INSERT INTO workflow_edges (id, workflow_id, source_node, target_node, source_output, target_input)
             VALUES ($1, $2, $3, $4, $5, $6)
         ''', edge_id, workflow_id, source_node, target_node, source_output, target_input)
+        print(f"✅ [create_workflow_edge] Created edge {edge_id} from {source_node} to {target_node}")
         return edge_id
+    except Exception as e:
+        print(f"❌ [create_workflow_edge] Error creating edge: {e}")
+        raise
     finally:
         if close_conn:
             await conn.close()
@@ -262,6 +288,7 @@ async def get_workflow_edges(workflow_id: str, tx=None) -> List[Dict[str, Any]]:
             edge['workflow_id'] = str(edge['workflow_id'])
             edge['created_at'] = edge['created_at'].isoformat() if edge['created_at'] else None
             edges.append(edge)
+        print(f"✅ [get_workflow_edges] Retrieved {len(edges)} edges for workflow {workflow_id}")
         return edges
     finally:
         if close_conn:
@@ -277,6 +304,7 @@ async def delete_workflow_edge(edge_record_id: str, tx=None) -> None:
         close_conn = True
     try:
         await conn.execute('DELETE FROM workflow_edges WHERE id = $1', edge_record_id)
+        print(f"✅ [delete_workflow_edge] Deleted edge {edge_record_id}")
     finally:
         if close_conn:
             await conn.close()
@@ -284,36 +312,23 @@ async def delete_workflow_edge(edge_record_id: str, tx=None) -> None:
 # ==================== SYNC ==================== #
 
 async def sync_workflow_graph(workflow_id: str, nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]], tx) -> None:
-    """Синхронизирует узлы и рёбра воркфлоу с переданными списками.
+    """Синхронизирует узлы и рёбра воркфлоу с переданными списками."""
+    print(f"🔵 [sync_workflow_graph] START for workflow {workflow_id}")
+    print(f"    nodes received: {len(nodes)}")
+    print(f"    edges received: {len(edges)}")
 
-    Выполняется в рамках открытой транзакции.
-    Алгоритм:
-      1. Получает текущие узлы из БД.
-      2. Для каждого узла из nodes:
-         - если node_id уже существует → обновляет поля (prompt_key, config, position_x, position_y)
-         - иначе → создаёт новый узел.
-      3. Удаляет узлы, которые есть в БД, но отсутствуют в nodes (каскадно удаляются связанные рёбра).
-      4. Удаляет все оставшиеся рёбра для данного workflow (чтобы убрать те, что ссылались на неудалённые узлы, но не входят в edges).
-      5. Вставляет новые рёбра из edges.
-
-    Args:
-        workflow_id: ID воркфлоу.
-        nodes: Список словарей с ключами: node_id, prompt_key, config, position_x, position_y.
-        edges: Список словарей с ключами: source_node, target_node, source_output, target_input.
-        tx: Объект транзакции.
-
-    Raises:
-        Exception: при ошибке целостности (например, ребро ссылается на несуществующий узел) транзакция будет откачена.
-    """
     # 1. Текущие узлы
     current_nodes = await get_workflow_nodes(workflow_id, tx=tx)
-    node_map = {n['node_id']: n for n in current_nodes}  # node_id -> запись с полем id
+    print(f"    current nodes in DB: {len(current_nodes)}")
+    node_map = {n['node_id']: n for n in current_nodes}
+    print(f"    node_map keys: {list(node_map.keys())}")
 
     # 2. Обработка узлов из запроса
     for node_data in nodes:
         node_id = node_data['node_id']
+        print(f"    processing node {node_id}")
         if node_id in node_map:
-            # Обновляем существующий
+            print(f"      -> updating existing node")
             record_id = node_map[node_id]['id']
             await update_workflow_node(
                 record_id,
@@ -323,10 +338,9 @@ async def sync_workflow_graph(workflow_id: str, nodes: List[Dict[str, Any]], edg
                 position_x=node_data['position_x'],
                 position_y=node_data['position_y']
             )
-            # Удаляем из node_map, чтобы потом не удалить ошибочно
             del node_map[node_id]
         else:
-            # Создаём новый
+            print(f"      -> creating new node")
             await create_workflow_node(
                 workflow_id,
                 node_id,
@@ -337,18 +351,23 @@ async def sync_workflow_graph(workflow_id: str, nodes: List[Dict[str, Any]], edg
                 tx=tx
             )
 
-    # 3. Удаляем узлы, оставшиеся в node_map (отсутствуют в запросе)
-    for node_record in node_map.values():
-        await delete_workflow_node(node_record['id'], tx=tx)
+    # 3. Удаляем узлы, оставшиеся в node_map
+    if node_map:
+        print(f"    nodes to delete (not in request): {list(node_map.keys())}")
+        for node_record in node_map.values():
+            print(f"      deleting node {node_record['node_id']} (record {node_record['id']})")
+            await delete_workflow_node(node_record['id'], tx=tx)
 
-    # 4. Удаляем все существующие рёбра (после удаления узлов часть могла удалиться каскадно,
-    #    но удалим оставшиеся, чтобы гарантировать точное соответствие)
+    # 4. Удаляем все существующие рёбра
     current_edges = await get_workflow_edges(workflow_id, tx=tx)
+    print(f"    current edges in DB: {len(current_edges)}")
     for edge in current_edges:
+        print(f"      deleting edge {edge['id']}")
         await delete_workflow_edge(edge['id'], tx=tx)
 
     # 5. Вставляем новые рёбра
     for edge_data in edges:
+        print(f"    creating edge from {edge_data['source_node']} to {edge_data['target_node']}")
         await create_workflow_edge(
             workflow_id,
             source_node=edge_data['source_node'],
@@ -357,3 +376,5 @@ async def sync_workflow_graph(workflow_id: str, nodes: List[Dict[str, Any]], edg
             target_input=edge_data.get('target_input', 'input'),
             tx=tx
         )
+
+    print(f"🔵 [sync_workflow_graph] END for workflow {workflow_id}")

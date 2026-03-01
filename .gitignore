@@ -18,6 +18,7 @@ node_modules/
 .env.*
 !.env.example
 .streamlit/secrets.toml
+frontend/.env.production
 
 # Local scripts
 cleanup_neon_prod.py

@@ -1,6 +1,8 @@
 # CHANGED: Use workflow_engine directly, remove orchestrator
 # CHANGED: Добавлена поддержка nodes/edges в create и update
-from fastapi import APIRouter
+# CHANGED: Добавлен query-параметр project_id для list_workflows, project_id в create_workflow
+# ADDED: Принты для отладки
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from typing import Optional
 import db
@@ -19,29 +21,40 @@ logger = logging.getLogger("MRAK-SERVER")
 router = APIRouter(prefix="/api", tags=["workflows"])
 
 @router.get("/workflows")
-async def list_workflows():
-    workflows = await db.list_workflows()
+async def list_workflows(project_id: Optional[str] = Query(None, description="Filter workflows by project ID")):
+    print(f"📥 GET /workflows project_id={project_id}")
+    workflows = await db.list_workflows(project_id=project_id)
+    print(f"📤 GET /workflows returning {len(workflows)} workflows")
     return JSONResponse(content=workflows)
 
 @router.post("/workflows", status_code=201)
 async def create_workflow(workflow: WorkflowCreate):
-    """Создаёт новый воркфлоу с опциональным графом (узлы и рёбра)."""
+    print(f"📥 POST /workflows name={workflow.name}, project_id={workflow.project_id}")
     async with transaction() as tx:
-        wf_id = await db.create_workflow(workflow.name, workflow.description, workflow.is_default, tx=tx)
+        wf_id = await db.create_workflow(
+            name=workflow.name,
+            description=workflow.description,
+            is_default=workflow.is_default,
+            project_id=workflow.project_id,
+            tx=tx
+        )
         if workflow.nodes or workflow.edges:
-            # Преобразуем Pydantic модели в словари для передачи в sync
             nodes_data = [node.dict() for node in workflow.nodes]
             edges_data = [edge.dict() for edge in workflow.edges]
+            print(f"   nodes: {len(nodes_data)}, edges: {len(edges_data)}")
             await db.sync_workflow_graph(wf_id, nodes_data, edges_data, tx)
+    print(f"📤 POST /workflows created {wf_id}")
     return JSONResponse(content={"id": wf_id})
 
 @router.get("/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str):
+    print(f"📥 GET /workflows/{workflow_id}")
     wf = await db.get_workflow(workflow_id)
     if not wf:
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
     nodes = await db.get_workflow_nodes(workflow_id)
     edges = await db.get_workflow_edges(workflow_id)
+    print(f"📤 GET /workflows/{workflow_id} returning workflow with {len(nodes)} nodes, {len(edges)} edges")
     return JSONResponse(content={
         "workflow": wf,
         "nodes": nodes,
@@ -50,6 +63,7 @@ async def get_workflow(workflow_id: str):
 
 @router.put("/workflows/{workflow_id}")
 async def update_workflow(workflow_id: str, wf_update: WorkflowUpdate):
+    print(f"📥 PUT /workflows/{workflow_id}")
     existing = await db.get_workflow(workflow_id)
     if not existing:
         return JSONResponse(content={"error": "Workflow not found"}, status_code=404)
@@ -60,14 +74,17 @@ async def update_workflow(workflow_id: str, wf_update: WorkflowUpdate):
         edges_to_sync = update_data.pop('edges', None)
 
         if update_data:
+            print(f"   updating workflow metadata: {update_data}")
             await db.update_workflow(workflow_id, tx=tx, **update_data)
 
         # Если оба списка переданы, синхронизируем граф
         if nodes_to_sync is not None and edges_to_sync is not None:
+            print(f"   syncing graph: {len(nodes_to_sync)} nodes, {len(edges_to_sync)} edges")
             await db.sync_workflow_graph(workflow_id, nodes_to_sync, edges_to_sync, tx)
         elif nodes_to_sync is not None or edges_to_sync is not None:
-            logger.warning(f"Partial graph update skipped for workflow {workflow_id}: need both nodes and edges lists")
+            print(f"   WARNING: partial graph update skipped")
 
+    print(f"📤 PUT /workflows/{workflow_id} completed")
     return JSONResponse(content={"status": "updated"})
 
 @router.delete("/workflows/{workflow_id}")

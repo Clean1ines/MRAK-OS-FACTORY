@@ -146,7 +146,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
 
   const [showCreateWorkflowModal, setShowCreateWorkflowModal] = useState(false);
 
-  // ADDED: состояния для редактирования/удаления конкретного воркфлоу
+  // состояния для редактирования/удаления конкретного воркфлоу
   const [editingWorkflow, setEditingWorkflow] = useState<{ id: string; name: string; description: string } | null>(null);
   const [deletingWorkflow, setDeletingWorkflow] = useState<{ id: string; name: string } | null>(null);
 
@@ -174,12 +174,13 @@ export const useWorkflows = (selectedProjectId: string | null) => {
   useEffect(() => {
     if (workflowDetail) {
       const nodes = (workflowDetail.nodes || []).map((n: WorkflowNode) => ({
-        id: n.node_id || crypto.randomUUID(),
+        id: crypto.randomUUID(),
         node_id: n.node_id!,
         prompt_key: n.prompt_key || 'UNKNOWN',
         position_x: n.position_x || 100,
         position_y: n.position_y || 100,
-        config: n.config || {}
+        config: n.config || {},
+        recordId: n.id, // сохраняем record_id из БД
       }));
       const edges = (workflowDetail.edges || []).map((e: WorkflowEdge) => ({
         id: e.id || crypto.randomUUID(),
@@ -243,6 +244,58 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     },
   });
 
+  // ADDED: мутация обновления узла
+  const updateNodeMutation = useMutation({
+    mutationFn: async ({ recordId, prompt_key, config }: { recordId: string; prompt_key: string; config: Record<string, unknown> }) => {
+      const token = sessionStorage.getItem('mrak_session_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/workflows/nodes/${recordId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ prompt_key, config }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
+      return { recordId, prompt_key, config };
+    },
+    onSuccess: ({ recordId, prompt_key, config }) => {
+      canvas.setNodes(prev =>
+        prev.map(node =>
+          node.recordId === recordId ? { ...node, prompt_key, config } : node
+        )
+      );
+      toast.success('Node updated');
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast.error('Failed to update node');
+    },
+  });
+
+  // ADDED: мутация удаления узла
+  const deleteNodeMutation = useMutation({
+    mutationFn: async (recordId: string) => {
+      const r = await client.DELETE('/api/workflows/nodes/{node_record_id}', {
+        params: { path: { node_record_id: recordId } }
+      });
+      if (r.error) throw r.error;
+      return recordId;
+    },
+    onSuccess: (recordId) => {
+      canvas.setNodes(prev => prev.filter(node => node.recordId !== recordId));
+      canvas.setEdges(prev => prev.filter(e => e.source_node !== recordId && e.target_node !== recordId));
+      toast.success('Node deleted');
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast.error('Failed to delete node');
+    },
+  });
+
   const handleSave = useCallback(async () => {
     if (!workflowName.trim() || !selectedProjectId) {
       toast.error('⚠️ Заполните обязательные поля');
@@ -268,7 +321,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     }
   }, [workflowName, workflowDescription, selectedProjectId, currentWorkflowId, canvas.nodes, canvas.edges, saveWorkflowMutation]);
 
-  const handleDelete = useCallback(async (id: string) => {
+  const handleDeleteWorkflow = useCallback(async (id: string) => {
     try {
       await deleteWorkflowMutation.mutateAsync(id);
       setDeletingWorkflow(null);
@@ -295,7 +348,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     }
   }, [selectedProjectId, createWorkflowMutation]);
 
-  // ADDED: обновление метаданных воркфлоу (без изменения графа) по ID
   const updateWorkflowMetadata = useCallback(async (id: string, name: string, description: string) => {
     if (!id || !selectedProjectId) {
       toast.error('No workflow selected');
@@ -307,7 +359,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
         name,
         description,
         projectId: selectedProjectId,
-        nodes: canvas.nodes, // передаём текущий граф, чтобы не потерять
+        nodes: canvas.nodes,
         edges: canvas.edges,
       });
       if (currentWorkflowId === id) {
@@ -320,7 +372,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     }
   }, [selectedProjectId, canvas.nodes, canvas.edges, saveWorkflowMutation, currentWorkflowId]);
 
-  // ADDED: функции для открытия/закрытия модалок
+  // функции для открытия/закрытия модалок воркфлоу
   const openEditModal = (wf: WorkflowSummary) => {
     setEditingWorkflow({ id: wf.id!, name: wf.name, description: wf.description || '' });
   };
@@ -330,6 +382,15 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     setDeletingWorkflow({ id: wf.id!, name: wf.name });
   };
   const closeDeleteModal = () => setDeletingWorkflow(null);
+
+  // ADDED: функции для узлов
+  const updateNode = useCallback(async (recordId: string, prompt_key: string, config: Record<string, unknown>) => {
+    return updateNodeMutation.mutateAsync({ recordId, prompt_key, config });
+  }, [updateNodeMutation]);
+
+  const deleteNode = useCallback(async (recordId: string) => {
+    return deleteNodeMutation.mutateAsync(recordId);
+  }, [deleteNodeMutation]);
 
   return {
     workflows,
@@ -348,13 +409,18 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     setCurrentWorkflowId,
     setShowCreateWorkflowModal,
     handleSave,
-    handleDelete, // теперь принимает id
+    handleDelete: handleDeleteWorkflow, // теперь принимает id
     handleCreateWorkflow,
     updateWorkflowMetadata,
     openEditModal,
     closeEditModal,
     openDeleteModal,
     closeDeleteModal,
+    // узлы
+    updateNode,
+    deleteNode,
+    isUpdatingNode: updateNodeMutation.isPending,
+    isDeletingNode: deleteNodeMutation.isPending,
     isCreatingWorkflow: createWorkflowMutation.isPending,
     isDeletingWorkflow: deleteWorkflowMutation.isPending,
   };

@@ -73,7 +73,8 @@ export const useWorkflowCanvas = (initialNodes: NodeData[] = [], initialEdges: E
         prompt_key: title,
         position_x: newNodePosition.x,
         position_y: newNodePosition.y,
-        config: { custom_prompt: newNodePrompt }
+        config: { custom_prompt: newNodePrompt },
+        recordId: undefined, // новый узел пока не имеет recordId
       }]);
     }
     setShowNodeModal(false);

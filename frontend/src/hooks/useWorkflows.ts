@@ -141,15 +141,17 @@ export const useWorkflows = (selectedProjectId: string | null) => {
 
   const [currentWorkflowId, setCurrentWorkflowId] = useState<string | null>(null);
   const [workflowName, setWorkflowName] = useState('');
+  const [workflowDescription, setWorkflowDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Состояния для создания воркфлоу
   const [showCreateWorkflowModal, setShowCreateWorkflowModal] = useState(false);
 
-  // Холст управляется отдельным хуком
+  // ADDED: состояния для редактирования/удаления конкретного воркфлоу
+  const [editingWorkflow, setEditingWorkflow] = useState<{ id: string; name: string; description: string } | null>(null);
+  const [deletingWorkflow, setDeletingWorkflow] = useState<{ id: string; name: string } | null>(null);
+
   const canvas = useWorkflowCanvas();
 
-  // Запрос списка воркфлоу
   const {
     data: workflows = [],
     isLoading: isLoadingWorkflows,
@@ -160,7 +162,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     enabled: !!selectedProjectId,
   });
 
-  // Запрос деталей текущего воркфлоу
   const {
     data: workflowDetail,
     isLoading: isLoadingDetail,
@@ -170,7 +171,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     enabled: !!currentWorkflowId,
   });
 
-  // Эффект для обновления canvas при загрузке деталей
   useEffect(() => {
     if (workflowDetail) {
       const nodes = (workflowDetail.nodes || []).map((n: WorkflowNode) => ({
@@ -186,19 +186,19 @@ export const useWorkflows = (selectedProjectId: string | null) => {
         source_node: e.source_node!,
         target_node: e.target_node!
       }));
-      // Обновляем состояние холста (setNodes/setEdges доступны из canvas)
       canvas.setNodes(nodes);
       canvas.setEdges(edges);
       setWorkflowName(workflowDetail.workflow?.name || '');
+      setWorkflowDescription(workflowDetail.workflow?.description || '');
     } else {
       canvas.setNodes([]);
       canvas.setEdges([]);
       setWorkflowName('');
+      setWorkflowDescription('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowDetail]);
 
-  // Мутация создания воркфлоу (просто имя, без нод)
   const createWorkflowMutation = useMutation({
     mutationFn: createWorkflowApi,
     onSuccess: () => {
@@ -212,7 +212,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     },
   });
 
-  // Мутация сохранения (с нодами и рёбрами)
   const saveWorkflowMutation = useMutation({
     mutationFn: saveWorkflowApi,
     onSuccess: () => {
@@ -225,15 +224,17 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     },
   });
 
-  // Мутация удаления
   const deleteWorkflowMutation = useMutation({
     mutationFn: deleteWorkflowApi,
-    onSuccess: () => {
+    onSuccess: (deletedId) => {
       queryClient.invalidateQueries({ queryKey: ['workflows', selectedProjectId] });
-      canvas.setNodes([]);
-      canvas.setEdges([]);
-      setCurrentWorkflowId(null);
-      setWorkflowName('New Workflow');
+      if (currentWorkflowId === deletedId) {
+        canvas.setNodes([]);
+        canvas.setEdges([]);
+        setCurrentWorkflowId(null);
+        setWorkflowName('');
+        setWorkflowDescription('');
+      }
       toast.success('✅ Удалено');
     },
     onError: (err: unknown) => {
@@ -256,7 +257,7 @@ export const useWorkflows = (selectedProjectId: string | null) => {
       await saveWorkflowMutation.mutateAsync({
         id: currentWorkflowId || undefined,
         name: workflowName,
-        description: 'Created in workspace editor',
+        description: workflowDescription,
         projectId: selectedProjectId,
         nodes: canvas.nodes,
         edges: canvas.edges,
@@ -265,17 +266,17 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     } finally {
       setLoading(false);
     }
-  }, [workflowName, selectedProjectId, currentWorkflowId, canvas.nodes, canvas.edges, saveWorkflowMutation]);
+  }, [workflowName, workflowDescription, selectedProjectId, currentWorkflowId, canvas.nodes, canvas.edges, saveWorkflowMutation]);
 
-  const handleDelete = useCallback(async () => {
-    if (!currentWorkflowId || !confirm(`Удалить "${workflowName}"?`)) return false;
+  const handleDelete = useCallback(async (id: string) => {
     try {
-      await deleteWorkflowMutation.mutateAsync(currentWorkflowId);
+      await deleteWorkflowMutation.mutateAsync(id);
+      setDeletingWorkflow(null);
       return true;
     } catch {
       return false;
     }
-  }, [currentWorkflowId, workflowName, deleteWorkflowMutation]);
+  }, [deleteWorkflowMutation]);
 
   const handleCreateWorkflow = useCallback(async (name: string, description: string) => {
     if (!name.trim() || !selectedProjectId) {
@@ -294,27 +295,66 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     }
   }, [selectedProjectId, createWorkflowMutation]);
 
+  // ADDED: обновление метаданных воркфлоу (без изменения графа) по ID
+  const updateWorkflowMetadata = useCallback(async (id: string, name: string, description: string) => {
+    if (!id || !selectedProjectId) {
+      toast.error('No workflow selected');
+      return false;
+    }
+    try {
+      await saveWorkflowMutation.mutateAsync({
+        id,
+        name,
+        description,
+        projectId: selectedProjectId,
+        nodes: canvas.nodes, // передаём текущий граф, чтобы не потерять
+        edges: canvas.edges,
+      });
+      if (currentWorkflowId === id) {
+        setWorkflowName(name);
+        setWorkflowDescription(description);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, [selectedProjectId, canvas.nodes, canvas.edges, saveWorkflowMutation, currentWorkflowId]);
+
+  // ADDED: функции для открытия/закрытия модалок
+  const openEditModal = (wf: WorkflowSummary) => {
+    setEditingWorkflow({ id: wf.id!, name: wf.name, description: wf.description || '' });
+  };
+  const closeEditModal = () => setEditingWorkflow(null);
+
+  const openDeleteModal = (wf: WorkflowSummary) => {
+    setDeletingWorkflow({ id: wf.id!, name: wf.name });
+  };
+  const closeDeleteModal = () => setDeletingWorkflow(null);
+
   return {
-    // данные из query
     workflows,
     isLoadingWorkflows,
     workflowsError,
-    // состояния из canvas
     ...canvas,
-    // состояния
     workflowName,
+    workflowDescription,
     currentWorkflowId,
     loading: loading || isLoadingDetail || saveWorkflowMutation.isPending,
     showCreateWorkflowModal,
-    // сеттеры
+    editingWorkflow,
+    deletingWorkflow,
     setWorkflowName,
+    setWorkflowDescription,
     setCurrentWorkflowId,
     setShowCreateWorkflowModal,
-    // функции
     handleSave,
-    handleDelete,
+    handleDelete, // теперь принимает id
     handleCreateWorkflow,
-    // статусы мутаций
+    updateWorkflowMetadata,
+    openEditModal,
+    closeEditModal,
+    openDeleteModal,
+    closeDeleteModal,
     isCreatingWorkflow: createWorkflowMutation.isPending,
     isDeletingWorkflow: deleteWorkflowMutation.isPending,
   };

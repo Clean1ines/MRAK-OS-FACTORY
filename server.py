@@ -4,16 +4,18 @@ import os
 import uuid
 from pathlib import Path
 from dotenv import load_dotenv
+from fastapi import FastAPI, Request
 
 # Load environment variables before any other imports that might use them
 load_dotenv()
 
-from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 import structlog
 from routers import projects, artifacts, clarification, workflows, modes, auth
 import db
+
+
 
 def validate_env():
     required = ["DATABASE_URL", "MASTER_KEY"]

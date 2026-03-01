@@ -155,3 +155,88 @@ async def test_delete_workflow_edge(tx):
 
     edges = await get_workflow_edges(wf_id, tx=tx)
     assert len(edges) == 0
+
+# ==================== NEW TESTS ====================
+
+async def test_cascade_delete_node_with_edges(tx):
+    # Создаём проект и воркфлоу
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("Cascade WF", project_id, tx=tx)
+
+    # Создаём узлы
+    node_a_id = await create_workflow_node(wf_id, "a", "A", {}, 0, 0, tx=tx)
+    node_b_id = await create_workflow_node(wf_id, "b", "B", {}, 100, 0, tx=tx)
+
+    # Создаём ребро
+    edge_id = await create_workflow_edge(wf_id, "a", "b", tx=tx)
+
+    # Удаляем узел a
+    await delete_workflow_node(node_a_id, tx=tx)
+
+    # Проверяем, что узел a удалился, а b остался
+    nodes = await get_workflow_nodes(wf_id, tx=tx)
+    assert len(nodes) == 1
+    assert nodes[0]["node_id"] == "b"
+
+    # Проверяем, что рёбер нет
+    edges = await get_workflow_edges(wf_id, tx=tx)
+    assert len(edges) == 0
+
+async def test_create_workflow_with_initial_graph(tx):
+    """Создание воркфлоу с начальным графом (через sync_workflow_graph)"""
+    from db import sync_workflow_graph  # импортируем функцию синхронизации
+
+    project_id = str(uuid.uuid4())
+    await tx.conn.execute(
+        "INSERT INTO projects (id, name) VALUES ($1, $2)",
+        project_id, "Test Project"
+    )
+    wf_id = await create_workflow("Initial Graph", project_id, tx=tx)
+
+    nodes = [
+        {
+            "node_id": "n1",
+            "prompt_key": "NODE1",
+            "config": {"custom": "hello"},
+            "position_x": 10,
+            "position_y": 20
+        },
+        {
+            "node_id": "n2",
+            "prompt_key": "NODE2",
+            "config": {},
+            "position_x": 200,
+            "position_y": 30
+        }
+    ]
+    edges = [
+        {
+            "source_node": "n1",
+            "target_node": "n2",
+            "source_output": "out",
+            "target_input": "in"
+        }
+    ]
+
+    await sync_workflow_graph(wf_id, nodes, edges, tx)
+
+    # Проверяем узлы
+    db_nodes = await get_workflow_nodes(wf_id, tx=tx)
+    assert len(db_nodes) == 2
+    node_map = {n["node_id"]: n for n in db_nodes}
+    assert node_map["n1"]["prompt_key"] == "NODE1"
+    assert node_map["n1"]["config"] == {"custom": "hello"}
+    assert node_map["n2"]["prompt_key"] == "NODE2"
+
+    # Проверяем рёбра
+    db_edges = await get_workflow_edges(wf_id, tx=tx)
+    assert len(db_edges) == 1
+    edge = db_edges[0]
+    assert edge["source_node"] == "n1"
+    assert edge["target_node"] == "n2"
+    assert edge["source_output"] == "out"
+    assert edge["target_input"] == "in"

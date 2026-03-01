@@ -331,11 +331,11 @@ export const useWorkflows = (selectedProjectId: string | null) => {
       }
       return res.json();
     },
-    onSuccess: (data, variables) => {
+    onSuccess: () => {
       toast.success('Edge created');
     },
     onError: (err: unknown) => {
-      console.error('Edge creation error:', err);
+      console.error('❌ Edge creation error:', err);
       toast.error('Failed to create edge: ' + (err instanceof Error ? err.message : String(err)));
     },
   });
@@ -556,20 +556,19 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     const sourceNode = canvas.connectingNode;
     if (!sourceNode) return;
 
-    console.log('Creating edge:', { sourceNode, targetNodeId, currentWorkflowId });
-
-    canvas.handleCompleteConnection(targetNodeId);
+    const source = sourceNode;
+    const target = targetNodeId;
 
     try {
       await createEdgeMutation.mutateAsync({
         workflowId: currentWorkflowId,
-        sourceNode,
-        targetNode: targetNodeId,
+        sourceNode: source,
+        targetNode: target,
       });
+      canvas.handleCompleteConnection(target);
     } catch (err) {
-      // Ошибка уже обработана в мутации, но можно дополнительно
-      console.error('Edge creation failed, rolling back local addition?', err);
-      // В идеале нужно откатить локальное ребро, но пока оставим
+      console.error('Edge creation failed:', err);
+      toast.error('Failed to create edge: ' + (err instanceof Error ? err.message : String(err)));
     }
   }, [canvas, currentWorkflowId, createEdgeMutation]);
 

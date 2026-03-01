@@ -25,7 +25,6 @@ export const WorkspacePage: React.FC = () => {
 
   const [editingNode, setEditingNode] = useState<{ recordId: string; promptKey: string; config: Record<string, unknown> } | null>(null);
   const [deletingNode, setDeletingNode] = useState<{ recordId?: string; nodeId: string; name: string } | null>(null);
-  // ADDED: состояние для удаления ребра
   const [deletingEdge, setDeletingEdge] = useState<{ edgeId: string; sourceNode: string; targetNode: string } | null>(null);
 
   const sidebarOpen = !isMobile && !userClosedSidebar;
@@ -71,7 +70,6 @@ export const WorkspacePage: React.FC = () => {
     setDeletingNode(null);
   };
 
-  // ADDED: обработчик для удаления ребра
   const handleRequestDeleteEdge = (edgeId: string, sourceNode: string, targetNode: string) => {
     setDeletingEdge({ edgeId, sourceNode, targetNode });
   };
@@ -235,8 +233,9 @@ export const WorkspacePage: React.FC = () => {
             onAddCustomNode={workflowsHook.handleAddCustomNode}
             onEditNode={(recordId, promptKey, config) => setEditingNode({ recordId, promptKey, config })}
             onRequestDeleteNode={handleRequestDeleteNode}
+            onStartConnection={workflowsHook.handleStartConnection} // ADDED
             onCompleteConnection={workflowsHook.handleCompleteConnection}
-            onRequestDeleteEdge={handleRequestDeleteEdge} // ADDED
+            onRequestDeleteEdge={handleRequestDeleteEdge}
           />
         </div>
 
@@ -330,7 +329,6 @@ export const WorkspacePage: React.FC = () => {
           isPending={workflowsHook.isDeletingNode}
         />
 
-        {/* ADDED: модалка для удаления ребра */}
         <DeleteConfirmModal
           isOpen={!!deletingEdge}
           onClose={() => setDeletingEdge(null)}

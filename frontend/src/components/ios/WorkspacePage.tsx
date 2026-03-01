@@ -222,6 +222,7 @@ export const WorkspacePage: React.FC = () => {
             onAddCustomNode={workflowsHook.handleAddCustomNode}
             onEditNode={(recordId, promptKey, config) => setEditingNode({ recordId, promptKey, config })}
             onRequestDeleteNode={handleRequestDeleteNode}
+            onCompleteConnection={workflowsHook.handleCompleteConnection} // используем обёрнутую версию
           />
         </div>
 

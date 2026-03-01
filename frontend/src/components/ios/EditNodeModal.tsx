@@ -10,6 +10,11 @@ interface EditNodeModalProps {
   isSaving?: boolean;
 }
 
+/**
+ * Модальное окно для редактирования узла.
+ * Позволяет изменить prompt_key и custom_prompt (извлекаемый из config).
+ * Не показывает JSON, только текстовое поле.
+ */
 export const EditNodeModal: React.FC<EditNodeModalProps> = ({
   isOpen,
   onClose,
@@ -19,7 +24,10 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
   isSaving = false,
 }) => {
   const [promptKey, setPromptKey] = useState(initialPromptKey);
-  const [configText, setConfigText] = useState(JSON.stringify(initialConfig, null, 2));
+  // Предполагаем, что в config лежит custom_prompt (как при создании)
+  const [customPrompt, setCustomPrompt] = useState(
+    typeof initialConfig.custom_prompt === 'string' ? initialConfig.custom_prompt : ''
+  );
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -27,7 +35,9 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPromptKey(initialPromptKey);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setConfigText(JSON.stringify(initialConfig, null, 2));
+      setCustomPrompt(
+        typeof initialConfig.custom_prompt === 'string' ? initialConfig.custom_prompt : ''
+      );
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('');
     }
@@ -39,18 +49,18 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
       setError('Prompt key is required');
       return;
     }
-    try {
-      const config = JSON.parse(configText);
-      await onSave(promptKey.trim(), config);
-      onClose();
-    } catch (err) {
-      setError('Invalid JSON: ' + (err instanceof Error ? err.message : String(err)));
-    }
+    setError('');
+    // Сохраняем custom_prompt в config, остальные поля конфига (если были) можно сохранить,
+    // но для простоты заменяем весь config на объект с custom_prompt
+    const newConfig = { custom_prompt: customPrompt };
+    await onSave(promptKey.trim(), newConfig);
+    onClose();
   };
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title="Edit Node">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <p className="text-xs text-[var(--accent-danger)]">{error}</p>}
         <div>
           <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
             Prompt Key *
@@ -66,25 +76,17 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
         </div>
         <div>
           <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
-            Config (JSON)
+            Prompt Text
           </label>
           <textarea
-            value={configText}
-            onChange={(e) => setConfigText(e.target.value)}
-            rows={8}
-            className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)] font-mono resize-vertical"
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            rows={5}
+            className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)] resize-vertical"
             disabled={isSaving}
           />
         </div>
-        {error && <p className="text-[var(--accent-danger)] text-xs">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)] transition-colors"
-          >
-            Cancel
-          </button>
           <button
             type="submit"
             disabled={isSaving}

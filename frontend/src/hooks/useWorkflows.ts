@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { client } from '../api/client';
 import toast from 'react-hot-toast';
 import type { NodeData, EdgeData } from './useCanvasEngine';
 import { validateWorkflowAcyclic } from '../utils/graphUtils';
@@ -43,22 +42,31 @@ interface WorkflowDetail {
   edges: WorkflowEdge[];
 }
 
+// используем fetch вместо client.GET для обхода проблем с типами
 const fetchWorkflows = async (projectId: string | null): Promise<WorkflowSummary[]> => {
   if (!projectId) return [];
-  const response = (await client.GET('/api/workflows')) as {
-    data?: WorkflowSummary[];
-    error?: unknown;
-  };
-  if (response.error) throw response.error;
-  return response.data || [];
+  const token = sessionStorage.getItem('mrak_session_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const url = `/api/workflows?project_id=${encodeURIComponent(projectId)}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
 };
 
 const fetchWorkflowDetail = async (id: string): Promise<WorkflowDetail> => {
-  const r = await client.GET('/api/workflows/{workflow_id}', {
-    params: { path: { workflow_id: id } }
-  });
-  if (r.error) throw r.error;
-  return r.data as WorkflowDetail;
+  const token = sessionStorage.getItem('mrak_session_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`/api/workflows/${id}`, { headers });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
 };
 
 const createWorkflowApi = async (params: {
@@ -129,10 +137,14 @@ const saveWorkflowApi = async (params: {
 };
 
 const deleteWorkflowApi = async (id: string) => {
-  const r = await client.DELETE('/api/workflows/{workflow_id}', {
-    params: { path: { workflow_id: id } }
-  });
-  if (r.error) throw r.error;
+  const token = sessionStorage.getItem('mrak_session_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`/api/workflows/${id}`, { method: 'DELETE', headers });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `HTTP ${res.status}`);
+  }
   return id;
 };
 
@@ -215,9 +227,12 @@ export const useWorkflows = (selectedProjectId: string | null) => {
 
   const saveWorkflowMutation = useMutation({
     mutationFn: saveWorkflowApi,
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workflows', selectedProjectId] });
-      toast.success(`✅ Workflow ${currentWorkflowId ? 'обновлён' : 'сохранён'}!`);
+      if (variables.id) {
+        queryClient.invalidateQueries({ queryKey: ['workflow', variables.id] });
+      }
+      toast.success(`✅ Workflow ${variables.id ? 'обновлён' : 'сохранён'}!`);
     },
     onError: (err: unknown) => {
       console.error('Save error:', err);
@@ -244,7 +259,54 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     },
   });
 
-  // ADDED: мутация обновления узла
+  // мутация создания узла
+  const createNodeMutation = useMutation({
+    mutationFn: async (params: {
+      workflowId: string;
+      nodeId: string;
+      promptKey: string;
+      config: Record<string, unknown>;
+      positionX: number;
+      positionY: number;
+    }) => {
+      const token = sessionStorage.getItem('mrak_session_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/workflows/${params.workflowId}/nodes`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          node_id: params.nodeId,
+          prompt_key: params.promptKey,
+          config: params.config,
+          position_x: params.positionX,
+          position_y: params.positionY,
+        }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
+      return res.json(); // { id: recordId }
+    },
+    onSuccess: (data, variables) => {
+      // обновляем локальный узел, добавляя recordId
+      canvas.setNodes(prev =>
+        prev.map(node =>
+          node.node_id === variables.nodeId
+            ? { ...node, recordId: data.id }
+            : node
+        )
+      );
+      toast.success('Node created');
+    },
+    onError: (err: unknown) => {
+      console.error(err);
+      toast.error('Failed to create node');
+    },
+  });
+
   const updateNodeMutation = useMutation({
     mutationFn: async ({ recordId, prompt_key, config }: { recordId: string; prompt_key: string; config: Record<string, unknown> }) => {
       const token = sessionStorage.getItem('mrak_session_token');
@@ -276,13 +338,16 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     },
   });
 
-  // ADDED: мутация удаления узла
   const deleteNodeMutation = useMutation({
     mutationFn: async (recordId: string) => {
-      const r = await client.DELETE('/api/workflows/nodes/{node_record_id}', {
-        params: { path: { node_record_id: recordId } }
-      });
-      if (r.error) throw r.error;
+      const token = sessionStorage.getItem('mrak_session_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/workflows/nodes/${recordId}`, { method: 'DELETE', headers });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
       return recordId;
     },
     onSuccess: (recordId) => {
@@ -372,7 +437,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     }
   }, [selectedProjectId, canvas.nodes, canvas.edges, saveWorkflowMutation, currentWorkflowId]);
 
-  // функции для открытия/закрытия модалок воркфлоу
   const openEditModal = (wf: WorkflowSummary) => {
     setEditingWorkflow({ id: wf.id!, name: wf.name, description: wf.description || '' });
   };
@@ -383,7 +447,6 @@ export const useWorkflows = (selectedProjectId: string | null) => {
   };
   const closeDeleteModal = () => setDeletingWorkflow(null);
 
-  // ADDED: функции для узлов
   const updateNode = useCallback(async (recordId: string, prompt_key: string, config: Record<string, unknown>) => {
     return updateNodeMutation.mutateAsync({ recordId, prompt_key, config });
   }, [updateNodeMutation]);
@@ -392,11 +455,48 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     return deleteNodeMutation.mutateAsync(recordId);
   }, [deleteNodeMutation]);
 
+  // обёртки для автоматического сохранения узлов
+  const wrappedConfirmAddCustomNode = useCallback(async () => {
+    if (!currentWorkflowId) {
+      toast.error('No workflow selected');
+      return;
+    }
+    const newNode = await canvas.confirmAddCustomNode();
+    if (!newNode) return;
+
+    await createNodeMutation.mutateAsync({
+      workflowId: currentWorkflowId,
+      nodeId: newNode.node_id,
+      promptKey: newNode.prompt_key,
+      config: newNode.config || {},
+      positionX: newNode.position_x,
+      positionY: newNode.position_y,
+    });
+  }, [canvas, currentWorkflowId, createNodeMutation]); // CHANGED: added canvas
+
+  const wrappedAddNodeFromList = useCallback(async (node: NodeData) => {
+    if (!currentWorkflowId) {
+      toast.error('No workflow selected');
+      return;
+    }
+    canvas.addNodeFromList(node);
+    await createNodeMutation.mutateAsync({
+      workflowId: currentWorkflowId,
+      nodeId: node.node_id,
+      promptKey: node.prompt_key,
+      config: node.config || {},
+      positionX: node.position_x,
+      positionY: node.position_y,
+    });
+  }, [canvas, currentWorkflowId, createNodeMutation]); // CHANGED: added canvas
+
   return {
     workflows,
     isLoadingWorkflows,
     workflowsError,
     ...canvas,
+    confirmAddCustomNode: wrappedConfirmAddCustomNode,
+    addNodeFromList: wrappedAddNodeFromList,
     workflowName,
     workflowDescription,
     currentWorkflowId,
@@ -409,18 +509,18 @@ export const useWorkflows = (selectedProjectId: string | null) => {
     setCurrentWorkflowId,
     setShowCreateWorkflowModal,
     handleSave,
-    handleDelete: handleDeleteWorkflow, // теперь принимает id
+    handleDelete: handleDeleteWorkflow,
     handleCreateWorkflow,
     updateWorkflowMetadata,
     openEditModal,
     closeEditModal,
     openDeleteModal,
     closeDeleteModal,
-    // узлы
     updateNode,
     deleteNode,
     isUpdatingNode: updateNodeMutation.isPending,
     isDeletingNode: deleteNodeMutation.isPending,
+    isCreatingNode: createNodeMutation.isPending,
     isCreatingWorkflow: createWorkflowMutation.isPending,
     isDeletingWorkflow: deleteWorkflowMutation.isPending,
   };

@@ -1,7 +1,23 @@
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import type { NodeData, EdgeData } from './useCanvasEngine';
 import { useNodeValidation } from '../components/ios/useNodeValidation';
+
+// Локальные типы, расширяющие базовые
+export interface NodeData {
+  id: string;
+  node_id: string;
+  prompt_key: string;
+  position_x: number;
+  position_y: number;
+  config?: Record<string, unknown>;
+  recordId?: string;
+}
+
+export interface EdgeData {
+  id: string;
+  source_node: string;
+  target_node: string;
+}
 
 interface UseWorkflowCanvasReturn {
   nodes: NodeData[];
@@ -17,7 +33,7 @@ interface UseWorkflowCanvasReturn {
   setNodes: (nodes: NodeData[] | ((prev: NodeData[]) => NodeData[])) => void;
   setEdges: (edges: EdgeData[] | ((prev: EdgeData[]) => EdgeData[])) => void;
   handleAddCustomNode: (x: number, y: number) => void;
-  confirmAddCustomNode: () => Promise<void>;
+  confirmAddCustomNode: () => Promise<NodeData | undefined>;
   addNodeFromList: (node: NodeData) => void;
   validateNodeUnique: (title: string, prompt: string) => string | null;
   createDeleteHandler: (nodeId: string) => () => void;
@@ -28,22 +44,17 @@ interface UseWorkflowCanvasReturn {
   setSelectedNode: (nodeId: string | null) => void;
 }
 
-/**
- * Хук для управления состоянием канваса (ноды, рёбра, соединения, модалки нод)
- */
 export const useWorkflowCanvas = (initialNodes: NodeData[] = [], initialEdges: EdgeData[] = []): UseWorkflowCanvasReturn => {
   const [nodes, setNodes] = useState<NodeData[]>(initialNodes);
   const [edges, setEdges] = useState<EdgeData[]>(initialEdges);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [connectingNode, setConnectingNode] = useState<string | null>(null);
 
-  // Модалки и формы для нод
   const [showNodeModal, setShowNodeModal] = useState(false);
   const [showNodeList, setShowNodeList] = useState(false);
   const [newNodePrompt, setNewNodePrompt] = useState('');
   const [newNodeTitle, setNewNodeTitle] = useState('');
 
-  // Для создания кастомной ноды (позиция)
   const [newNodePosition, setNewNodePosition] = useState<{ x: number; y: number } | null>(null);
 
   const { validateNodeUnique } = useNodeValidation(nodes);
@@ -55,7 +66,7 @@ export const useWorkflowCanvas = (initialNodes: NodeData[] = [], initialEdges: E
     setNewNodePosition({ x, y });
   }, []);
 
-  const confirmAddCustomNode = useCallback(async () => {
+  const confirmAddCustomNode = useCallback(async (): Promise<NodeData | undefined> => {
     if (!newNodePrompt.trim()) {
       toast.error('Введите промпт');
       return;
@@ -66,21 +77,25 @@ export const useWorkflowCanvas = (initialNodes: NodeData[] = [], initialEdges: E
       toast.error(`⚠️ ${err}`);
       return;
     }
-    if (newNodePosition) {
-      setNodes(prev => [...prev, {
-        id: crypto.randomUUID(),
-        node_id: crypto.randomUUID(),
-        prompt_key: title,
-        position_x: newNodePosition.x,
-        position_y: newNodePosition.y,
-        config: { custom_prompt: newNodePrompt },
-        recordId: undefined, // новый узел пока не имеет recordId
-      }]);
+    if (!newNodePosition) {
+      toast.error('Position not set');
+      return;
     }
+    const newNode: NodeData = {
+      id: crypto.randomUUID(),
+      node_id: crypto.randomUUID(),
+      prompt_key: title,
+      position_x: newNodePosition.x,
+      position_y: newNodePosition.y,
+      config: { custom_prompt: newNodePrompt },
+      recordId: undefined,
+    };
+    setNodes(prev => [...prev, newNode]);
     setShowNodeModal(false);
     setNewNodePrompt('');
     setNewNodeTitle('');
     setNewNodePosition(null);
+    return newNode;
   }, [newNodePrompt, newNodeTitle, newNodePosition, validateNodeUnique]);
 
   const addNodeFromList = useCallback((node: NodeData) => {

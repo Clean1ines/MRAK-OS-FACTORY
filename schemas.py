@@ -1,4 +1,5 @@
 # CHANGED: Добавлены поля nodes и edges для передачи графа воркфлоу
+# CHANGED: Добавлено поле project_id в WorkflowCreate и WorkflowResponse
 import re
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
@@ -100,6 +101,8 @@ class WorkflowCreate(BaseModel):
     name: str
     description: str = ""
     is_default: bool = False
+    # ADDED: обязательное поле project_id
+    project_id: str
     nodes: List["WorkflowNodeCreate"] = Field(default_factory=list, description="Начальные узлы графа")
     edges: List["WorkflowEdgeCreate"] = Field(default_factory=list, description="Начальные рёбра графа")
 
@@ -110,6 +113,7 @@ class WorkflowUpdate(BaseModel):
     is_default: Optional[bool] = None
     nodes: Optional[List["WorkflowNodeCreate"]] = Field(None, description="Полный новый набор узлов (если указан)")
     edges: Optional[List["WorkflowEdgeCreate"]] = Field(None, description="Полный новый набор рёбер (если указан)")
+    # project_id не включаем – он не обновляется
 
 class WorkflowNodeCreate(BaseModel):
     node_id: str
@@ -135,6 +139,8 @@ class WorkflowResponse(BaseModel):
     name: str
     description: str
     is_default: bool
+    # ADDED
+    project_id: str
     created_at: str
     updated_at: str
 

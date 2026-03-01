@@ -12,6 +12,7 @@ interface IOSCanvasProps {
   onAddCustomNode?: (x: number, y: number) => void;
   onEditNode?: (recordId: string, promptKey: string, config: Record<string, unknown>) => void;
   onRequestDeleteNode: (recordId: string | undefined, nodeId: string, name: string) => void;
+  onStartConnection?: (nodeId: string) => void; // ADDED
   onCompleteConnection?: (targetNodeId: string) => void;
   onRequestDeleteEdge?: (edgeId: string, sourceNode: string, targetNode: string) => void;
 }
@@ -24,6 +25,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   onAddCustomNode,
   onEditNode,
   onRequestDeleteNode,
+  onStartConnection, // ADDED
   onCompleteConnection,
   onRequestDeleteEdge,
 }) => {
@@ -113,10 +115,15 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   }, [contextMenu, nodes, onNodesChange, adjustToViewport]);
 
   const handleStartConnection = useCallback((nodeId: string) => {
+    console.log('🔵 handleStartConnection', nodeId);
     setConnectingNode(nodeId);
-  }, []);
+    if (onStartConnection) { // ADDED
+      onStartConnection(nodeId);
+    }
+  }, [onStartConnection]);
 
   const handleCompleteConnection = useCallback((targetNodeId: string) => {
+    console.log('🟢 handleCompleteConnection', targetNodeId, 'connectingNode:', connectingNode);
     if (connectingNode && connectingNode !== targetNodeId) {
       const edgeExists = edges.some(
         e => e.source_node === connectingNode && e.target_node === targetNodeId
@@ -130,11 +137,10 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
         onEdgesChange([...edges, newEdge]);
       }
     }
-    setConnectingNode(null);
-
     if (onCompleteConnection) {
       onCompleteConnection(targetNodeId);
     }
+    setConnectingNode(null);
   }, [connectingNode, edges, onEdgesChange, onCompleteConnection]);
 
   const handleCloseMenu = useCallback(() => {
@@ -246,7 +252,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
             <IOSNode
               key={node.id}
               node={node}
-              nodes={nodes} // ADDED: передаём все узлы для поиска имён
+              nodes={nodes}
               edges={edges}
               isSelected={selectedNode === node.node_id}
               isConnecting={connectingNode === node.node_id}

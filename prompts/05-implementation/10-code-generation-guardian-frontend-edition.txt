@@ -36,8 +36,8 @@
 // Задача: добавить useWorkflows хук для загрузки списка воркфлоу
 // Ожидаемый код:
 import { useQuery } from '@tanstack/react-query';
-import { client } from '../api/client';
-import type { WorkflowSummary } from '../api/client'; // импорт типа из схемы
+import { client } from '@shared/api';
+import type { WorkflowSummary } from '@shared/api'; // импорт типа из схемы
 
 export const useWorkflows = (projectId: string | null) => {
   return useQuery({

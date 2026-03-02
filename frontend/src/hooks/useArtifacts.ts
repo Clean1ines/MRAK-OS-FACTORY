@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
-import { api } from '../api/client';
+import { useProjectStore } from '@entities/project';
+import { api } from '@shared/api';
 
 // Локальный тип для артефакта (соответствует тому, что приходит с API)
 interface ApiArtifact {
@@ -21,7 +22,7 @@ interface ApiArtifact {
  * Сохраняет результат в Zustand store при успешной загрузке.
  */
 export const useArtifacts = () => {
-  const currentProjectId = useAppStore((s) => s.currentProjectId);
+  const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const setArtifacts = useAppStore((s) => s.setArtifacts);
 
   const query = useQuery({

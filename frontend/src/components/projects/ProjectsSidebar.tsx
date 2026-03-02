@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAppStore, Project } from '../../store/useAppStore';
-import { useProjects } from '../../hooks/useProjects';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useProjectStore, useProjects, Project } from '@entities/project';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { HamburgerMenu } from '../layout/HamburgerMenu';
 import { CreateProjectModal } from './CreateProjectModal';
 import { EditProjectModal } from './EditProjectModal';
-import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
+import { DeleteConfirmModal } from '@/shared/ui';
 
 const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className, ...props }) => (
   <button
@@ -17,7 +16,7 @@ const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ class
 
 export const ProjectsSidebar: React.FC = () => {
   const navigate = useNavigate();
-  const { currentProjectId, setCurrentProjectId } = useAppStore();
+  const { currentProjectId, setCurrentProjectId } = useProjectStore();
   const {
     projects,
     isCreateOpen,
@@ -44,7 +43,6 @@ export const ProjectsSidebar: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsSidebarOpen(!isMobile);
   }, [isMobile]);
 
@@ -115,7 +113,7 @@ export const ProjectsSidebar: React.FC = () => {
           className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)]"
         >
           <option value="" disabled>Select a project</option>
-          {projects.map((p) => (
+          {projects.map((p: Project) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
@@ -124,7 +122,7 @@ export const ProjectsSidebar: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {projects.map((project) => (
+        {projects.map((project: Project) => (
           <div
             key={project.id}
             className={`p-2 rounded cursor-pointer flex items-center justify-between transition-colors ${
@@ -167,9 +165,6 @@ export const ProjectsSidebar: React.FC = () => {
         >
           + New Project
         </Button>
-        <div className="text-xs text-[var(--text-muted)] text-center">
-          {projects.length} {projects.length === 1 ? 'project' : 'projects'}
-        </div>
       </div>
 
       <CreateProjectModal

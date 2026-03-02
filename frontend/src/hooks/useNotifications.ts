@@ -1,7 +1,7 @@
 // frontend/src/hooks/useNotifications.ts
 import { useCallback } from 'react';
 import { create } from 'zustand';
-import { TimeoutError } from '../api/fetchWithTimeout';
+import { TimeoutError } from '@shared/api';
 
 interface Notification {
   id: number;

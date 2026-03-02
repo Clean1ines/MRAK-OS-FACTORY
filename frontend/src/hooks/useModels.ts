@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
-import { api } from '../api/client';
+import { api } from '@shared/api';
 
 // Локальный тип для модели (API возвращает массив объектов с id)
 interface ApiModel {

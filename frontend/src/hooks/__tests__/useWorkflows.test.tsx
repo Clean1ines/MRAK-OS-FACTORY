@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useWorkflows } from '../useWorkflows';
-import { client } from '../../api/client';
+import { client } from '@shared/api';
 import toast from 'react-hot-toast';
 
 // Мокаем модули

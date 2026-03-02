@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import type { NodeData } from '../../hooks/useCanvasEngine';
+import { NodeData } from '@shared/lib';
 import { EditNodeModal } from './EditNodeModal';
 
 interface NodeListPanelProps {

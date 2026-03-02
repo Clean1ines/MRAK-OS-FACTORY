@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import type { NodeData, EdgeData } from './useCanvasEngine';
-import { validateWorkflowAcyclic } from '../utils/graphUtils';
+import { NodeData, EdgeData } from '@shared/lib';
+import { validateWorkflowAcyclic } from '@shared/lib';
 import { useWorkflowCanvas } from './useWorkflowCanvas';
 
 interface WorkflowSummary {

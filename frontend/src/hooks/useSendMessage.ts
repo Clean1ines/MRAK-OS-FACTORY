@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { useProjectStore } from '@entities/project';
 import { useNotification } from './useNotifications';
 import { useStreaming } from './useStreaming';
 
@@ -7,7 +8,7 @@ export const useSendMessage = () => {
   const [inputValue, setInputValue] = useState('');
   const { showNotification } = useNotification();
   const addMessage = useAppStore((s) => s.addMessage);
-  const currentProjectId = useAppStore((s) => s.currentProjectId);
+  const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const selectedModel = useAppStore((s) => s.selectedModel);
   const mode = '01_CORE';
 

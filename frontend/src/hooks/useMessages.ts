@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useProjectStore } from '@entities/project';
 import { useAppStore } from '../store/useAppStore';
-import { api } from '../api/client';
+import { api } from '@shared/api';
 
 interface MessageArtifact {
   id?: string;
@@ -23,7 +24,7 @@ interface MessageArtifact {
  * Сохраняет результат в Zustand store при успешной загрузке.
  */
 export const useMessages = () => {
-  const currentProjectId = useAppStore((s) => s.currentProjectId);
+  const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const setMessages = useAppStore((s) => s.setMessages);
 
   const query = useQuery({

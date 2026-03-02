@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api } from '../../api/client';
+import { api } from '@shared/api';
 import { useNotification } from '../../hooks/useNotifications';
 
 export const LoginPage: React.FC = () => {

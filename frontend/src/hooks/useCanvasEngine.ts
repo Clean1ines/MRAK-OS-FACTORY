@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { NodeData, EdgeData } from '@shared/lib/types';
 import {
   VIEWPORT_SCALE_MIN,
   VIEWPORT_SCALE_MAX,
@@ -7,22 +8,6 @@ import {
   ZOOM_FACTOR,
   PAN_MOUSE_BUTTON,
 } from '../constants/canvas';
-
-export interface NodeData {
-  id: string;
-  node_id: string;
-  prompt_key: string;
-  position_x: number;
-  position_y: number;
-  config?: Record<string, unknown>;
-  recordId?: string; // ADDED: идентификатор записи в БД
-}
-
-export interface EdgeData {
-  id: string;
-  source_node: string;
-  target_node: string;
-}
 
 export interface UseCanvasEngineReturn {
   pan: { x: number; y: number };
@@ -36,11 +21,6 @@ export interface UseCanvasEngineReturn {
 
 /**
  * Custom hook for canvas engine: pan, zoom, node drag, selection.
- * @param {NodeData[]} nodes - Current nodes array
- * @param {EdgeData[]} _edges - Current edges array (unused, kept for API symmetry)
- * @param {(nodes: NodeData[]) => void} setNodes - State setter for nodes (direct value only)
- * @param {(edges: EdgeData[]) => void} _setEdges - State setter for edges (unused)
- * @returns {UseCanvasEngineReturn} Canvas interaction handlers and state
  */
 export const useCanvasEngine = (
   nodes: NodeData[],

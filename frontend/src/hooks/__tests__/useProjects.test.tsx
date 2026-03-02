@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useProjects } from '../useProjects';
-import { api } from '../../api/client';
+import { api } from '@shared/api';
 import { useNotification } from '../useNotifications';
 import { useAppStore } from '../../store/useAppStore';
 

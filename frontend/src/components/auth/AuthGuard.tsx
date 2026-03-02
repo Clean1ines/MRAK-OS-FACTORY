@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
+import { api } from '@shared/api';
 import { LoginPage } from './LoginPage';
 
 interface AuthGuardProps {

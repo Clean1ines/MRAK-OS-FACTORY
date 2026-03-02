@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { api, ProjectResponse } from '../../api/client';
+import { api, ProjectResponse } from '@shared/api';
 import { IOSShell } from './IOSShell';
 import { IOSCanvas } from './IOSCanvas';
 import { NodeListPanel } from './NodeListPanel';
@@ -11,7 +11,7 @@ import { useWorkflows } from '../../hooks/useWorkflows';
 import { useSelectedProject } from '../../hooks/useSelectedProject';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
 import { EditWorkflowModal } from './EditWorkflowModal';
-import { DeleteConfirmModal } from '../common/DeleteConfirmModal';
+import { DeleteConfirmModal } from '@shared/ui';
 import { EditNodeModal } from './EditNodeModal';
 import { SIDEBAR_HAMBURGER_WIDTH } from '../../constants/canvas';
 

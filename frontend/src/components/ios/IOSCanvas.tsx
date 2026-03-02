@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useMemo } from 'react';
-import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
+import { NodeData, EdgeData } from '@shared/lib';
 import { useCanvasEngine } from '../../hooks/useCanvasEngine';
 import { IOSNode } from './IOSNode';
 import { NODE_HALF_WIDTH, NODE_HALF_HEIGHT } from '../../constants/canvas';

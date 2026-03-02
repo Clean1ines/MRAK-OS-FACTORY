@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
+import { NodeData, EdgeData } from '@shared/lib';
 
 interface IOSNodeProps {
   node: NodeData;

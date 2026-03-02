@@ -2,7 +2,7 @@
 // ADDED: Hook for node validation logic (SRP extraction)
 
 import { useCallback } from 'react';
-import type { NodeData } from '../../hooks/useCanvasEngine';
+import { NodeData } from '@shared/lib';
 
 export interface ValidationOptions {
   excludeCustomPrompt?: boolean;

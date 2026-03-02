@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAppStore, Project } from '../store/useAppStore';
-import { useNotification } from './useNotifications';
-import { api, getErrorMessage, ProjectResponse } from '../api/client';
+import { Project, useProjectStore } from '@entities/project';
+import { useNotification } from '../../../hooks/useNotifications';
+import { api, getErrorMessage, ProjectResponse } from '@shared/api';
 
 interface CreateProjectParams {
   name: string;
@@ -24,7 +24,7 @@ const fetchProjects = async (): Promise<ProjectResponse[]> => {
 export const useProjects = () => {
   const queryClient = useQueryClient();
   const { showNotification } = useNotification();
-  const { addProject, updateProject, removeProject } = useAppStore();
+  const { addProject, updateProject, removeProject } = useProjectStore();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);

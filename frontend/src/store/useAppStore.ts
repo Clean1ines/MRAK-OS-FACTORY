@@ -13,12 +13,6 @@ export interface Artifact {
   summary?: string;
 }
 
-export interface Project {
-  id: string;
-  name: string;
-  description: string;
-}
-
 export interface Model {
   id: string;
 }
@@ -35,15 +29,13 @@ export interface ArtifactType {
   requires_clarification: boolean;
 }
 
-export interface Message {
+export interface ChatMessageData {
   role: 'user' | 'assistant';
   content: string;
-  timestamp?: number;
+  timestamp: number;
 }
 
 interface AppState {
-  projects: Project[];
-  currentProjectId: string | null;
   artifacts: Artifact[];
   parentData: Record<string, string>;
   currentArtifact: { content: unknown } | null;
@@ -52,15 +44,14 @@ interface AppState {
   modes: Mode[];
   currentClarificationSessionId: string | null;
   artifactTypes: ArtifactType[];
-  messages: Message[];
   qTokens: string;
   qReq: string;
   isSimpleMode: boolean;
   selectedModel: string | null;
   selectedArtifactType: string;
+  // Chat State
+  messages: ChatMessageData[];
 
-  setProjects: (projects: Project[]) => void;
-  setCurrentProjectId: (id: string | null) => void;
   setArtifacts: (artifacts: Artifact[]) => void;
   setCurrentArtifact: (artifact: { content: unknown } | null) => void;
   setCurrentParentId: (id: string | null) => void;
@@ -68,24 +59,18 @@ interface AppState {
   setModes: (modes: Mode[]) => void;
   setCurrentClarificationSessionId: (id: string | null) => void;
   setArtifactTypes: (types: ArtifactType[]) => void;
-  addMessage: (msg: Message) => void;
-  setMessages: (msgs: Message[]) => void;
   setTokens: (tokens: string, req: string) => void;
   setSimpleMode: (isSimple: boolean) => void;
   setSelectedModel: (model: string | null) => void;
   setSelectedArtifactType: (type: string) => void;
-
-  // #ADDED: методы для точечного изменения проектов
-  addProject: (project: Project) => void;
-  updateProject: (id: string, updates: Partial<Project>) => void;
-  removeProject: (id: string) => void;
+  // Chat Actions
+  setMessages: (messages: ChatMessageData[]) => void;
+  addMessage: (message: ChatMessageData) => void;
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      projects: [],
-      currentProjectId: null,
       artifacts: [],
       parentData: {},
       currentArtifact: null,
@@ -94,19 +79,13 @@ export const useAppStore = create<AppState>()(
       modes: [],
       currentClarificationSessionId: null,
       artifactTypes: [],
-      messages: [],
       qTokens: '---',
       qReq: '---',
       isSimpleMode: false,
       selectedModel: null,
       selectedArtifactType: 'BusinessIdea',
+      messages: [],
 
-      setProjects: (projects) => set({ projects }),
-      setCurrentProjectId: (id) => {
-        set({ currentProjectId: id, currentClarificationSessionId: null });
-        if (id) localStorage.setItem('selectedProjectId', id);
-        else localStorage.removeItem('selectedProjectId');
-      },
       setArtifacts: (artifacts) => {
         const parentData: Record<string, string> = {};
         artifacts.forEach((a) => {
@@ -120,31 +99,16 @@ export const useAppStore = create<AppState>()(
       setModes: (modes) => set({ modes }),
       setCurrentClarificationSessionId: (id) => set({ currentClarificationSessionId: id }),
       setArtifactTypes: (types) => set({ artifactTypes: types }),
-      addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
-      setMessages: (msgs) => set({ messages: msgs }),
       setTokens: (tokens, req) => set({ qTokens: tokens, qReq: req }),
       setSimpleMode: (isSimple) => set({ isSimpleMode: isSimple }),
       setSelectedModel: (model) => set({ selectedModel: model }),
       setSelectedArtifactType: (type) => set({ selectedArtifactType: type }),
-
-      // #ADDED: реализации новых методов
-      addProject: (project) =>
-        set((state) => ({ projects: [...state.projects, project] })),
-      updateProject: (id, updates) =>
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === id ? { ...p, ...updates } : p
-          ),
-        })),
-      removeProject: (id) =>
-        set((state) => ({
-          projects: state.projects.filter((p) => p.id !== id),
-        })),
+      setMessages: (messages) => set({ messages }),
+      addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
     }),
     {
       name: 'mrak-ui-state',
       partialize: (state) => ({
-        currentProjectId: state.currentProjectId,
         selectedModel: state.selectedModel,
         selectedArtifactType: state.selectedArtifactType,
         isSimpleMode: state.isSimpleMode,

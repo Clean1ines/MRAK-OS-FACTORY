@@ -1,14 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
-import { useProjects } from '../hooks/useProjects';
+import { useProjectStore, useProjects } from '@entities/project';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { IOSShell } from './ios/IOSShell';
 import { ChatCanvas } from './ChatCanvas';
 
 export const ChatInterface: React.FC = () => {
   const navigate = useNavigate();
-  const { currentProjectId, models, selectedModel, setSelectedModel } = useAppStore();
+  const { models, selectedModel, setSelectedModel } = useAppStore();
+  const currentProjectId = useProjectStore(s => s.currentProjectId);
   const { projects } = useProjects();
   useMediaQuery('(max-width: 768px)');
 

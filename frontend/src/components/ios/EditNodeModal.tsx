@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BaseModal } from '../common/BaseModal';
+import { BaseModal } from '@shared/ui';
 
 interface EditNodeModalProps {
   isOpen: boolean;

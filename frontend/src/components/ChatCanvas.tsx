@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore, ChatMessageData } from '../store/useAppStore';
+import { useProjectStore } from '@entities/project';
 import { useStreaming } from '../hooks/useStreaming';
 import { useNotification } from '../hooks/useNotifications';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -60,12 +61,13 @@ const ExpandingTextarea: React.FC<{
 export const ChatCanvas: React.FC = () => {
   const [message, setMessage] = useState('');
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  
   const messages = useAppStore(s => s.messages);
   const addMessage = useAppStore(s => s.addMessage);
-  const currentProjectId = useAppStore(s => s.currentProjectId);
+  const currentProjectId = useProjectStore(s => s.currentProjectId);
   const selectedModel = useAppStore(s => s.selectedModel);
+  
   const showNotification = useNotification().showNotification;
-
   const { startStream } = useStreaming();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -83,7 +85,7 @@ export const ChatCanvas: React.FC = () => {
       return;
     }
 
-    const userMsg = { role: 'user' as const, content: message, timestamp: Date.now() };
+    const userMsg: ChatMessageData = { role: 'user', content: message, timestamp: Date.now() };
     addMessage(userMsg);
     setMessage('');
     setStreamingContent('');
@@ -131,7 +133,7 @@ export const ChatCanvas: React.FC = () => {
             </div>
           </div>
         )}
-        {messages.map((msg, idx) => (
+        {messages.map((msg: ChatMessageData, idx: number) => (
           <ChatMessage key={idx} role={msg.role} content={msg.content} />
         ))}
         {streamingContent !== null && (

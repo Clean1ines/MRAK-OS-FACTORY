@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { ProjectResponse } from '../api/client';
+import type { ProjectResponse } from '@shared/api';
 
 export const useSelectedProject = (projects: ProjectResponse[]) => {
   const [searchParams, setSearchParams] = useSearchParams();

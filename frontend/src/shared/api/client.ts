@@ -34,7 +34,6 @@ export const getErrorMessage = (error: unknown): string => {
       return error.error;
     }
     if ('detail' in error && Array.isArray(error.detail)) {
-      // #CHANGED: заменили any на unknown с проверкой
       const details = error.detail as Array<{ msg?: string }>;
       return details.map(d => d.msg).filter(Boolean).join(', ');
     }
@@ -145,6 +144,54 @@ export const api = {
   messages: {
     list: (projectId: string) =>
       client.GET('/api/projects/{project_id}/messages', { params: { path: { project_id: projectId } } }),
+  },
+  workflows: {
+    list: (projectId?: string) =>
+      client.GET('/api/workflows', {
+        params: projectId ? { query: { project_id: projectId } } : undefined,
+      }),
+    get: (workflowId: string) =>
+      client.GET('/api/workflows/{workflow_id}', {
+        params: { path: { workflow_id: workflowId } },
+      }),
+    create: (data: components['schemas']['WorkflowCreate'] & { project_id: string }) =>
+      client.POST('/api/workflows', { body: data }),
+    update: (workflowId: string, data: components['schemas']['WorkflowUpdate']) =>
+      client.PUT('/api/workflows/{workflow_id}', {
+        params: { path: { workflow_id: workflowId } },
+        body: data,
+      }),
+    delete: (workflowId: string) =>
+      client.DELETE('/api/workflows/{workflow_id}', {
+        params: { path: { workflow_id: workflowId } },
+      }),
+    nodes: {
+      create: (workflowId: string, data: components['schemas']['WorkflowNodeCreate']) =>
+        client.POST('/api/workflows/{workflow_id}/nodes', {
+          params: { path: { workflow_id: workflowId } },
+          body: data,
+        }),
+      update: (nodeRecordId: string, data: components['schemas']['WorkflowNodeUpdate']) =>
+        client.PUT('/api/workflows/nodes/{node_record_id}', {
+          params: { path: { node_record_id: nodeRecordId } },
+          body: data,
+        }),
+      delete: (nodeRecordId: string) =>
+        client.DELETE('/api/workflows/nodes/{node_record_id}', {
+          params: { path: { node_record_id: nodeRecordId } },
+        }),
+    },
+    edges: {
+      create: (workflowId: string, data: components['schemas']['WorkflowEdgeCreate']) =>
+        client.POST('/api/workflows/{workflow_id}/edges', {
+          params: { path: { workflow_id: workflowId } },
+          body: data,
+        }),
+      delete: (edgeRecordId: string) =>
+        client.DELETE('/api/workflows/edges/{edge_record_id}', {
+          params: { path: { edge_record_id: edgeRecordId } },
+        }),
+    },
   },
   auth: {
     login: async (body: { master_key: string }) => {

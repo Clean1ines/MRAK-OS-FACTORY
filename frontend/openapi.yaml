@@ -1,585 +1,522 @@
-openapi: 3.0.0
+openapi: 3.1.0
 info:
   title: MRAK-OS Factory API
-  description: API для AI-ассистента разработки, управляющего проектами, артефактами, сессиями уточнения и workflow.
-  version: 1.0.0
-servers:
-  - url: https://mrak-os-factory.onrender.com
-    description: Продакшн сервер
-  - url: http://localhost:8000
-    description: Локальный сервер разработки
-
+  version: 0.1.0
 paths:
-  # ==================== Проекты ====================
-  /api/projects:
+  /health:
     get:
-      operationId: getProjects
-      summary: Список всех проектов
-      tags:
-        - projects
+      summary: Health
+      description: "Health check endpoint for load balancers and monitoring.\nReturns\
+        \ {\"status\": \"ok\"} if service is alive.\n\nReturns:\n    dict: Status\
+        \ indicator."
+      operationId: health_health_get
       responses:
         '200':
-          description: Успешный ответ
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/projects:
+    get:
+      tags:
+      - projects
+      summary: List Projects
+      description: Возвращает список всех проектов, отсортированных по дате создания
+        (сначала новые).
+      operationId: list_projects_api_projects_get
+      responses:
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
-                type: array
                 items:
-                  $ref: '#/components/schemas/Project'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+                  $ref: '#/components/schemas/ProjectResponse'
+                type: array
+                title: Response List Projects Api Projects Get
     post:
-      operationId: createProject
-      summary: Создать новый проект
       tags:
-        - projects
+      - projects
+      summary: Create Project
+      description: 'Создаёт новый проект.
+
+
+        Проверяет уникальность имени (не должно существовать проекта с таким же именем).'
+      operationId: create_project_api_projects_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ProjectCreate'
+        required: true
       responses:
-        '200':
-          description: Проект создан
+        '201':
+          description: Successful Response
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  name:
-                    type: string
+                $ref: '#/components/schemas/ProjectResponse'
         '422':
-          $ref: '#/components/responses/ValidationError'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/projects/{project_id}:
+    get:
+      tags:
+      - projects
+      summary: Get Project
+      description: Возвращает проект по его ID.
+      operationId: get_project_api_projects__project_id__get
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - projects
+      summary: Update Project
+      description: 'Полностью обновляет проект.
+
+
+        Проверяет уникальность имени: новое имя не должно принадлежать другому проекту.
+
+        Если проект с указанным ID не найден, возвращает 404.'
+      operationId: update_project_api_projects__project_id__put
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
-      operationId: deleteProject
-      summary: Удалить проект (каскадно удаляет все артефакты)
       tags:
-        - projects
+      - projects
+      summary: Delete Project
+      description: Удаляет проект и все связанные с ним артефакты (каскадно).
+      operationId: delete_project_api_projects__project_id__delete
       parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Проект удалён
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: deleted
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /api/projects/{project_id}/unlock:
-    post:
-      operationId: unlockProject
-      summary: Разблокировать проект паролем (устанавливает cookie)
-      tags:
-        - projects
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
+      - name: project_id
+        in: path
         required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                password:
-                  type: string
+        schema:
+          type: string
+          title: Project Id
       responses:
         '200':
-          description: Доступ разрешён, cookie установлена
-        '400':
-          description: Проект не защищён паролем
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '403':
-          description: Неверный пароль
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/projects/{project_id}/set_password:
-    post:
-      operationId: setProjectPassword
-      summary: Установить или снять пароль проекта (только для администратора)
-      tags:
-        - projects
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                password:
-                  type: string
-                  description: Если пустая строка – пароль удаляется
-      security:
-        - MasterKeyAuth: []
-      responses:
-        '200':
-          description: Пароль обновлён
-        '400':
-          description: Некорректный запрос
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  # ==================== Артефакты ====================
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/projects/{project_id}/artifacts:
     get:
-      operationId: getArtifacts
-      summary: Получить список артефактов проекта
       tags:
-        - artifacts
+      - artifacts
+      summary: List Artifacts
+      operationId: list_artifacts_api_projects__project_id__artifacts_get
       parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: type
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Фильтр по типу артефакта
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Type
       responses:
         '200':
-          description: Список артефактов
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Artifact'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/artifact:
     post:
-      operationId: createArtifact
-      summary: Сохранить или сгенерировать артефакт
       tags:
-        - artifacts
+      - artifacts
+      summary: Create Artifact
+      operationId: create_artifact_api_artifact_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ArtifactCreate'
+        required: true
       responses:
         '200':
-          description: Успешно сохранено/сгенерировано
+          description: Successful Response
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  generated:
-                    type: boolean
-        '404':
-          description: Родительский артефакт не найден
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+              schema: {}
         '422':
-          $ref: '#/components/responses/ValidationError'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/latest_artifact:
     get:
-      operationId: getLatestArtifact
-      summary: Получить последнюю версию артефакта по родителю и типу
       tags:
-        - artifacts
+      - artifacts
+      summary: Latest Artifact
+      operationId: latest_artifact_api_latest_artifact_get
       parameters:
-        - name: parent_id
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: type
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: parent_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Parent Id
+      - name: type
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Type
       responses:
         '200':
-          description: Информация о существовании и содержимом
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  exists:
-                    type: boolean
-                  artifact_id:
-                    type: string
-                    format: uuid
-                  content:
-                    type: object
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/validate_artifact:
     post:
-      operationId: validateArtifact
-      summary: Установить статус артефакта (VALIDATED / REJECTED)
       tags:
-        - artifacts
+      - artifacts
+      summary: Validate Artifact
+      operationId: validate_artifact_api_validate_artifact_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                artifact_id:
-                  type: string
-                  format: uuid
-                status:
-                  type: string
-                  enum: [VALIDATED, REJECTED]
+              $ref: '#/components/schemas/ValidateArtifactRequest'
+        required: true
       responses:
         '200':
-          description: Статус обновлён
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: updated
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/artifact/{artifact_id}:
     delete:
-      operationId: deleteArtifact
-      summary: Удалить артефакт (каскадно)
       tags:
-        - artifacts
+      - artifacts
+      summary: Delete Artifact Endpoint
+      operationId: delete_artifact_endpoint_api_artifact__artifact_id__delete
       parameters:
-        - name: artifact_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: artifact_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Artifact Id
       responses:
         '200':
-          description: Артефакт удалён
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: deleted
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/generate_artifact:
     post:
-      operationId: generateArtifact
-      summary: Сгенерировать артефакт с учётом фидбека (специализированные методы)
       tags:
-        - artifacts
+      - artifacts
+      summary: Generate Artifact Endpoint
+      operationId: generate_artifact_endpoint_api_generate_artifact_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/GenerateArtifactRequest'
+        required: true
       responses:
         '200':
-          description: Результат генерации
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  result:
-                    type: object
-        '422':
-          $ref: '#/components/responses/ValidationError'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/save_artifact_package:
     post:
-      operationId: saveArtifactPackage
-      summary: Сохранить пакет артефактов (с версионированием и проверкой дубликатов)
       tags:
-        - artifacts
+      - artifacts
+      summary: Save Artifact Package
+      operationId: save_artifact_package_api_save_artifact_package_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/SavePackageRequest'
+        required: true
       responses:
         '200':
-          description: Сохранённый артефакт (или дубликат)
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  duplicate:
-                    type: boolean
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/projects/{project_id}/messages:
     get:
-      operationId: getProjectMessages
-      summary: Получить историю сообщений (LLMResponse) проекта
       tags:
-        - artifacts
+      - artifacts
+      summary: Get Project Messages
+      operationId: get_project_messages_api_projects__project_id__messages_get
       parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
       responses:
         '200':
-          description: Список артефактов типа LLMResponse
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Artifact'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  # ==================== Типы артефактов ====================
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/artifact-types:
     get:
-      operationId: getArtifactTypes
-      summary: Список всех типов артефактов с метаданными
       tags:
-        - artifact-types
+      - artifacts
+      summary: List Artifact Types
+      operationId: list_artifact_types_api_artifact_types_get
       responses:
         '200':
-          description: Массив типов
+          description: Successful Response
           content:
             application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ArtifactType'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+              schema: {}
     post:
-      operationId: createArtifactType
-      summary: Создать новый тип артефакта (админ)
       tags:
-        - artifact-types
+      - artifacts
+      summary: Create Artifact Type Endpoint
+      operationId: create_artifact_type_endpoint_api_artifact_types_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ArtifactTypeCreate'
-      security:
-        - MasterKeyAuth: []
+              additionalProperties: true
+              type: object
+              title: Req
+        required: true
       responses:
         '201':
-          description: Тип создан
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  type:
-                    type: string
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/artifact-types/{type}:
     get:
-      operationId: getArtifactType
-      summary: Получить метаданные конкретного типа
       tags:
-        - artifact-types
+      - artifacts
+      summary: Get Artifact Type
+      operationId: get_artifact_type_api_artifact_types__type__get
       parameters:
-        - name: type
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Type
       responses:
         '200':
-          description: Метаданные типа
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArtifactType'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+                $ref: '#/components/schemas/HTTPValidationError'
     put:
-      operationId: updateArtifactType
-      summary: Обновить метаданные типа (админ)
       tags:
-        - artifact-types
+      - artifacts
+      summary: Update Artifact Type Endpoint
+      operationId: update_artifact_type_endpoint_api_artifact_types__type__put
       parameters:
-        - name: type
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Type
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              description: Частичные обновляемые поля (schema, allowed_parents, requires_clarification, icon)
-      security:
-        - MasterKeyAuth: []
+              additionalProperties: true
+              title: Req
       responses:
         '200':
-          description: Обновлено
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
-      operationId: deleteArtifactType
-      summary: Удалить тип артефакта (админ)
       tags:
-        - artifact-types
+      - artifacts
+      summary: Delete Artifact Type Endpoint
+      operationId: delete_artifact_type_endpoint_api_artifact_types__type__delete
       parameters:
-        - name: type
-          in: path
-          required: true
-          schema:
-            type: string
-      security:
-        - MasterKeyAuth: []
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Type
       responses:
         '200':
-          description: Удалено
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  # ==================== Сессии уточнения ====================
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/clarification/start:
     post:
-      operationId: startClarification
-      summary: Начать новую сессию уточнения
       tags:
-        - clarification
+      - clarification
+      summary: Start Clarification
+      operationId: start_clarification_api_clarification_start_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/StartClarificationRequest'
+        required: true
       responses:
         '200':
-          description: Сессия создана, возвращается первый вопрос ассистента
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClarificationSessionResponse'
-        '400':
-          description: Неверные параметры или режим не найден
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/clarification/{session_id}/message:
     post:
-      operationId: sendClarificationMessage
-      summary: Отправить сообщение в сессию и получить ответ
       tags:
-        - clarification
+      - clarification
+      summary: Add Message
+      operationId: add_message_api_clarification__session_id__message_post
       parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
       requestBody:
         required: true
         content:
@@ -588,141 +525,127 @@ paths:
               $ref: '#/components/schemas/MessageRequest'
       responses:
         '200':
-          description: Обновлённая сессия
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClarificationSessionResponse'
-        '400':
-          description: Сессия не активна
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/clarification/{session_id}:
     get:
-      operationId: getClarificationSession
-      summary: Получить текущее состояние сессии
       tags:
-        - clarification
+      - clarification
+      summary: Get Clarification Session Endpoint
+      operationId: get_clarification_session_endpoint_api_clarification__session_id__get
       parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
       responses:
         '200':
-          description: Сессия
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClarificationSessionResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/clarification/{session_id}/complete:
     post:
-      operationId: completeClarificationSession
-      summary: Завершить сессию (установить статус completed)
       tags:
-        - clarification
+      - clarification
+      summary: Complete Clarification Session
+      operationId: complete_clarification_session_api_clarification__session_id__complete_post
       parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
       responses:
         '200':
-          description: Сессия завершена
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: completed
-                  session_id:
-                    type: string
-        '400':
-          description: Сессия уже завершена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/projects/{project_id}/clarification/active:
     get:
-      operationId: getActiveClarificationSessions
-      summary: Список активных сессий проекта
       tags:
-        - clarification
+      - clarification
+      summary: Get Active Sessions
+      operationId: get_active_sessions_api_projects__project_id__clarification_active_get
       parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
       responses:
         '200':
-          description: Массив активных сессий
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    target_artifact_type:
-                      type: string
-                    created_at:
-                      type: string
-                      format: date-time
-                    updated_at:
-                      type: string
-                      format: date-time
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ==================== Workflow ====================
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/workflows:
     get:
-      operationId: getWorkflows
-      summary: Список всех workflow
       tags:
-        - workflows
+      - workflows
+      summary: List Workflows
+      operationId: list_workflows_api_workflows_get
+      parameters:
+      - name: project_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter workflows by project ID
+          title: Project Id
+        description: Filter workflows by project ID
       responses:
         '200':
-          description: Массив workflow
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Workflow'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
-      operationId: createWorkflow
-      summary: Создать новый workflow
       tags:
-        - workflows
+      - workflows
+      summary: Create Workflow
+      operationId: create_workflow_api_workflows_post
       requestBody:
         required: true
         content:
@@ -731,56 +654,53 @@ paths:
               $ref: '#/components/schemas/WorkflowCreate'
       responses:
         '201':
-          description: Workflow создан
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/workflows/{workflow_id}:
     get:
-      operationId: getWorkflow
-      summary: Получить workflow с узлами и рёбрами
       tags:
-        - workflows
+      - workflows
+      summary: Get Workflow
+      operationId: get_workflow_api_workflows__workflow_id__get
       parameters:
-        - name: workflow_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workflow Id
       responses:
         '200':
-          description: Детальная информация
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkflowDetail'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+                $ref: '#/components/schemas/HTTPValidationError'
     put:
-      operationId: updateWorkflow
-      summary: Обновить метаданные workflow
       tags:
-        - workflows
+      - workflows
+      summary: Update Workflow
+      operationId: update_workflow_api_workflows__workflow_id__put
       parameters:
-        - name: workflow_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workflow Id
       requestBody:
         required: true
         content:
@@ -789,46 +709,53 @@ paths:
               $ref: '#/components/schemas/WorkflowUpdate'
       responses:
         '200':
-          description: Обновлено
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
-      operationId: deleteWorkflow
-      summary: Удалить workflow
       tags:
-        - workflows
+      - workflows
+      summary: Delete Workflow
+      operationId: delete_workflow_api_workflows__workflow_id__delete
       parameters:
-        - name: workflow_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workflow Id
       responses:
         '200':
-          description: Удалено
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/workflows/{workflow_id}/nodes:
     post:
-      operationId: createWorkflowNode
-      summary: Добавить узел в workflow
       tags:
-        - workflows
+      - workflows
+      summary: Create Workflow Node
+      operationId: create_workflow_node_api_workflows__workflow_id__nodes_post
       parameters:
-        - name: workflow_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workflow Id
       requestBody:
         required: true
         content:
@@ -837,39 +764,29 @@ paths:
               $ref: '#/components/schemas/WorkflowNodeCreate'
       responses:
         '201':
-          description: Узел создан
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-        '400':
-          description: Узел с таким node_id уже существует
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/workflows/nodes/{node_record_id}:
     put:
-      operationId: updateWorkflowNode
-      summary: Обновить узел
       tags:
-        - workflows
+      - workflows
+      summary: Update Workflow Node
+      operationId: update_workflow_node_api_workflows_nodes__node_record_id__put
       parameters:
-        - name: node_record_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: node_record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Node Record Id
       requestBody:
         required: true
         content:
@@ -878,44 +795,53 @@ paths:
               $ref: '#/components/schemas/WorkflowNodeUpdate'
       responses:
         '200':
-          description: Обновлено
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
-      operationId: deleteWorkflowNode
-      summary: Удалить узел
       tags:
-        - workflows
+      - workflows
+      summary: Delete Workflow Node
+      operationId: delete_workflow_node_api_workflows_nodes__node_record_id__delete
       parameters:
-        - name: node_record_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: node_record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Node Record Id
       responses:
         '200':
-          description: Удалено
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/workflows/{workflow_id}/edges:
     post:
-      operationId: createWorkflowEdge
-      summary: Добавить ребро в workflow
       tags:
-        - workflows
+      - workflows
+      summary: Create Workflow Edge
+      operationId: create_workflow_edge_api_workflows__workflow_id__edges_post
       parameters:
-        - name: workflow_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workflow_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Workflow Id
       requestBody:
         required: true
         content:
@@ -924,636 +850,643 @@ paths:
               $ref: '#/components/schemas/WorkflowEdgeCreate'
       responses:
         '201':
-          description: Ребро создано
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-        '400':
-          description: Некорректные узлы (не найдены)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/workflows/edges/{edge_record_id}:
     delete:
-      operationId: deleteWorkflowEdge
-      summary: Удалить ребро
       tags:
-        - workflows
+      - workflows
+      summary: Delete Workflow Edge
+      operationId: delete_workflow_edge_api_workflows_edges__edge_record_id__delete
       parameters:
-        - name: edge_record_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: edge_record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Edge Record Id
       responses:
         '200':
-          description: Удалено
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/workflow/next:
     get:
-      operationId: getNextWorkflowStep
-      summary: Получить следующий шаг для проекта (простой режим)
       tags:
-        - workflows
+      - workflows
+      summary: Get Next Step
+      operationId: get_next_step_api_workflow_next_get
       parameters:
-        - name: project_id
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Project Id
       responses:
         '200':
-          description: Информация о следующем шаге или завершении
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  next_stage:
-                    type: string
-                    description: Тип следующего артефакта или 'finished'
-                  prompt_type:
-                    type: string
-                  parent_id:
-                    type: string
-                    format: uuid
-                  description:
-                    type: string
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/workflow/execute_next:
     post:
-      operationId: executeNextWorkflowStep
-      summary: Выполнить следующий шаг (сгенерировать артефакт)
       tags:
-        - workflows
+      - workflows
+      summary: Execute Next Step
+      operationId: execute_next_step_api_workflow_execute_next_post
       parameters:
-        - name: project_id
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: model
-          in: query
-          required: false
-          schema:
-            type: string
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      - name: model
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
       responses:
         '200':
-          description: Результат выполнения шага (артефакт)
+          description: Successful Response
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  artifact_id:
-                    type: string
-                  artifact_type:
-                    type: string
-                  content:
-                    type: object
-                  parent_id:
-                    type: string
-                  next_stage:
-                    type: string
-                  existing:
-                    type: boolean
-        '400':
-          description: Нет следующего шага или ошибка
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          $ref: '#/components/responses/NotFound'
+              schema: {}
         '422':
-          $ref: '#/components/responses/ValidationError'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  # ==================== Модели и режимы ====================
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/models:
     get:
-      operationId: getModels
-      summary: Список доступных LLM-моделей
       tags:
-        - modes
+      - modes
+      summary: Get Models
+      operationId: get_models_api_models_get
       responses:
         '200':
-          description: Массив моделей
+          description: Successful Response
           content:
             application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+              schema: {}
   /api/modes:
     get:
-      operationId: getModes
-      summary: Список доступных режимов промптов
       tags:
-        - modes
+      - modes
+      summary: Get Available Modes
+      operationId: get_available_modes_api_modes_get
       responses:
         '200':
-          description: Массив режимов
+          description: Successful Response
           content:
             application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    name:
-                      type: string
-                    default:
-                      type: boolean
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+              schema: {}
   /api/analyze:
     post:
-      operationId: analyzeStream
-      summary: Отправить запрос к LLM в стриминговом режиме
       tags:
-        - modes
+      - modes
+      summary: Analyze
+      operationId: analyze_api_analyze_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/auth/login:
+    post:
+      tags:
+      - auth
+      summary: Login
+      description: Login with master key, return session token in JSON
+      operationId: login_api_auth_login_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
+              additionalProperties: true
               type: object
-              properties:
-                prompt:
-                  type: string
-                mode:
-                  type: string
-                model:
-                  type: string
-                project_id:
-                  type: string
-                  format: uuid
+              title: Body
+        required: true
       responses:
         '200':
-          description: Стриминг текстового ответа (text/plain)
+          description: Successful Response
           content:
-            text/plain:
-              schema:
-                type: string
-        '400':
-          description: Неверный JSON или отсутствует prompt
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Ошибка получения системного промпта
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/auth/logout:
+    post:
+      tags:
+      - auth
+      summary: Logout
+      description: Logout - client should clear sessionStorage
+      operationId: logout_api_auth_logout_post
+      responses:
+        '200':
+          description: Successful Response
           content:
-            text/plain:
+            application/json:
+              schema: {}
+  /api/auth/session:
+    get:
+      tags:
+      - auth
+      summary: Get Session
+      description: Check current session from Bearer token OR cookie
+      operationId: get_session_api_auth_session_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /:
+    get:
+      summary: Serve Frontend
+      description: "Serve frontend index.html for SPA routing.\n\nReturns:\n    FileResponse:\
+        \ index.html if exists, else error JSON."
+      operationId: serve_frontend__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /{path}:
+    get:
+      summary: Serve Spa
+      description: "Handle SPA client-side routing: serve index.html for unknown paths.\n\
+        \nArgs:\n    path: URL path segment.\n\nReturns:\n    FileResponse or JSON\
+        \ error."
+      operationId: serve_spa__path__get
+      parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Path
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
               schema:
-                type: string
-                example: "🔴 SYSTEM_CRITICAL_ERROR: ..."
-
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
-  securitySchemes:
-    MasterKeyAuth:
-      type: apiKey
-      in: header
-      name: X-Master-Key
-      description: Ключ администратора для доступа к защищённым операциям.
-
   schemas:
-    Project:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        description:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        password_hash:
-          type: string
-          nullable: true
-
-    ProjectCreate:
-      type: object
-      required:
-        - name
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-
-    Artifact:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        type:
-          type: string
-        parent_id:
-          type: string
-          format: uuid
-          nullable: true
-        content:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        version:
-          type: string
-        status:
-          type: string
-          enum: [DRAFT, GENERATED, VALIDATED, REJECTED]
-        summary:
-          type: string
-
     ArtifactCreate:
-      type: object
-      required:
-        - project_id
-        - artifact_type
-        - content
       properties:
         project_id:
           type: string
-          format: uuid
+          title: Project Id
         artifact_type:
           type: string
+          title: Artifact Type
         content:
           type: string
+          title: Content
         parent_id:
-          type: string
-          format: uuid
-          nullable: true
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Parent Id
         generate:
           type: boolean
+          title: Generate
+          default: false
         model:
-          type: string
-
-    GenerateArtifactRequest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
       type: object
       required:
-        - artifact_type
-        - parent_id
-        - project_id
+      - project_id
+      - artifact_type
+      - content
+      title: ArtifactCreate
+    ClarificationSessionResponse:
       properties:
-        artifact_type:
+        id:
           type: string
-        parent_id:
-          type: string
-          format: uuid
-        feedback:
-          type: string
-        model:
-          type: string
+          title: Id
         project_id:
           type: string
-          format: uuid
-        existing_content:
-          type: object
-          nullable: true
-
-    SavePackageRequest:
-      type: object
-      required:
-        - project_id
-        - parent_id
-        - artifact_type
-        - content
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        parent_id:
-          type: string
-          format: uuid
-        artifact_type:
-          type: string
-        content:
-          type: object
-
-    ArtifactType:
-      type: object
-      properties:
-        type:
-          type: string
-        schema:
-          type: object
-        allowed_parents:
-          type: array
-          items:
-            type: string
-        requires_clarification:
-          type: boolean
-        icon:
-          type: string
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    ArtifactTypeCreate:
-      type: object
-      required:
-        - type
-        - schema
-      properties:
-        type:
-          type: string
-        schema:
-          type: object
-        allowed_parents:
-          type: array
-          items:
-            type: string
-        requires_clarification:
-          type: boolean
-        icon:
-          type: string
-
-    StartClarificationRequest:
-      type: object
-      required:
-        - project_id
-        - target_artifact_type
-      properties:
-        project_id:
-          type: string
-          format: uuid
+          title: Project Id
         target_artifact_type:
           type: string
-        model:
+          title: Target Artifact Type
+        history:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: History
+        status:
           type: string
-
-    MessageRequest:
+          title: Status
+        context_summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Context Summary
+        final_artifact_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Final Artifact Id
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
       type: object
       required:
-        - message
+      - id
+      - project_id
+      - target_artifact_type
+      - history
+      - status
+      - created_at
+      - updated_at
+      title: ClarificationSessionResponse
+    GenerateArtifactRequest:
+      properties:
+        artifact_type:
+          type: string
+          title: Artifact Type
+        parent_id:
+          type: string
+          title: Parent Id
+        feedback:
+          type: string
+          title: Feedback
+          default: ''
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        project_id:
+          type: string
+          title: Project Id
+        existing_content:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Existing Content
+      type: object
+      required:
+      - artifact_type
+      - parent_id
+      - project_id
+      title: GenerateArtifactRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    MessageRequest:
       properties:
         message:
           type: string
-
-    ClarificationSessionResponse:
+          title: Message
       type: object
+      required:
+      - message
+      title: MessageRequest
+    ProjectCreate:
       properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+          description: Project name, 1-100 characters
+        description:
+          type: string
+          title: Description
+          description: Project description
+          default: ''
+      type: object
+      required:
+      - name
+      title: ProjectCreate
+      description: Схема для создания нового проекта.
+    ProjectResponse:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+          description: Project name, 1-100 characters
+        description:
+          type: string
+          title: Description
+          description: Project description
+          default: ''
         id:
           type: string
-          format: uuid
+          title: Id
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
+        updated_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Updated At
+      type: object
+      required:
+      - name
+      - id
+      title: ProjectResponse
+      description: Схема для ответа с данными проекта.
+    ProjectUpdate:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+          description: Project name, 1-100 characters
+        description:
+          type: string
+          title: Description
+          description: Project description
+          default: ''
+      type: object
+      required:
+      - name
+      title: ProjectUpdate
+      description: Схема для обновления проекта (PUT — все поля обязательны).
+    SavePackageRequest:
+      properties:
         project_id:
           type: string
-          format: uuid
+          title: Project Id
+        parent_id:
+          type: string
+          title: Parent Id
+        artifact_type:
+          type: string
+          title: Artifact Type
+        content:
+          title: Content
+      type: object
+      required:
+      - project_id
+      - parent_id
+      - artifact_type
+      - content
+      title: SavePackageRequest
+    StartClarificationRequest:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
         target_artifact_type:
           type: string
-        history:
-          type: array
-          items:
-            type: object
-            properties:
-              role:
-                type: string
-                enum: [user, assistant]
-              content:
-                type: string
-              timestamp:
-                type: string
-                format: date-time
+          title: Target Artifact Type
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+      type: object
+      required:
+      - project_id
+      - target_artifact_type
+      title: StartClarificationRequest
+    ValidateArtifactRequest:
+      properties:
+        artifact_id:
+          type: string
+          title: Artifact Id
         status:
           type: string
-          enum: [active, completed]
-        context_summary:
-          type: object
-          nullable: true
-        final_artifact_id:
-          type: string
-          format: uuid
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    Workflow:
+          title: Status
       type: object
+      required:
+      - artifact_id
+      - status
+      title: ValidateArtifactRequest
+    ValidationError:
       properties:
-        id:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
           type: string
-          format: uuid
-        name:
+          title: Message
+        type:
           type: string
-        description:
-          type: string
-        is_default:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
     WorkflowCreate:
-      type: object
-      required:
-        - name
       properties:
         name:
           type: string
+          title: Name
         description:
           type: string
+          title: Description
+          default: ''
         is_default:
           type: boolean
-
-    WorkflowUpdate:
-      type: object
-      properties:
-        name:
+          title: Is Default
+          default: false
+        project_id:
           type: string
-        description:
-          type: string
-        is_default:
-          type: boolean
-
-    WorkflowNodeCreate:
+          title: Project Id
+        nodes:
+          items:
+            $ref: '#/components/schemas/WorkflowNodeCreate'
+          type: array
+          title: Nodes
+          description: Начальные узлы графа
+        edges:
+          items:
+            $ref: '#/components/schemas/WorkflowEdgeCreate'
+          type: array
+          title: Edges
+          description: Начальные рёбра графа
       type: object
       required:
-        - node_id
-        - prompt_key
-        - position_x
-        - position_y
-      properties:
-        node_id:
-          type: string
-        prompt_key:
-          type: string
-        config:
-          type: object
-        position_x:
-          type: number
-          format: float
-        position_y:
-          type: number
-          format: float
-
-    WorkflowNodeUpdate:
-      type: object
-      properties:
-        prompt_key:
-          type: string
-        config:
-          type: object
-        position_x:
-          type: number
-          format: float
-        position_y:
-          type: number
-          format: float
-
+      - name
+      - project_id
+      title: WorkflowCreate
+      description: Схема создания воркфлоу с опциональным графом.
     WorkflowEdgeCreate:
-      type: object
-      required:
-        - source_node
-        - target_node
       properties:
         source_node:
           type: string
+          title: Source Node
         target_node:
           type: string
+          title: Target Node
         source_output:
           type: string
+          title: Source Output
           default: output
         target_input:
           type: string
+          title: Target Input
           default: input
-
-    WorkflowDetail:
       type: object
+      required:
+      - source_node
+      - target_node
+      title: WorkflowEdgeCreate
+    WorkflowNodeCreate:
       properties:
-        workflow:
-          $ref: '#/components/schemas/Workflow'
-        nodes:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              workflow_id:
-                type: string
-              node_id:
-                type: string
-              prompt_key:
-                type: string
-              config:
-                type: object
-              position_x:
-                type: number
-              position_y:
-                type: number
-              created_at:
-                type: string
-                format: date-time
-              updated_at:
-                type: string
-                format: date-time
-        edges:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              workflow_id:
-                type: string
-              source_node:
-                type: string
-              target_node:
-                type: string
-              source_output:
-                type: string
-              target_input:
-                type: string
-              created_at:
-                type: string
-                format: date-time
-
-    Error:
-      type: object
-      properties:
-        error:
+        node_id:
           type: string
-
-  responses:
-    NotFound:
-      description: Ресурс не найден
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    BadRequest:
-      description: Некорректный запрос
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    ValidationError:
-      description: Ошибка валидации
-      content:
-        application/json:
-          schema:
+          title: Node Id
+        prompt_key:
+          type: string
+          title: Prompt Key
+        config:
+          additionalProperties: true
+          type: object
+          title: Config
+          default: {}
+        position_x:
+          type: number
+          title: Position X
+        position_y:
+          type: number
+          title: Position Y
+      type: object
+      required:
+      - node_id
+      - prompt_key
+      - position_x
+      - position_y
+      title: WorkflowNodeCreate
+    WorkflowNodeUpdate:
+      properties:
+        prompt_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Prompt Key
+        config:
+          anyOf:
+          - additionalProperties: true
             type: object
-            properties:
-              error:
-                type: string
-    InternalServerError:
-      description: Внутренняя ошибка сервера
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
+          - type: 'null'
+          title: Config
+        position_x:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Position X
+        position_y:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Position Y
+      type: object
+      title: WorkflowNodeUpdate
+    WorkflowUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        is_default:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Default
+        nodes:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/WorkflowNodeCreate'
+            type: array
+          - type: 'null'
+          title: Nodes
+          description: Полный новый набор узлов (если указан)
+        edges:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/WorkflowEdgeCreate'
+            type: array
+          - type: 'null'
+          title: Edges
+          description: Полный новый набор рёбер (если указан)
+      type: object
+      title: WorkflowUpdate
+      description: Схема обновления воркфлоу. Поля nodes/edges могут отсутствовать
+        (тогда граф не меняется).
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

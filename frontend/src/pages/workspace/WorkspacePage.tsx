@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { useQuery } from '@tanstack/react-query';
 import { api, ProjectResponse } from '@shared/api';
 import { IOSShell } from '@/widgets/workflow-shell/ui/IOSShell';
 import { IOSCanvas } from '@/widgets/workflow-editor/ui/IOSCanvas';
@@ -7,7 +8,6 @@ import { NodeListPanel } from '@/widgets/node-picker/ui/NodeListPanel';
 import { NodeModal } from '@/features/node/view-details/ui/NodeModal';
 import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { HamburgerMenu } from '@/widgets/header/ui/HamburgerMenu';
-import { useWorkflows } from '@/entities/workflow/api/useWorkflows';
 import { useSelectedProject } from '@/entities/project/api/useSelectedProject';
 import { CreateWorkflowModal } from '@/features/workflow/create/ui/CreateWorkflowModal';
 import { EditWorkflowModal } from '@/features/workflow/edit/ui/EditWorkflowModal';
@@ -15,13 +15,59 @@ import { DeleteConfirmModal } from '@shared/ui';
 import { EditNodeModal } from '@/features/node/edit-content/ui/EditNodeModal';
 import { SIDEBAR_HAMBURGER_WIDTH } from '@/shared/lib/constants/canvas';
 
+// Новые хуки
+import { useWorkflowsData, WorkflowDetail } from '@/entities/workflow/api/useWorkflowsData';
+import { useWorkflowUI } from '@/features/workflow/model/useWorkflowUI';
+import { useWorkflowCanvas } from '@/widgets/workflow-editor/lib/useWorkflowCanvas';
+import { workflowApi } from '@/entities/workflow/api/workflowApi';
+
+import { NodeData } from '@shared/lib';
+
 export const WorkspacePage: React.FC = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [userClosedSidebar, setUserClosedSidebar] = useState(false);
 
   const { selectedProjectId } = useSelectedProject(projects);
-  const workflowsHook = useWorkflows(selectedProjectId);
+  const data = useWorkflowsData(selectedProjectId);
+  const ui = useWorkflowUI();
+  const canvas = useWorkflowCanvas();
+
+  // Загрузка деталей текущего воркфлоу
+  const { data: workflowDetail } = useQuery<WorkflowDetail>({
+    queryKey: ['workflow', ui.currentWorkflowId],
+    queryFn: () => workflowApi.get(ui.currentWorkflowId!).then(res => res.data as WorkflowDetail),
+    enabled: !!ui.currentWorkflowId,
+  });
+
+  // Синхронизация деталей с канвасом и UI-именами
+  useEffect(() => {
+    if (workflowDetail) {
+      const nodes = (workflowDetail.nodes || []).map((n) => ({
+        id: crypto.randomUUID(),
+        node_id: n.node_id!,
+        prompt_key: n.prompt_key || 'UNKNOWN',
+        position_x: n.position_x || 100,
+        position_y: n.position_y || 100,
+        config: n.config || {},
+        recordId: n.id,
+      }));
+      const edges = (workflowDetail.edges || []).map((e) => ({
+        id: e.id || crypto.randomUUID(),
+        source_node: e.source_node!,
+        target_node: e.target_node!,
+      }));
+      canvas.setNodes(nodes);
+      canvas.setEdges(edges);
+      ui.setWorkflowName(workflowDetail.workflow?.name || '');
+      ui.setWorkflowDescription(workflowDetail.workflow?.description || '');
+    } else {
+      canvas.setNodes([]);
+      canvas.setEdges([]);
+      ui.setWorkflowName('');
+      ui.setWorkflowDescription('');
+    }
+  }, [workflowDetail]);
 
   const [editingNode, setEditingNode] = useState<{ recordId: string; promptKey: string; config: Record<string, unknown> } | null>(null);
   const [deletingNode, setDeletingNode] = useState<{ recordId?: string; nodeId: string; name: string } | null>(null);
@@ -54,6 +100,134 @@ export const WorkspacePage: React.FC = () => {
 
   const currentProject = projects.find(p => p.id === selectedProjectId);
 
+  const handleCreateWorkflow = useCallback(async (name: string, description: string): Promise<void> => {
+    if (!name.trim() || !selectedProjectId) return;
+    try {
+      await data.createWorkflow.mutateAsync({ name, description, projectId: selectedProjectId });
+      ui.setShowCreateModal(false);
+    } catch {
+      // ошибка уже обработана в мутации
+    }
+  }, [data, selectedProjectId, ui]);
+
+  const handleDeleteWorkflow = useCallback(async (id: string): Promise<void> => {
+    try {
+      await data.deleteWorkflow.mutateAsync(id);
+      ui.closeDeleteModal();
+    } catch {
+      // ошибка уже обработана
+    }
+  }, [data, ui]);
+
+  const handleAddCustomNode = useCallback((x: number, y: number) => {
+    canvas.handleAddCustomNode(x, y);
+  }, [canvas]);
+
+  const handleConfirmAddCustomNode = useCallback(async () => {
+    const newNode = await canvas.confirmAddCustomNode();
+    if (!newNode || !ui.currentWorkflowId) return;
+    try {
+      const result = await data.createNode.mutateAsync({
+        workflowId: ui.currentWorkflowId,
+        nodeId: newNode.node_id,
+        promptKey: newNode.prompt_key,
+        config: newNode.config || {},
+        positionX: newNode.position_x,
+        positionY: newNode.position_y,
+      });
+      // Обновляем recordId в локальном узле
+      canvas.setNodes(prev =>
+        prev.map(n => (n.node_id === newNode.node_id ? { ...n, recordId: result.id } : n))
+      );
+    } catch (err) {
+      console.error('Failed to create node:', err);
+    }
+  }, [canvas, data, ui.currentWorkflowId]);
+
+  // Обработчик добавления узла из списка (с сохранением на сервере)
+  const handleAddNodeFromList = useCallback(async (node: NodeData) => {
+    if (!ui.currentWorkflowId) return;
+    // Сначала добавляем локально для мгновенного UI
+    canvas.addNodeFromList(node);
+    try {
+      const result = await data.createNode.mutateAsync({
+        workflowId: ui.currentWorkflowId,
+        nodeId: node.node_id,
+        promptKey: node.prompt_key,
+        config: node.config || {},
+        positionX: node.position_x,
+        positionY: node.position_y,
+      });
+      // Обновляем recordId после успешного создания на сервере
+      canvas.setNodes(prev =>
+        prev.map(n => (n.node_id === node.node_id ? { ...n, recordId: result.id } : n))
+      );
+    } catch (err) {
+      console.error('Failed to create node from list:', err);
+      // Можно откатить локальное добавление, но для простоты оставим как есть
+      // (пользователь увидит ошибку и узел останется без recordId)
+    }
+  }, [canvas, data, ui.currentWorkflowId]);
+
+  const handleUpdateNode = useCallback(async (recordId: string, promptKey: string, config: Record<string, unknown>) => {
+    try {
+      await data.updateNode.mutateAsync({ recordId, prompt_key: promptKey, config });
+    } catch (err) {
+      console.error('Failed to update node:', err);
+    }
+  }, [data]);
+
+  const handleDeleteNode = useCallback(async (recordId: string) => {
+    try {
+      await data.deleteNode.mutateAsync(recordId);
+      canvas.setNodes(prev => prev.filter(n => n.recordId !== recordId));
+      canvas.setEdges(prev => prev.filter(e => e.source_node !== recordId && e.target_node !== recordId));
+    } catch (err) {
+      console.error('Failed to delete node:', err);
+    }
+  }, [data, canvas]);
+
+  const handleStartConnection = useCallback((nodeId: string) => {
+    canvas.handleStartConnection(nodeId);
+  }, [canvas]);
+
+  const handleCompleteConnection = useCallback(async (targetNodeId: string) => {
+    const sourceNodeId = canvas.connectingNode;
+    if (!sourceNodeId || !ui.currentWorkflowId) return;
+
+    // Проверяем, что исходный узел уже сохранён на сервере (имеет recordId)
+    const sourceNode = canvas.nodes.find(n => n.node_id === sourceNodeId);
+    if (!sourceNode) {
+      toast.error('Source node not found');
+      return;
+    }
+    // Если у узла нет recordId, значит он ещё не сохранён – ждём или просим подождать
+    if (!sourceNode.recordId) {
+      toast.error('Please wait for node to be saved before connecting');
+      return;
+    }
+
+    try {
+      await data.createEdge.mutateAsync({
+        workflowId: ui.currentWorkflowId,
+        sourceNode: sourceNodeId,
+        targetNode: targetNodeId,
+      });
+      canvas.handleCompleteConnection(targetNodeId);
+    } catch (err) {
+      console.error('Failed to create edge:', err);
+    }
+  }, [canvas, data, ui.currentWorkflowId]);
+
+  const handleDeleteEdge = useCallback(async (edgeId: string) => {
+    try {
+      await data.deleteEdge.mutateAsync(edgeId);
+      canvas.setEdges(prev => prev.filter(e => e.id !== edgeId));
+    } catch (err) {
+      console.error('Failed to delete edge:', err);
+    }
+  }, [data, canvas]);
+
   const handleRequestDeleteNode = (recordId: string | undefined, nodeId: string, name: string) => {
     setDeletingNode({ recordId, nodeId, name });
   };
@@ -61,10 +235,10 @@ export const WorkspacePage: React.FC = () => {
   const confirmDeleteNode = async () => {
     if (!deletingNode) return;
     if (deletingNode.recordId) {
-      await workflowsHook.deleteNode(deletingNode.recordId);
+      await handleDeleteNode(deletingNode.recordId);
     } else {
-      workflowsHook.setNodes(prev => prev.filter(n => n.node_id !== deletingNode.nodeId));
-      workflowsHook.setEdges(prev => prev.filter(e => e.source_node !== deletingNode.nodeId && e.target_node !== deletingNode.nodeId));
+      canvas.setNodes(prev => prev.filter(n => n.node_id !== deletingNode.nodeId));
+      canvas.setEdges(prev => prev.filter(e => e.source_node !== deletingNode.nodeId && e.target_node !== deletingNode.nodeId));
       toast.success('Node removed');
     }
     setDeletingNode(null);
@@ -76,7 +250,7 @@ export const WorkspacePage: React.FC = () => {
 
   const confirmDeleteEdge = async () => {
     if (!deletingEdge) return;
-    await workflowsHook.deleteEdge(deletingEdge.edgeId);
+    await handleDeleteEdge(deletingEdge.edgeId);
     setDeletingEdge(null);
   };
 
@@ -122,20 +296,20 @@ export const WorkspacePage: React.FC = () => {
                 <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">
                   ⚠️ Select project on home page
                 </div>
-              ) : workflowsHook.workflows.length === 0 ? (
+              ) : data.workflows.length === 0 ? (
                 <div className="text-[10px] text-[var(--text-muted)] text-center py-4">
                   No workflows
                 </div>
               ) : (
-                workflowsHook.workflows.map((wf) => (
+                data.workflows.map((wf) => (
                   <div
                     key={wf.id}
                     className={`w-full text-left px-3 py-2 rounded mb-1 text-xs flex items-center justify-between cursor-pointer ${
-                      workflowsHook.currentWorkflowId === wf.id
+                      ui.currentWorkflowId === wf.id
                         ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]'
                         : 'text-[var(--text-secondary)] hover:bg-[var(--ios-glass-bright)]'
                     }`}
-                    onClick={() => workflowsHook.setCurrentWorkflowId(wf.id!)}
+                    onClick={() => ui.setCurrentWorkflowId(wf.id!)}
                     data-testid="workflow-item"
                   >
                     <div className="flex-1">
@@ -146,7 +320,7 @@ export const WorkspacePage: React.FC = () => {
                     </div>
                     <div className="flex gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
                       <button
-                        onClick={() => workflowsHook.openEditModal(wf)}
+                        onClick={() => ui.openEditModal({ id: wf.id!, name: wf.name, description: wf.description || '' })}
                         className="text-[var(--text-muted)] hover:text-[var(--bronze-base)] transition-colors p-1"
                         title="Edit workflow"
                       >
@@ -155,7 +329,7 @@ export const WorkspacePage: React.FC = () => {
                         </svg>
                       </button>
                       <button
-                        onClick={() => workflowsHook.openDeleteModal(wf)}
+                        onClick={() => ui.openDeleteModal(wf)}
                         className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors p-1"
                         title="Delete workflow"
                       >
@@ -171,7 +345,7 @@ export const WorkspacePage: React.FC = () => {
 
             <div className="p-3 border-t border-[var(--ios-border)] space-y-2">
               <button
-                onClick={() => workflowsHook.setShowCreateWorkflowModal(true)}
+                onClick={() => ui.setShowCreateModal(true)}
                 disabled={!selectedProjectId}
                 className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2 disabled:opacity-30"
                 data-testid="new-workflow-button"
@@ -185,7 +359,7 @@ export const WorkspacePage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => workflowsHook.setShowNodeList(true)}
+                  onClick={() => canvas.setShowNodeList(true)}
                   disabled={!selectedProjectId}
                   className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
                   data-testid="nodes-button"
@@ -209,7 +383,7 @@ export const WorkspacePage: React.FC = () => {
               </div>
 
               <div className="text-[9px] text-[var(--text-muted)] text-center pt-2">
-                {workflowsHook.workflows.length} workflow{workflowsHook.workflows.length !== 1 ? 's' : ''}
+                {data.workflows.length} workflow{data.workflows.length !== 1 ? 's' : ''}
               </div>
             </div>
           </aside>
@@ -220,90 +394,87 @@ export const WorkspacePage: React.FC = () => {
             <div style={{ width: !sidebarOpen ? SIDEBAR_HAMBURGER_WIDTH : 0 }} className="transition-all" />
             <div className="flex-1 flex justify-center items-center">
               <h2 className="text-sm font-semibold text-[var(--text-main)]">
-                {workflowsHook.workflowName || 'Untitled Workflow'}
+                {ui.workflowName || 'Untitled Workflow'}
               </h2>
             </div>
             <div style={{ width: !sidebarOpen ? SIDEBAR_HAMBURGER_WIDTH : 0 }} className="transition-all" />
           </div>
           <IOSCanvas
-            nodes={workflowsHook.nodes}
-            edges={workflowsHook.edges}
-            onNodesChange={workflowsHook.setNodes}
-            onEdgesChange={workflowsHook.setEdges}
-            onAddCustomNode={workflowsHook.handleAddCustomNode}
+            nodes={canvas.nodes}
+            edges={canvas.edges}
+            onNodesChange={canvas.setNodes}
+            onEdgesChange={canvas.setEdges}
+            onAddCustomNode={handleAddCustomNode}
             onEditNode={(recordId, promptKey, config) => setEditingNode({ recordId, promptKey, config })}
             onRequestDeleteNode={handleRequestDeleteNode}
-            onStartConnection={workflowsHook.handleStartConnection} // ADDED
-            onCompleteConnection={workflowsHook.handleCompleteConnection}
+            onStartConnection={handleStartConnection}
+            onCompleteConnection={handleCompleteConnection}
             onRequestDeleteEdge={handleRequestDeleteEdge}
           />
         </div>
 
         <NodeListPanel
-          visible={workflowsHook.showNodeList}
-          onClose={() => workflowsHook.setShowNodeList(false)}
-          nodes={workflowsHook.nodes}
-          onAddNode={workflowsHook.addNodeFromList}
-          onUpdateNode={async (recordId, promptKey, config) => {
-            await workflowsHook.updateNode(recordId, promptKey, config);
-          }}
+          visible={canvas.showNodeList}
+          onClose={() => canvas.setShowNodeList(false)}
+          nodes={canvas.nodes}
+          onAddNode={handleAddNodeFromList}  // ← используем обёртку с сохранением
+          onUpdateNode={handleUpdateNode}
           onDeleteNode={(recordId, nodeId) => {
-            const node = workflowsHook.nodes.find(n => n.node_id === nodeId);
+            const node = canvas.nodes.find(n => n.node_id === nodeId);
             if (node) {
               handleRequestDeleteNode(recordId, nodeId, node.prompt_key);
             }
           }}
-          currentWorkflowId={workflowsHook.currentWorkflowId}
+          currentWorkflowId={ui.currentWorkflowId}
         />
+
         <NodeModal
-          visible={workflowsHook.showNodeModal}
-          onClose={() => workflowsHook.setShowNodeModal(false)}
-          title={workflowsHook.newNodeTitle}
-          onTitleChange={workflowsHook.setNewNodeTitle}
-          prompt={workflowsHook.newNodePrompt}
-          onPromptChange={workflowsHook.setNewNodePrompt}
-          onConfirm={workflowsHook.confirmAddCustomNode}
-          validationError={workflowsHook.newNodeTitle.trim() ? workflowsHook.validateNodeUnique(workflowsHook.newNodeTitle.trim(), workflowsHook.newNodePrompt) : null}
+          visible={canvas.showNodeModal}
+          onClose={() => canvas.setShowNodeModal(false)}
+          title={canvas.newNodeTitle}
+          onTitleChange={canvas.setNewNodeTitle}
+          prompt={canvas.newNodePrompt}
+          onPromptChange={canvas.setNewNodePrompt}
+          onConfirm={handleConfirmAddCustomNode}
+          validationError={
+            canvas.newNodeTitle.trim()
+              ? canvas.validateNodeUnique(canvas.newNodeTitle.trim(), canvas.newNodePrompt)
+              : null
+          }
         />
 
         <CreateWorkflowModal
-          isOpen={workflowsHook.showCreateWorkflowModal}
-          onClose={() => workflowsHook.setShowCreateWorkflowModal(false)}
-          onCreate={async (name, description) => {
-            await workflowsHook.handleCreateWorkflow(name, description);
-          }}
-          isPending={workflowsHook.isCreatingWorkflow}
+          isOpen={ui.showCreateModal}
+          onClose={() => ui.setShowCreateModal(false)}
+          onCreate={handleCreateWorkflow}
+          isPending={data.createWorkflow.isPending}
         />
 
         <EditWorkflowModal
-          isOpen={!!workflowsHook.editingWorkflow}
-          onClose={workflowsHook.closeEditModal}
-          initialName={workflowsHook.editingWorkflow?.name || ''}
-          initialDescription={workflowsHook.editingWorkflow?.description || ''}
+          isOpen={!!ui.editingWorkflow}
+          onClose={ui.closeEditModal}
+          initialName={ui.editingWorkflow?.name || ''}
+          initialDescription={ui.editingWorkflow?.description || ''}
           onSave={async (name, description) => {
-            if (workflowsHook.editingWorkflow) {
-              await workflowsHook.updateWorkflowMetadata(
-                workflowsHook.editingWorkflow.id,
+            if (ui.editingWorkflow) {
+              await data.updateWorkflow.mutateAsync({
+                id: ui.editingWorkflow.id,
                 name,
-                description
-              );
-              workflowsHook.closeEditModal();
+                description,
+              });
+              ui.closeEditModal();
             }
           }}
-          isSaving={workflowsHook.loading}
+          isSaving={data.updateWorkflow.isPending}
         />
 
         <DeleteConfirmModal
-          isOpen={!!workflowsHook.deletingWorkflow}
-          onClose={workflowsHook.closeDeleteModal}
-          onConfirm={async () => {
-            if (workflowsHook.deletingWorkflow) {
-              await workflowsHook.handleDelete(workflowsHook.deletingWorkflow.id);
-            }
-          }}
-          itemName={workflowsHook.deletingWorkflow?.name || ''}
+          isOpen={!!ui.deletingWorkflow}
+          onClose={ui.closeDeleteModal}
+          onConfirm={() => handleDeleteWorkflow(ui.deletingWorkflow!.id)}
+          itemName={ui.deletingWorkflow?.name || ''}
           itemType="workflow"
-          isPending={workflowsHook.isDeletingWorkflow}
+          isPending={data.deleteWorkflow.isPending}
         />
 
         <EditNodeModal
@@ -313,11 +484,11 @@ export const WorkspacePage: React.FC = () => {
           initialConfig={editingNode?.config || {}}
           onSave={async (promptKey, config) => {
             if (editingNode) {
-              await workflowsHook.updateNode(editingNode.recordId, promptKey, config);
+              await handleUpdateNode(editingNode.recordId, promptKey, config);
               setEditingNode(null);
             }
           }}
-          isSaving={workflowsHook.isUpdatingNode}
+          isSaving={data.updateNode.isPending}
         />
 
         <DeleteConfirmModal
@@ -326,7 +497,7 @@ export const WorkspacePage: React.FC = () => {
           onConfirm={confirmDeleteNode}
           itemName={deletingNode?.name || ''}
           itemType="node"
-          isPending={workflowsHook.isDeletingNode}
+          isPending={data.deleteNode.isPending}
         />
 
         <DeleteConfirmModal
@@ -335,7 +506,7 @@ export const WorkspacePage: React.FC = () => {
           onConfirm={confirmDeleteEdge}
           itemName={`edge between ${deletingEdge?.sourceNode.substring(0,6)} and ${deletingEdge?.targetNode.substring(0,6)}`}
           itemType="edge"
-          isPending={workflowsHook.isDeletingEdge}
+          isPending={data.deleteEdge.isPending}
         />
       </div>
     </IOSShell>

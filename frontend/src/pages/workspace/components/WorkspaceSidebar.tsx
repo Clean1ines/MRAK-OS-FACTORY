@@ -23,7 +23,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   isMobile,
   sidebarOpen,
   onCloseSidebar,
-  onOpenSidebar,
+  // onOpenSidebar не используется внутри, поэтому не включаем в деструктуризацию
   selectedProjectId,
   currentProjectName,
   workflows,

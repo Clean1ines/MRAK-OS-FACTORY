@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useQuery } from '@tanstack/react-query';
-import { api, ProjectResponse } from '@shared/api';
+import { api } from '@shared/api';
 import { IOSShell } from '@/widgets/workflow-shell/ui/IOSShell';
 import { IOSCanvas } from '@/widgets/workflow-editor/ui/IOSCanvas';
 import { NodeListPanel } from '@/widgets/node-picker/ui/NodeListPanel';
@@ -14,20 +14,21 @@ import { EditWorkflowModal } from '@/features/workflow/edit/ui/EditWorkflowModal
 import { DeleteConfirmModal } from '@shared/ui';
 import { EditNodeModal } from '@/features/node/edit-content/ui/EditNodeModal';
 import { SIDEBAR_HAMBURGER_WIDTH } from '@/shared/lib/constants/canvas';
+import { useProjects } from '@/entities/project/api/useProjects';
 
 // Новые хуки
 import { useWorkflowsData, WorkflowDetail } from '@/entities/workflow/api/useWorkflowsData';
 import { useWorkflowUI } from '@/features/workflow/model/useWorkflowUI';
 import { useWorkflowCanvas } from '@/widgets/workflow-editor/lib/useWorkflowCanvas';
 import { workflowApi } from '@/entities/workflow/api/workflowApi';
-
 import { NodeData } from '@shared/lib';
+import { WorkspaceSidebar } from './components/WorkspaceSidebar';
 
 export const WorkspacePage: React.FC = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [userClosedSidebar, setUserClosedSidebar] = useState(false);
 
+  const { projects } = useProjects();
   const { selectedProjectId } = useSelectedProject(projects);
   const data = useWorkflowsData(selectedProjectId);
   const ui = useWorkflowUI();
@@ -77,26 +78,6 @@ export const WorkspacePage: React.FC = () => {
 
   const handleCloseSidebar = () => setUserClosedSidebar(true);
   const handleOpenSidebar = () => setUserClosedSidebar(false);
-
-  useEffect(() => {
-    const loadProjects = async () => {
-      try {
-        const { data, error } = await api.projects.list();
-        if (error) {
-          console.error('Failed to load projects:', error);
-          return;
-        }
-        if (data && Array.isArray(data)) {
-          setProjects(data);
-        } else {
-          setProjects([]);
-        }
-      } catch (e) {
-        console.error('Error loading projects:', e);
-      }
-    };
-    loadProjects();
-  }, []);
 
   const currentProject = projects.find(p => p.id === selectedProjectId);
 
@@ -164,8 +145,6 @@ export const WorkspacePage: React.FC = () => {
       );
     } catch (err) {
       console.error('Failed to create node from list:', err);
-      // Можно откатить локальное добавление, но для простоты оставим как есть
-      // (пользователь увидит ошибку и узел останется без recordId)
     }
   }, [canvas, data, ui.currentWorkflowId]);
 
@@ -254,6 +233,15 @@ export const WorkspacePage: React.FC = () => {
     setDeletingEdge(null);
   };
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await api.auth.logout();
+      window.location.href = '/login';
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
   return (
     <IOSShell>
       <div className="flex h-full">
@@ -261,133 +249,22 @@ export const WorkspacePage: React.FC = () => {
           <HamburgerMenu onOpenSidebar={handleOpenSidebar} showHomeIcon={true} />
         )}
 
-        {sidebarOpen && (
-          <aside
-            className={`${
-              isMobile ? 'fixed top-0 left-0 h-full z-50 shadow-2xl' : 'w-64'
-            } bg-[var(--ios-glass)] backdrop-blur-md border-r border-[var(--ios-border)] flex flex-col`}
-            data-testid="sidebar"
-          >
-            <div className="flex justify-end p-2">
-              <button
-                onClick={handleCloseSidebar}
-                className="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-                aria-label="Close sidebar"
-                data-testid="close-sidebar"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-3 border-b border-[var(--ios-border)]">
-              <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">
-                Current Project
-              </label>
-              <div className="w-full bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded px-2 py-1.5 text-xs text-[var(--text-main)]">
-                {currentProject?.name || '—'}
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-2">
-              {!selectedProjectId ? (
-                <div className="text-[10px] text-[var(--accent-warning)] text-center py-4">
-                  ⚠️ Select project on home page
-                </div>
-              ) : data.workflows.length === 0 ? (
-                <div className="text-[10px] text-[var(--text-muted)] text-center py-4">
-                  No workflows
-                </div>
-              ) : (
-                data.workflows.map((wf) => (
-                  <div
-                    key={wf.id}
-                    className={`w-full text-left px-3 py-2 rounded mb-1 text-xs flex items-center justify-between cursor-pointer ${
-                      ui.currentWorkflowId === wf.id
-                        ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--ios-glass-bright)]'
-                    }`}
-                    onClick={() => ui.setCurrentWorkflowId(wf.id!)}
-                    data-testid="workflow-item"
-                  >
-                    <div className="flex-1">
-                      <div className="font-semibold truncate">{wf.name}</div>
-                      <div className="text-[9px] opacity-60 truncate">
-                        {wf.description || 'No description'}
-                      </div>
-                    </div>
-                    <div className="flex gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => ui.openEditModal({ id: wf.id!, name: wf.name, description: wf.description || '' })}
-                        className="text-[var(--text-muted)] hover:text-[var(--bronze-base)] transition-colors p-1"
-                        title="Edit workflow"
-                      >
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M17 3L21 7L7 21H3V17L17 3Z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => ui.openDeleteModal(wf)}
-                        className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors p-1"
-                        title="Delete workflow"
-                      >
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M3 6H21M19 6V20C19 21.1046 18.1046 22 17 22H7C5.89543 22 5 21.1046 5 20V6M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="p-3 border-t border-[var(--ios-border)] space-y-2">
-              <button
-                onClick={() => ui.setShowCreateModal(true)}
-                disabled={!selectedProjectId}
-                className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2 disabled:opacity-30"
-                data-testid="new-workflow-button"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                New Workflow
-              </button>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => canvas.setShowNodeList(true)}
-                  disabled={!selectedProjectId}
-                  className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
-                  data-testid="nodes-button"
-                >
-                  Nodes
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      await api.auth.logout();
-                      window.location.href = '/login';
-                    } catch (e) {
-                      console.error(e);
-                    }
-                  }}
-                  className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors"
-                  data-testid="logout-button"
-                >
-                  Logout
-                </button>
-              </div>
-
-              <div className="text-[9px] text-[var(--text-muted)] text-center pt-2">
-                {data.workflows.length} workflow{data.workflows.length !== 1 ? 's' : ''}
-              </div>
-            </div>
-          </aside>
-        )}
+        <WorkspaceSidebar
+          isMobile={isMobile}
+          sidebarOpen={sidebarOpen}
+          onCloseSidebar={handleCloseSidebar}
+          onOpenSidebar={handleOpenSidebar}
+          selectedProjectId={selectedProjectId}
+          currentProjectName={currentProject?.name || ''}
+          workflows={data.workflows}
+          currentWorkflowId={ui.currentWorkflowId}
+          onSelectWorkflow={ui.setCurrentWorkflowId}
+          onEditWorkflow={(wf) => ui.openEditModal({ id: wf.id!, name: wf.name, description: wf.description || '' })}
+          onDeleteWorkflow={ui.openDeleteModal}
+          onCreateWorkflow={() => ui.setShowCreateModal(true)}
+          onOpenNodeList={() => canvas.setShowNodeList(true)}
+          onLogout={handleLogout}
+        />
 
         <div className="flex-1 flex flex-col">
           <div className="h-12 flex items-center border-b border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
@@ -417,7 +294,7 @@ export const WorkspacePage: React.FC = () => {
           visible={canvas.showNodeList}
           onClose={() => canvas.setShowNodeList(false)}
           nodes={canvas.nodes}
-          onAddNode={handleAddNodeFromList}  // ← используем обёртку с сохранением
+          onAddNode={handleAddNodeFromList}
           onUpdateNode={handleUpdateNode}
           onDeleteNode={(recordId, nodeId) => {
             const node = canvas.nodes.find(n => n.node_id === nodeId);

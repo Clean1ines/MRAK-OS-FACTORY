@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface EditWorkflowModalProps {
   isOpen: boolean;
@@ -20,17 +20,19 @@ export const EditWorkflowModal: React.FC<EditWorkflowModalProps> = ({
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
   const [error, setError] = useState('');
+  const prevIsOpenRef = useRef(isOpen);
 
   useEffect(() => {
-    if (isOpen) {
-      // Сбрасываем поля при открытии модалки
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Сбрасываем поля только при открытии модалки (переход false -> true)
+    if (isOpen && !prevIsOpenRef.current) {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
       setName(initialName);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
       setDescription(initialDescription);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('');
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, initialName, initialDescription]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,6 +41,7 @@ export const EditWorkflowModal: React.FC<EditWorkflowModalProps> = ({
       setError('Name is required');
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError('');
     try {
       await onSave(name.trim(), description);

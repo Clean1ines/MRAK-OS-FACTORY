@@ -1,6 +1,6 @@
 // frontend/src/utils/logger.test.ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { frontendLogger } from './logger';
+import { frontendLogger } from '@/shared/lib/logger';
 
 // Mock console methods with proper typing
 const mockConsole: Record<string, ReturnType<typeof vi.fn>> = {

@@ -25,7 +25,7 @@ export default defineConfig([
 
   // Специальные правила для тестовых файлов (ослабляем требования)
   {
-    files: ['**/*.test.{ts,tsx}', '**/test/**/*.{ts,tsx}', 'src/test/setup.ts'],
+    files: ['**/*.test.{ts,tsx}', '**/test/**/*.{ts,tsx}', 'src/app/test/setup.ts'],
     rules: {
       // Разрешаем explicit any в тестах
       '@typescript-eslint/no-explicit-any': 'off',

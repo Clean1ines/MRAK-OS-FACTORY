@@ -1,0 +1,29 @@
+MODE: ARCH
+
+
+Analyze requested change.
+
+
+Output:
+
+1. Impacted files
+
+2. Impacted symbols
+
+3. Required modifications
+
+4. Possible risks
+
+5. Step-by-step plan
+
+
+No code.
+
+
+Before final output:
+
+Critique your solution.
+
+List possible mistakes.
+
+Fix them.

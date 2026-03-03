@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BaseModal } from '@shared/ui';
 
 interface EditNodeModalProps {
@@ -28,18 +28,20 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
     typeof initialConfig.custom_prompt === 'string' ? initialConfig.custom_prompt : ''
   );
   const [error, setError] = useState('');
+  const prevIsOpenRef = useRef(isOpen);
 
   useEffect(() => {
-    if (isOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Сбрасываем поля только при открытии модалки (переход false -> true)
+    if (isOpen && !prevIsOpenRef.current) {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
       setPromptKey(initialPromptKey);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCustomPrompt(
         typeof initialConfig.custom_prompt === 'string' ? initialConfig.custom_prompt : ''
       );
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('');
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, initialPromptKey, initialConfig]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,6 +50,7 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
       setError('Prompt key is required');
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError('');
     const newConfig = { custom_prompt: customPrompt };
     await onSave(promptKey.trim(), newConfig);

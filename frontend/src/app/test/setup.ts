@@ -1,4 +1,4 @@
-// frontend/src/test/setup.ts
+// frontend/src/app/test/setup.ts
 import { vi, beforeEach, afterEach } from 'vitest';
 
 // Mock sessionStorage for tests (jsdom doesn't provide it by default)

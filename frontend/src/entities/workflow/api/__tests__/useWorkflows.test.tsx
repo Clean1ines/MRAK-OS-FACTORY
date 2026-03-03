@@ -1,19 +1,30 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useWorkflows } from '../useWorkflows';
-import { client } from '@shared/api';
-import toast from 'react-hot-toast';
 
-// Мокаем модули
-vi.mock('../../api/client');
-vi.mock('react-hot-toast');
-vi.mock('../../utils/graphUtils', () => ({
+// Мокаем useWorkflowCanvas
+const mockSetNodes = vi.fn();
+const mockSetEdges = vi.fn();
+vi.mock('@/widgets/workflow-editor/lib/useWorkflowCanvas', () => ({
+  useWorkflowCanvas: vi.fn(() => ({
+    nodes: [],
+    edges: [],
+    connectingNode: null,
+    setNodes: mockSetNodes,
+    setEdges: mockSetEdges,
+    confirmAddCustomNode: vi.fn(),
+    addNodeFromList: vi.fn(),
+    handleCompleteConnection: vi.fn(),
+  })),
+}));
+
+// Мокаем validateWorkflowAcyclic
+vi.mock('@shared/lib', () => ({
   validateWorkflowAcyclic: () => ({ valid: true, cycles: [] }),
 }));
 
-// Мокаем sessionStorage
 const mockSessionStorage = (() => {
   let store: Record<string, string> = {};
   return {
@@ -34,6 +45,7 @@ describe('useWorkflows', () => {
     vi.clearAllMocks();
     window.sessionStorage.clear();
     window.sessionStorage.setItem('mrak_session_token', 'fake-token');
+    global.fetch = vi.fn();
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -46,17 +58,15 @@ describe('useWorkflows', () => {
   ];
 
   const mockWorkflowDetail = {
-    workflow: { id: 'wf1', name: 'Workflow 1' },
-    nodes: [{ node_id: 'n1', prompt_key: 'KEY', position_x: 100, position_y: 200, config: {} }],
+    workflow: { id: 'wf1', name: 'Workflow 1', description: 'Desc 1' },
+    nodes: [{ id: 'n1', node_id: 'n1', prompt_key: 'KEY', position_x: 100, position_y: 200, config: {} }],
     edges: [],
   };
 
   it('should fetch workflows when projectId provided', async () => {
-    (client.GET as any).mockImplementation((path: string) => {
-      if (path === '/api/workflows') {
-        return Promise.resolve({ data: mockWorkflows, error: null });
-      }
-      return Promise.reject();
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockWorkflows,
     });
 
     const { result } = renderHook(() => useWorkflows('proj-123'), { wrapper });
@@ -66,42 +76,59 @@ describe('useWorkflows', () => {
   });
 
   it('should fetch workflow detail when currentWorkflowId changes', async () => {
-    (client.GET as any).mockImplementation((path: string) => {
-      if (path === '/api/workflows') {
-        return Promise.resolve({ data: mockWorkflows, error: null });
-      }
-      if (path === '/api/workflows/{workflow_id}') {
-        return Promise.resolve({ data: mockWorkflowDetail, error: null });
-      }
-      return Promise.reject();
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockWorkflows,
+    });
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockWorkflowDetail,
     });
 
     const { result } = renderHook(() => useWorkflows('proj-123'), { wrapper });
 
     await waitFor(() => expect(result.current.isLoadingWorkflows).toBe(false));
 
-    result.current.setCurrentWorkflowId('wf1');
+    act(() => {
+      result.current.setCurrentWorkflowId('wf1');
+    });
 
     await waitFor(() => expect(result.current.workflowName).toBe('Workflow 1'));
-    expect(result.current.nodes).toHaveLength(1);
-    expect(result.current.edges).toHaveLength(0);
+
+    // Проверяем, что setNodes был вызван хотя бы один раз с правильными данными
+    expect(mockSetNodes).toHaveBeenCalled();
+    const lastNodesCall = mockSetNodes.mock.calls[mockSetNodes.mock.calls.length - 1];
+    expect(lastNodesCall[0]).toHaveLength(1);
+    expect(lastNodesCall[0][0]).toMatchObject({
+      node_id: 'n1',
+      prompt_key: 'KEY',
+    });
+
+    // Проверяем edges
+    expect(mockSetEdges).toHaveBeenCalledWith([]);
   });
 
   it('should create workflow via handleCreateWorkflow', async () => {
-    (client.GET as any).mockResolvedValue({ data: mockWorkflows, error: null });
-    const fetchMock = vi.fn().mockResolvedValue({
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockWorkflows,
+    });
+    (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: 'new-wf', name: 'New' }),
     });
-    global.fetch = fetchMock as any;
 
     const { result } = renderHook(() => useWorkflows('proj-123'), { wrapper });
 
     await waitFor(() => expect(result.current.isLoadingWorkflows).toBe(false));
 
-    const success = await result.current.handleCreateWorkflow('New Workflow', 'Desc');
-    expect(success).toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith(
+    let success: boolean;
+    await act(async () => {
+      success = await result.current.handleCreateWorkflow('New Workflow', 'Desc');
+    });
+
+    expect(success!).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
       '/api/workflows',
       expect.objectContaining({
         method: 'POST',
@@ -112,49 +139,71 @@ describe('useWorkflows', () => {
   });
 
   it('should save workflow via handleSave', async () => {
-    (client.GET as any).mockImplementation((path: string) => {
-      if (path === '/api/workflows') return Promise.resolve({ data: mockWorkflows, error: null });
-      if (path === '/api/workflows/{workflow_id}') return Promise.resolve({ data: mockWorkflowDetail, error: null });
-      return Promise.reject();
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockWorkflows,
     });
-
-    const fetchMock = vi.fn().mockResolvedValue({
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockWorkflowDetail,
+    });
+    (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: 'wf1' }),
     });
-    global.fetch = fetchMock as any;
 
     const { result } = renderHook(() => useWorkflows('proj-123'), { wrapper });
 
-    result.current.setCurrentWorkflowId('wf1');
+    act(() => {
+      result.current.setCurrentWorkflowId('wf1');
+    });
+
     await waitFor(() => expect(result.current.workflowName).toBe('Workflow 1'));
 
-    const saveResult = await result.current.handleSave();
-    expect(saveResult).toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith(
+    let saveResult: boolean;
+    await act(async () => {
+      saveResult = await result.current.handleSave();
+    });
+
+    expect(saveResult!).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
       '/api/workflows/wf1',
       expect.objectContaining({ method: 'PUT' })
     );
   });
 
   it('should delete workflow', async () => {
-    (client.GET as any).mockImplementation((path: string) => {
-      if (path === '/api/workflows') return Promise.resolve({ data: mockWorkflows, error: null });
-      if (path === '/api/workflows/{workflow_id}') return Promise.resolve({ data: mockWorkflowDetail, error: null });
-      return Promise.reject();
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockWorkflows,
     });
-    (client.DELETE as any).mockResolvedValue({ error: null });
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockWorkflowDetail,
+    });
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({}),
+    });
     window.confirm = vi.fn(() => true);
 
     const { result } = renderHook(() => useWorkflows('proj-123'), { wrapper });
 
-    result.current.setCurrentWorkflowId('wf1');
+    act(() => {
+      result.current.setCurrentWorkflowId('wf1');
+    });
+
     await waitFor(() => expect(result.current.workflowName).toBe('Workflow 1'));
 
-    const deleteResult = await result.current.handleDelete();
-    expect(deleteResult).toBe(true);
-    expect(client.DELETE).toHaveBeenCalledWith('/api/workflows/{workflow_id}', {
-      params: { path: { workflow_id: 'wf1' } },
+    let deleteResult: boolean;
+    await act(async () => {
+      deleteResult = await result.current.handleDelete('wf1');
     });
+
+    expect(deleteResult!).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/workflows/wf1',
+      expect.objectContaining({ method: 'DELETE' })
+    );
   });
 });

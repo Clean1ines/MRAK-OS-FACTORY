@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { hasCycle, formatCycleDescription, validateWorkflowAcyclic } from '../graphUtils';
-import type { NodeData, EdgeData } from '../../hooks/useCanvasEngine';
+import type { NodeData, EdgeData } from '../../../hooks/useCanvasEngine';
 
 // Helper to create test nodes
 const makeNode = (id: string, prompt_key: string): NodeData => ({

@@ -4,13 +4,13 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useProjects } from '../useProjects';
 import { api } from '@shared/api';
-import { useNotification } from '../useNotifications';
-import { useAppStore } from '../../store/useAppStore';
+import { useNotification } from '@/shared/lib/notification/useNotifications';
+import { useAppStore } from '@/app/store';
 
 // Мокаем модули
-vi.mock('../../api/client');
-vi.mock('../useNotifications');
-vi.mock('../../store/useAppStore');
+vi.mock('@shared/api');
+vi.mock('@/shared/lib/notification/useNotifications');
+vi.mock('@/app/store');
 
 const mockProjects = [
   { id: '1', name: 'Project 1', description: 'Desc 1' },

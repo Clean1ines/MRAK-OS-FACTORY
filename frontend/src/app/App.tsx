@@ -3,11 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@shared/api/queryClient';
 // Пока импортируем из старых путей, они переедут на следующих шагах
-import { ChatInterface } from '../components/ChatInterface';
-import { WorkspacePage } from '../components/ios/WorkspacePage';
-import { AuthGuard } from '../components/auth/AuthGuard';
-import { LoginPage } from '../components/auth/LoginPage';
-import { ProtectedLayout } from '../components/layout/ProtectedLayout';
+import { ChatInterface } from '@/widgets/chat-window/ui/ChatInterface';
+import { WorkspacePage } from '@/pages/workspace/WorkspacePage';
+import { AuthGuard } from '@/features/auth/protect-routes/AuthGuard';
+import { LoginPage } from '@/pages/login/LoginPage';
+import { ProtectedLayout } from '@/widgets/layout/ui/ProtectedLayout';
 import { Toast } from '@shared/ui/toast/Toast';
 
 class ErrorBoundary extends React.Component<

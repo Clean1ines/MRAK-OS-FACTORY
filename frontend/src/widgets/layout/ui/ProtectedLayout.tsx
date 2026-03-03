@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { ProjectsSidebar } from '@widgets/sidebar';
-import { useProjectData } from '@/hooks/useProjectData';
+import { useProjectData } from '@/entities/project/api/useProjectData';
 
 /**
  * Общий layout для защищённых страниц.

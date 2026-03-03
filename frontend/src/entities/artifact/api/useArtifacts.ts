@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useAppStore } from '@/store/useAppStore';
+import { useAppStore } from '@/app/store';
 import { useProjectStore } from '@entities/project';
 import { api } from '@shared/api';
 

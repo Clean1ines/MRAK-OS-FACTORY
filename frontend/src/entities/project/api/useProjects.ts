@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Project, useProjectStore } from '@entities/project';
-import { useNotification } from '../../../hooks/useNotifications';
+import { useNotification } from '@/shared/lib/notification/useNotifications';
 import { api, getErrorMessage, ProjectResponse } from '@shared/api';
 
 interface CreateProjectParams {

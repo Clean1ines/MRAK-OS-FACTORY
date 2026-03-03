@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useProjectStore } from '@entities/project';
-import { useAppStore } from '@/store/useAppStore';
+import { useAppStore } from '@/app/store';
 import { api } from '@shared/api';
 
 interface MessageArtifact {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore, useProjects, Project, ProjectItem } from '@entities/project';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { HamburgerMenu } from '@widgets/header';
 import { CreateProjectModal } from '@features/project/create';
 import { EditProjectModal } from '@features/project/edit';

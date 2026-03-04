@@ -31,7 +31,8 @@ MIGRATION_ORDER = [
     "add_projects_name_unique.sql",
     "add_project_constraints.py",
     "add_default_workflow.sql",
-    "001_add_runs_and_node_executions.sql",      # ✨ Новая миграция
+    "001_add_runs_and_node_executions.sql",
+    "002_add_cycle_prevention_trigger.sql",      # ✨ Новая миграция для защиты от циклов
 ]
 
 async def ensure_migrations_table(conn):

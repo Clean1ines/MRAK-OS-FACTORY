@@ -23,19 +23,7 @@ if not DATABASE_URL:
 
 # Порядок применения миграций (новые добавляем в конец)
 MIGRATION_ORDER = [
-    "add_workflow_tables.sql",
-    "fix_artifacts_schema.sql",
-    "add_artifact_types.sql",
-    "add_clarification_sessions.py",
-    "cleanup_duplicate_projects.py",
-    "add_projects_name_unique.sql",
-    "add_project_constraints.py",
-    "add_default_workflow.sql",
-    "001_add_runs_and_node_executions.sql",
-    "002_add_cycle_prevention_trigger.sql",
-    "003_add_artifact_node_execution_id.sql",
-    "004_add_superseded_by_to_node_executions.sql",
-    "005_add_artifact_versioning.sql",      
+     "000_full_schema.sql",   
 ]
 
 async def ensure_migrations_table(conn):

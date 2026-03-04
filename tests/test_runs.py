@@ -1,6 +1,7 @@
 """
 Debug version of runs tests with unique project names to avoid 400 errors.
 Все вызовы execute_node используют record_id узла (UUID), а не логическое имя.
+Исправлено: при ручном переводе в COMPLETED или VALIDATED создаётся артефакт и заполняется output_artifact_id.
 """
 import pytest
 import uuid
@@ -275,18 +276,29 @@ def test_validate_execution_success():
     assert exec_resp.status_code == 200
     exec_id = exec_resp.json()["id"]
 
-    # Вручную переводим в COMPLETED (обычно это делает фоновая задача)
+    # Вручную создаём артефакт и переводим выполнение в COMPLETED
     import asyncpg
     import os
     import asyncio
 
-    async def set_completed():
+    async def prepare():
         conn = await asyncpg.connect(os.getenv("DATABASE_URL"))
         try:
-            await conn.execute("UPDATE node_executions SET status = 'COMPLETED' WHERE id = $1", exec_id)
+            # Создаём артефакт
+            artifact_id = str(uuid.uuid4())
+            await conn.execute("""
+                INSERT INTO artifacts (id, project_id, type, content, owner, status)
+                VALUES ($1, $2, 'test', '{"result": "ok"}', 'system', 'ACTIVE')
+            """, artifact_id, project_id)
+            # Обновляем выполнение: статус COMPLETED и output_artifact_id
+            await conn.execute("""
+                UPDATE node_executions
+                SET status = 'COMPLETED', output_artifact_id = $1
+                WHERE id = $2
+            """, artifact_id, exec_id)
         finally:
             await conn.close()
-    asyncio.run(set_completed())
+    asyncio.run(prepare())
 
     # Валидируем
     validate_resp = client.post(f"/api/executions/{exec_id}/validate")
@@ -382,18 +394,29 @@ def test_supersede_execution_success():
     assert exec2_resp.status_code == 200
     exec2_id = exec2_resp.json()["id"]
 
-    # Переводим первое в VALIDATED (прямое обновление БД)
+    # Переводим первое в VALIDATED (прямое обновление БД) – создаём артефакт и привязываем
     import asyncpg
     import os
     import asyncio
 
-    async def set_validated():
+    async def prepare():
         conn = await asyncpg.connect(os.getenv("DATABASE_URL"))
         try:
-            await conn.execute("UPDATE node_executions SET status = 'VALIDATED' WHERE id = $1", exec1_id)
+            # Создаём артефакт для первого выполнения
+            artifact1_id = str(uuid.uuid4())
+            await conn.execute("""
+                INSERT INTO artifacts (id, project_id, type, content, owner, status)
+                VALUES ($1, $2, 'test', '{"result": "old"}', 'system', 'ACTIVE')
+            """, artifact1_id, project_id)
+            # Переводим первое выполнение в VALIDATED с артефактом
+            await conn.execute("""
+                UPDATE node_executions
+                SET status = 'VALIDATED', output_artifact_id = $1
+                WHERE id = $2
+            """, artifact1_id, exec1_id)
         finally:
             await conn.close()
-    asyncio.run(set_validated())
+    asyncio.run(prepare())
 
     # Вызываем supersede
     sup_resp = client.post(f"/api/executions/{exec1_id}/supersede?new_execution_id={exec2_id}")

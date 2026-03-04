@@ -64,122 +64,53 @@ from server import app
 import db
 
 
-# #ADDED: Sync wrapper for async DB initialization (runs after container is started)
-def _initialize_database_sync():
+def _apply_schema():
+    """Применяет полную схему из дампа к тестовой базе."""
+    schema_file = Path(__file__).parent / "test_schema.sql"
+    if not schema_file.exists():
+        raise RuntimeError(
+            f"Schema file {schema_file} not found. "
+            "Run: pg_dump -s $DATABASE_URL > tests/test_schema.sql"
+        )
+
+    # Явно передаём URL в команду psql, без export
+    cmd = ["psql", TEST_DATABASE_URL, "-f", str(schema_file)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(result.stderr)
+        raise RuntimeError("Failed to apply schema to test database")
+    print("✅ Test database schema applied")
+
+# Применяем схему один раз при импорте conftest.py
+_apply_schema()
+
+
+# === ADDED: Session-scoped autouse fixture to clean all tables before tests ===
+@pytest.fixture(scope="session", autouse=True)
+def clean_test_db():
     """
-    Synchronous wrapper to initialize database tables before tests.
-    This runs at module import time, guaranteeing tables exist.
+    Очищает все таблицы в тестовой БД перед запуском тестовой сессии.
+    Выполняется один раз перед всеми тестами, после создания таблиц.
     """
+    import asyncpg
     import asyncio
 
-    async def init_db():
+    async def clean():
         conn = await asyncpg.connect(TEST_DATABASE_URL)
-        try:
-            # Check if tables exist
-            tables = await conn.fetch("""
-                SELECT table_name FROM information_schema.tables
-                WHERE table_schema = 'public' AND table_name IN
-                ('projects', 'workflows', 'workflow_nodes', 'workflow_edges',
-                 'artifacts', 'artifact_types', 'clarification_sessions')
-            """)
+        # Получаем список всех пользовательских таблиц в схеме public
+        tables = await conn.fetch("""
+            SELECT tablename FROM pg_tables
+            WHERE schemaname = 'public' AND tablename != 'spatial_ref_sys'
+        """)
+        if tables:
+            table_names = ', '.join(f'"{t["tablename"]}"' for t in tables)
+            await conn.execute(f"TRUNCATE TABLE {table_names} RESTART IDENTITY CASCADE;")
+        await conn.close()
 
-            if len(tables) < 7:
-                print(f"🔧 Found {len(tables)}/7 tables, creating missing tables...")
-
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS public.projects (
-                        id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
-                        name text NOT NULL,
-                        description text,
-                        created_at timestamp with time zone DEFAULT now(),
-                        updated_at timestamp with time zone DEFAULT now()
-                    );
-
-                    CREATE TABLE IF NOT EXISTS public.artifact_types (
-                        type text NOT NULL PRIMARY KEY,
-                        schema jsonb NOT NULL,
-                        icon text,
-                        allowed_parents text[] DEFAULT '{}'::text[] NOT NULL,
-                        requires_clarification boolean DEFAULT false NOT NULL
-                    );
-
-                    CREATE TABLE IF NOT EXISTS public.workflows (
-                        id uuid NOT NULL PRIMARY KEY,
-                        name text NOT NULL,
-                        description text,
-                        project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-                        is_default boolean DEFAULT false,
-                        created_at timestamp with time zone DEFAULT now(),
-                        updated_at timestamp with time zone DEFAULT now()
-                    );
-
-                    CREATE TABLE IF NOT EXISTS public.workflow_nodes (
-                        id uuid NOT NULL PRIMARY KEY,
-                        workflow_id uuid NOT NULL REFERENCES public.workflows(id) ON DELETE CASCADE,
-                        node_id text NOT NULL,
-                        prompt_key text NOT NULL,
-                        position_x double precision NOT NULL,
-                        position_y double precision NOT NULL,
-                        config jsonb DEFAULT '{}'::jsonb NOT NULL,
-                        UNIQUE(workflow_id, node_id)
-                    );
-
-                    CREATE TABLE IF NOT EXISTS public.workflow_edges (
-                        id uuid NOT NULL PRIMARY KEY,
-                        workflow_id uuid NOT NULL REFERENCES public.workflows(id) ON DELETE CASCADE,
-                        source_node text NOT NULL,
-                        target_node text NOT NULL,
-                        source_output text DEFAULT 'output'::text NOT NULL,
-                        target_input text DEFAULT 'input'::text NOT NULL,
-                        FOREIGN KEY (workflow_id, source_node) REFERENCES public.workflow_nodes(workflow_id, node_id) ON DELETE CASCADE,
-                        FOREIGN KEY (workflow_id, target_node) REFERENCES public.workflow_nodes(workflow_id, node_id) ON DELETE CASCADE
-                    );
-
-                    CREATE TABLE IF NOT EXISTS public.artifacts (
-                        id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
-                        project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-                        type text NOT NULL,
-                        name text,
-                        content jsonb NOT NULL,
-                        content_hash character varying(64),
-                        parent_id uuid REFERENCES public.artifacts(id) ON DELETE SET NULL,
-                        owner character varying(100),
-                        created_at timestamp with time zone DEFAULT now(),
-                        updated_at timestamp with time zone DEFAULT now(),
-                        created_by text DEFAULT 'system'::text
-                    );
-
-                    CREATE TABLE IF NOT EXISTS public.clarification_sessions (
-                        id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
-                        project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
-                        target_artifact_type text NOT NULL,
-                        status text DEFAULT 'active'::text NOT NULL,
-                        system_prompt text NOT NULL,
-                        user_prompt_template text,
-                        context_summary text,
-                        history jsonb DEFAULT '[]'::jsonb NOT NULL,
-                        node_id uuid REFERENCES public.workflow_nodes(id),
-                        final_artifact_id uuid REFERENCES public.artifacts(id) ON DELETE SET NULL,
-                        created_at timestamp with time zone DEFAULT now(),
-                        updated_at timestamp with time zone DEFAULT now()
-                    );
-
-                    CREATE INDEX IF NOT EXISTS idx_workflow_nodes_workflow ON public.workflow_nodes USING btree (workflow_id);
-                    CREATE INDEX IF NOT EXISTS idx_workflow_edges_workflow ON public.workflow_edges USING btree (workflow_id);
-                    CREATE INDEX IF NOT EXISTS idx_clarification_sessions_project ON public.clarification_sessions USING btree (project_id);
-                    CREATE INDEX IF NOT EXISTS idx_clarification_sessions_status ON public.clarification_sessions USING btree (status);
-                """)
-                print("✅ Database tables created/verified")
-            else:
-                print("✅ All database tables exist")
-        finally:
-            await conn.close()
-
-    # Run async init synchronously at import time
-    asyncio.run(init_db())
-
-# #CRITICAL: Run DB initialization AFTER container is started
-_initialize_database_sync()
+    asyncio.run(clean())
+    yield  # тесты выполняются
+    # после тестов ничего не делаем (очистка перед следующей сессией произойдёт снова)
+# =============================================================================
 
 
 @pytest.fixture(scope="function")

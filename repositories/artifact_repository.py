@@ -11,7 +11,7 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None, lo
         conn = await get_connection()
         close_conn = True
     try:
-        query = 'SELECT id, type, parent_id, content, created_at, updated_at, version, status, content_hash, logical_key, superseded_by FROM artifacts WHERE project_id = $1'
+        query = 'SELECT id, type, parent_id, content, created_at, updated_at, version, status, content_hash, logical_key, superseded_by, node_execution_id FROM artifacts WHERE project_id = $1'
         params = [project_id]
         idx = 2
         if artifact_type:
@@ -30,6 +30,7 @@ async def get_artifacts(project_id: str, artifact_type: Optional[str] = None, lo
             art['id'] = str(art['id'])
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['superseded_by'] = str(art['superseded_by']) if art['superseded_by'] else None
+            art['node_execution_id'] = str(art['node_execution_id']) if art['node_execution_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
             if isinstance(art['content'], str):
@@ -64,6 +65,7 @@ async def get_last_artifact(project_id: str, tx=None) -> Optional[Dict[str, Any]
             art['id'] = str(art['id'])
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['superseded_by'] = str(art['superseded_by']) if art['superseded_by'] else None
+            art['node_execution_id'] = str(art['node_execution_id']) if art['node_execution_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
             if isinstance(art['content'], str):
@@ -93,6 +95,7 @@ async def get_last_validated_artifact(project_id: str, tx=None) -> Optional[Dict
             art['id'] = str(art['id'])
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['superseded_by'] = str(art['superseded_by']) if art['superseded_by'] else None
+            art['node_execution_id'] = str(art['node_execution_id']) if art['node_execution_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
             if isinstance(art['content'], str):
@@ -122,6 +125,7 @@ async def get_last_package(parent_id: str, artifact_type: str, tx=None) -> Optio
             art['id'] = str(art['id'])
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['superseded_by'] = str(art['superseded_by']) if art['superseded_by'] else None
+            art['node_execution_id'] = str(art['node_execution_id']) if art['node_execution_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
             if isinstance(art['content'], str):
@@ -155,6 +159,7 @@ async def get_last_version(project_id: str, logical_key: str, tx=None) -> Option
             art['id'] = str(art['id'])
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['superseded_by'] = str(art['superseded_by']) if art['superseded_by'] else None
+            art['node_execution_id'] = str(art['node_execution_id']) if art['node_execution_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
             if isinstance(art['content'], str):
@@ -184,6 +189,7 @@ async def get_active_artifact_by_logical_key(project_id: str, logical_key: str, 
             art['id'] = str(art['id'])
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['superseded_by'] = str(art['superseded_by']) if art['superseded_by'] else None
+            art['node_execution_id'] = str(art['node_execution_id']) if art['node_execution_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
             if isinstance(art['content'], str):
@@ -310,6 +316,7 @@ async def get_artifact(artifact_id: str, tx=None) -> Optional[Dict[str, Any]]:
             art['id'] = str(art['id'])
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['superseded_by'] = str(art['superseded_by']) if art['superseded_by'] else None
+            art['node_execution_id'] = str(art['node_execution_id']) if art['node_execution_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
             if isinstance(art['content'], str):
@@ -337,6 +344,7 @@ async def get_artifacts_by_ids(artifact_ids: List[str], tx=None) -> List[Dict[st
             art['id'] = str(art['id'])
             art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
             art['superseded_by'] = str(art['superseded_by']) if art['superseded_by'] else None
+            art['node_execution_id'] = str(art['node_execution_id']) if art['node_execution_id'] else None
             art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
             art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
             artifacts.append(art)

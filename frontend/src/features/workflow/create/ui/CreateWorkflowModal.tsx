@@ -63,13 +63,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
           />
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs font-semibold rounded bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] text-[var(--text-main)] hover:bg-[var(--ios-glass-bright)] transition-colors"
-          >
-            Cancel
-          </button>
+          
           <button
             type="submit"
             disabled={isPending}

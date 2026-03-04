@@ -70,7 +70,7 @@ async def test_artifact(db_connection, test_project):
     return art_id
 
 # ----------------------------------------------------------------------
-# Tests for run_repository (unchanged, all passed)
+# Tests for run_repository
 # ----------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -222,7 +222,6 @@ async def test_create_node_execution_with_artifacts(tx, test_run, test_node, tes
 
 @pytest.mark.asyncio
 async def test_create_node_execution_unique_violation(tx, test_run, test_node):
-    # Создаём родительское выполнение, чтобы иметь не-NULL parent_execution_id
     parent_id = await node_execution_repository.create_node_execution(
         run_id=test_run,
         node_definition_id=test_node,
@@ -230,7 +229,6 @@ async def test_create_node_execution_unique_violation(tx, test_run, test_node):
         idempotency_key="parent",
         tx=tx
     )
-    # Первое дочернее
     await node_execution_repository.create_node_execution(
         run_id=test_run,
         node_definition_id=test_node,
@@ -238,7 +236,6 @@ async def test_create_node_execution_unique_violation(tx, test_run, test_node):
         idempotency_key="dup",
         tx=tx
     )
-    # Второе с тем же ключом должно вызвать ошибку
     with pytest.raises(asyncpg.UniqueViolationError):
         await node_execution_repository.create_node_execution(
             run_id=test_run,
@@ -251,7 +248,9 @@ async def test_create_node_execution_unique_violation(tx, test_run, test_node):
 @pytest.mark.asyncio
 async def test_create_node_execution_fk_violation_run(tx, test_node):
     fake_run = str(uuid.uuid4())
-    with pytest.raises(asyncpg.ForeignKeyViolationError):
+    # Because project_id is NOT NULL and is filled by a trigger from the run,
+    # when run does not exist, trigger cannot set project_id → NotNullViolationError
+    with pytest.raises(asyncpg.NotNullViolationError):
         await node_execution_repository.create_node_execution(
             run_id=fake_run,
             node_definition_id=test_node,
@@ -383,6 +382,7 @@ async def test_find_existing_execution_not_found(tx, test_run, test_node):
 
 @pytest.mark.asyncio
 async def test_get_validated_execution_for_node_found(tx, test_run, test_node):
+    # Create two executions, one VALIDATED
     exec1 = await node_execution_repository.create_node_execution(
         run_id=test_run,
         node_definition_id=test_node,
@@ -397,7 +397,18 @@ async def test_get_validated_execution_for_node_found(tx, test_run, test_node):
         idempotency_key="key2",
         tx=tx
     )
-    await tx.conn.execute("UPDATE node_executions SET status = 'VALIDATED' WHERE id = $1", exec2)
+    # Create an artifact to satisfy the validated_requires_artifact constraint
+    artifact_id = str(uuid.uuid4())
+    await tx.conn.execute("""
+        INSERT INTO artifacts (id, project_id, type, content, owner)
+        VALUES ($1, (SELECT project_id FROM runs WHERE id = $2), 'test', '{}', 'system')
+    """, artifact_id, test_run)
+    # Set exec2 to VALIDATED with output_artifact_id
+    await tx.conn.execute(
+        "UPDATE node_executions SET status = 'VALIDATED', output_artifact_id = $1 WHERE id = $2",
+        artifact_id, exec2
+    )
+
     validated = await node_execution_repository.get_validated_execution_for_node(
         run_id=test_run,
         node_definition_id=test_node,
@@ -408,6 +419,7 @@ async def test_get_validated_execution_for_node_found(tx, test_run, test_node):
 
 @pytest.mark.asyncio
 async def test_get_validated_execution_for_node_not_found(tx, test_run, test_node):
+    # Create a non-validated execution
     await node_execution_repository.create_node_execution(
         run_id=test_run,
         node_definition_id=test_node,

@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 import structlog
 
-from routers import projects, artifacts, workflows, auth
+from routers import projects, artifacts, workflows, auth, truth
 from routers import runs
 from routers import modes
 import db
@@ -63,6 +63,7 @@ app.include_router(artifacts.router)
 #app.include_router(clarification.router)
 app.include_router(workflows.router)
 app.include_router(auth.router)
+app.include_router(truth.router)
 app.include_router(runs.router)
 
 # Модуль modes временно отключён — будет переписан позже

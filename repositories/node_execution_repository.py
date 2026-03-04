@@ -15,7 +15,7 @@ def _row_to_dict(row) -> Dict[str, Any]:
             data[key] = str(data[key])
     if data.get('input_artifact_ids') and isinstance(data['input_artifact_ids'], str):
         data['input_artifact_ids'] = json.loads(data['input_artifact_ids'])
-    for key in ['created_at', 'updated_at']:
+    for key in ['created_at', 'updated_at', 'validated_at']:
         if key in data and data[key] is not None:
             data[key] = data[key].isoformat()
     return data
@@ -188,7 +188,7 @@ async def supersede_execution(old_id: str, new_id: str, tx=None) -> None:
             await conn.close()
 
 async def validate_execution(exec_id: str, tx=None) -> None:
-    """Переводит выполнение в VALIDATED."""
+    """Переводит выполнение в VALIDATED и фиксирует validated_at."""
     if tx:
         conn = tx.conn
         close_conn = False
@@ -198,7 +198,7 @@ async def validate_execution(exec_id: str, tx=None) -> None:
     try:
         await conn.execute("""
             UPDATE node_executions
-            SET status = 'VALIDATED', updated_at = NOW()
+            SET status = 'VALIDATED', validated_at = NOW(), updated_at = NOW()
             WHERE id = $1
         """, exec_id)
     finally:

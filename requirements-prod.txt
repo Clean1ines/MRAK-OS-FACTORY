@@ -13,3 +13,5 @@ python-dotenv==1.0.0
 asyncpg==0.29.0
 redis==5.0.1
 structlog==24.1.0
+
+freezegun-1.5.5

@@ -78,31 +78,30 @@ async def validate_execution(exec_id: str):
         )
         if not target_row:
             raise HTTPException(status_code=404, detail="Execution not found")
-        # Преобразуем в словарь для удобства (можно использовать _row_to_dict, но пока вручную)
         target = dict(target_row)
-        # Преобразуем UUID в строки (упрощённо)
         for k in ['id', 'run_id', 'node_definition_id', 'parent_execution_id', 'output_artifact_id']:
             if target.get(k):
                 target[k] = str(target[k])
 
-        # 2. Проверяем статус выполнения
         if target["status"] != "COMPLETED":
             raise HTTPException(
                 status_code=409,
                 detail=f"Cannot validate execution with status {target['status']}"
             )
 
-        # 3. Проверяем, что run не замёрз и не архивирован (должен быть OPEN)
         run = await run_repository.get_run(target["run_id"], tx=tx)
         if not run or run["status"] != "OPEN":
             raise HTTPException(status_code=409, detail="Run is not OPEN, cannot validate")
 
-        # 4. Ищем текущее активное (VALIDATED) для этого же узла с блокировкой
+        # FIX: use project_id instead of run_id to find active execution project-wide
         active_row = await tx.conn.fetchrow("""
             SELECT * FROM node_executions
-            WHERE run_id = $1 AND node_definition_id = $2 AND status = 'VALIDATED'
+            WHERE project_id = $1
+              AND node_definition_id = $2
+              AND status = 'VALIDATED'
+              AND superseded_by_id IS NULL
             FOR UPDATE
-        """, target["run_id"], target["node_definition_id"])
+        """, run["project_id"], target["node_definition_id"])
 
         superseded_id = None
         previous_active_id = None
@@ -114,26 +113,48 @@ async def validate_execution(exec_id: str):
                     active[k] = str(active[k])
             previous_active_id = active["id"]
 
-            # Переводим старое выполнение в SUPERSEDED, запоминаем замену
             await node_execution_repository.supersede_execution(active["id"], exec_id, tx=tx)
             superseded_id = active["id"]
 
-            # Если у старого артефакта есть статус – помечаем SUPERSEDED
             if active.get("output_artifact_id"):
                 await artifact_repository.update_artifact_status(
                     active["output_artifact_id"], "SUPERSEDED", tx=tx
                 )
 
-        # 5. Валидируем целевое выполнение
         await node_execution_repository.validate_execution(exec_id, tx=tx)
 
-        # 6. Если у целевого артефакта есть статус – делаем ACTIVE
         if target.get("output_artifact_id"):
             await artifact_repository.update_artifact_status(
                 target["output_artifact_id"], "ACTIVE", tx=tx
             )
 
-        # 7. Получаем обновлённую запись для ответа
+        # ADDED for ADR-006: update project_truth_snapshot
+        project_id = run["project_id"]
+        node_def_id = target["node_definition_id"]
+        artifact_id = target.get("output_artifact_id")
+        if artifact_id:
+            artifact = await artifact_repository.get_artifact(artifact_id, tx=tx)
+            logical_key = artifact.get("logical_key") if artifact else None
+            version = artifact.get("version") if artifact else None
+        else:
+            # По ограничению validated_requires_artifact это не должно происходить, но оставим защиту
+            logical_key = None
+            version = None
+
+        await tx.conn.execute("""
+            INSERT INTO project_truth_snapshot
+                (project_id, node_definition_id, execution_id, artifact_id, validated_at,
+                 artifact_logical_key, artifact_version)
+            VALUES ($1, $2, $3, $4, NOW(), $5, $6)
+            ON CONFLICT (project_id, node_definition_id) DO UPDATE
+            SET execution_id = EXCLUDED.execution_id,
+                artifact_id = EXCLUDED.artifact_id,
+                validated_at = EXCLUDED.validated_at,
+                artifact_logical_key = EXCLUDED.artifact_logical_key,
+                artifact_version = EXCLUDED.artifact_version,
+                updated_at = NOW()
+        """, project_id, node_def_id, exec_id, artifact_id, logical_key, version)
+
         updated = await node_execution_repository.get_node_execution(exec_id, tx=tx)
 
     return ValidateExecutionResponse(

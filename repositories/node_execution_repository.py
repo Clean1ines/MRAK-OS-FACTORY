@@ -16,7 +16,7 @@ async def create_node_execution(
     """
     Создаёт новую запись NodeExecution со статусом PROCESSING.
     Возвращает ID созданной записи.
-    input_artifact_ids преобразуется в JSONB.
+    input_artifact_ids преобразуется в JSONB (через json.dumps).
     """
     if tx:
         conn = tx.conn
@@ -26,7 +26,8 @@ async def create_node_execution(
         close_conn = True
 
     try:
-        # Преобразуем список UUID в JSON (asyncpg сама сериализует list в jsonb)
+        # Преобразуем список UUID в JSON-строку (asyncpg ожидает строку для JSONB)
+        input_artifacts_json = json.dumps(input_artifact_ids) if input_artifact_ids is not None else None
         exec_id = await conn.fetchval("""
             INSERT INTO node_executions (
                 run_id, node_definition_id, parent_execution_id,
@@ -34,8 +35,8 @@ async def create_node_execution(
             ) VALUES ($1, $2, $3, $4, $5)
             RETURNING id
         """, run_id, node_definition_id, parent_execution_id,
-            idempotency_key, input_artifact_ids)
-        return exec_id
+            idempotency_key, input_artifacts_json)
+        return str(exec_id)
     finally:
         if close_conn:
             await conn.close()
@@ -54,7 +55,21 @@ async def get_node_execution(exec_id: str, tx=None) -> Optional[Dict[str, Any]]:
     try:
         row = await conn.fetchrow("SELECT * FROM node_executions WHERE id = $1", exec_id)
         if row:
-            return dict(row)
+            exec_dict = dict(row)
+            # Преобразуем UUID в строки
+            exec_dict['id'] = str(exec_dict['id'])
+            exec_dict['run_id'] = str(exec_dict['run_id'])
+            exec_dict['node_definition_id'] = str(exec_dict['node_definition_id'])
+            if exec_dict['parent_execution_id']:
+                exec_dict['parent_execution_id'] = str(exec_dict['parent_execution_id'])
+            if exec_dict['output_artifact_id']:
+                exec_dict['output_artifact_id'] = str(exec_dict['output_artifact_id'])
+            # Парсим input_artifact_ids, если это строка (потому что сохраняли как JSON-строку)
+            if exec_dict['input_artifact_ids'] and isinstance(exec_dict['input_artifact_ids'], str):
+                exec_dict['input_artifact_ids'] = json.loads(exec_dict['input_artifact_ids'])
+            exec_dict['created_at'] = exec_dict['created_at'].isoformat() if exec_dict['created_at'] else None
+            exec_dict['updated_at'] = exec_dict['updated_at'].isoformat() if exec_dict['updated_at'] else None
+            return exec_dict
         return None
     finally:
         if close_conn:
@@ -113,15 +128,28 @@ async def find_existing_execution(
         close_conn = True
 
     try:
+        # parent_execution_id может быть NULL, поэтому используем IS NOT DISTINCT FROM
         row = await conn.fetchrow("""
             SELECT * FROM node_executions
             WHERE run_id = $1
               AND node_definition_id = $2
-              AND (parent_execution_id IS NULL AND $3::uuid IS NULL OR parent_execution_id = $3)
+              AND parent_execution_id IS NOT DISTINCT FROM $3
               AND idempotency_key = $4
         """, run_id, node_definition_id, parent_execution_id, idempotency_key)
         if row:
-            return dict(row)
+            exec_dict = dict(row)
+            exec_dict['id'] = str(exec_dict['id'])
+            exec_dict['run_id'] = str(exec_dict['run_id'])
+            exec_dict['node_definition_id'] = str(exec_dict['node_definition_id'])
+            if exec_dict['parent_execution_id']:
+                exec_dict['parent_execution_id'] = str(exec_dict['parent_execution_id'])
+            if exec_dict['output_artifact_id']:
+                exec_dict['output_artifact_id'] = str(exec_dict['output_artifact_id'])
+            if exec_dict['input_artifact_ids'] and isinstance(exec_dict['input_artifact_ids'], str):
+                exec_dict['input_artifact_ids'] = json.loads(exec_dict['input_artifact_ids'])
+            exec_dict['created_at'] = exec_dict['created_at'].isoformat() if exec_dict['created_at'] else None
+            exec_dict['updated_at'] = exec_dict['updated_at'].isoformat() if exec_dict['updated_at'] else None
+            return exec_dict
         return None
     finally:
         if close_conn:
@@ -152,7 +180,19 @@ async def get_validated_execution_for_node(
             LIMIT 1
         """, run_id, node_definition_id)
         if row:
-            return dict(row)
+            exec_dict = dict(row)
+            exec_dict['id'] = str(exec_dict['id'])
+            exec_dict['run_id'] = str(exec_dict['run_id'])
+            exec_dict['node_definition_id'] = str(exec_dict['node_definition_id'])
+            if exec_dict['parent_execution_id']:
+                exec_dict['parent_execution_id'] = str(exec_dict['parent_execution_id'])
+            if exec_dict['output_artifact_id']:
+                exec_dict['output_artifact_id'] = str(exec_dict['output_artifact_id'])
+            if exec_dict['input_artifact_ids'] and isinstance(exec_dict['input_artifact_ids'], str):
+                exec_dict['input_artifact_ids'] = json.loads(exec_dict['input_artifact_ids'])
+            exec_dict['created_at'] = exec_dict['created_at'].isoformat() if exec_dict['created_at'] else None
+            exec_dict['updated_at'] = exec_dict['updated_at'].isoformat() if exec_dict['updated_at'] else None
+            return exec_dict
         return None
     finally:
         if close_conn:

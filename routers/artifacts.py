@@ -19,9 +19,7 @@ logger = logging.getLogger("MRAK-SERVER")
 
 router = APIRouter(prefix="/api", tags=["artifacts"])
 
-# Вспомогательная функция для создания generation_config (временный костыль)
 def _make_generation_config(artifact_type: str) -> dict:
-    # TODO: в будущем generation_config должен браться из ноды
     return {
         "system_prompt": f"You are generating a {artifact_type}.",
         "user_prompt_template": "Context:\n{all_artifacts}\n\nUser input:\n{user_input}",
@@ -159,7 +157,8 @@ async def get_project_messages(project_id: str):
     artifacts.sort(key=lambda x: x['created_at'])
     return JSONResponse(content=artifacts)
 
-# ==================== ТИПЫ АРТЕФАКТОВ (без изменений) ====================
+# ==================== ТИПЫ АРТЕФАКТОВ ====================
+
 @router.get("/artifact-types")
 async def list_artifact_types():
     async with transaction() as tx:
@@ -182,6 +181,11 @@ async def get_artifact_type(type: str):
     t = await db.get_artifact_type(type)
     if not t:
         return JSONResponse(content={"error": "Type not found"}, status_code=404)
+    # Convert datetime fields to strings
+    if t.get("created_at"):
+        t["created_at"] = t["created_at"].isoformat()
+    if t.get("updated_at"):
+        t["updated_at"] = t["updated_at"].isoformat()
     return JSONResponse(content=t)
 
 @router.post("/artifact-types", status_code=201)
@@ -190,31 +194,43 @@ async def create_artifact_type_endpoint(req: dict):
     for field in required:
         if field not in req:
             return JSONResponse(content={"error": f"Missing field {field}"}, status_code=400)
-    async with transaction() as tx:
-        await db.create_artifact_type(
-            type=req["type"],
-            schema=req["schema"],
-            allowed_parents=req.get("allowed_parents", []),
-            requires_clarification=req.get("requires_clarification", False),
-            icon=req.get("icon"),
-            tx=tx
-        )
-    return JSONResponse(content={"type": req["type"]})
+    try:
+        async with transaction() as tx:
+            await db.create_artifact_type(
+                type=req["type"],
+                schema=req["schema"],
+                allowed_parents=req.get("allowed_parents", []),
+                requires_clarification=req.get("requires_clarification", False),
+                icon=req.get("icon"),
+                tx=tx
+            )
+        return {"type": req["type"]}
+    except Exception as e:
+        logger.error(f"Error creating artifact type: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @router.put("/artifact-types/{type}")
 async def update_artifact_type_endpoint(type: str, req: dict):
     existing = await db.get_artifact_type(type)
     if not existing:
         return JSONResponse(content={"error": "Type not found"}, status_code=404)
-    async with transaction() as tx:
-        await db.update_artifact_type(type, tx=tx, **req)
-    return JSONResponse(content={"status": "updated"})
+    try:
+        async with transaction() as tx:
+            await db.update_artifact_type(type, tx=tx, **req)
+        return JSONResponse(content={"status": "updated"})
+    except Exception as e:
+        logger.error(f"Error updating artifact type: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @router.delete("/artifact-types/{type}")
 async def delete_artifact_type_endpoint(type: str):
     existing = await db.get_artifact_type(type)
     if not existing:
         return JSONResponse(content={"error": "Type not found"}, status_code=404)
-    async with transaction() as tx:
-        await db.delete_artifact_type(type, tx=tx)
-    return JSONResponse(content={"status": "deleted"})
+    try:
+        async with transaction() as tx:
+            await db.delete_artifact_type(type, tx=tx)
+        return JSONResponse(content={"status": "deleted"})
+    except Exception as e:
+        logger.error(f"Error deleting artifact type: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)

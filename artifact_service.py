@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List
 
 from repositories.artifact_repository import save_artifact
 from repositories.base import transaction
-from validation import validate_json_output, ValidationError
+from validation import validate_json_output, ValidationError, REQUIRED_FIELDS
 
 logger = logging.getLogger("artifact-service")
 
@@ -43,7 +43,7 @@ class ArtifactService:
                 try:
                     result_data = json.loads(result_text)
                 except json.JSONDecodeError:
-                    if artifact_type in validation.REQUIRED_FIELDS:
+                    if artifact_type in REQUIRED_FIELDS:
                         raise ValueError("Response is not valid JSON")
                     else:
                         result_data = {"text": result_text}
@@ -78,8 +78,8 @@ class ArtifactService:
 
         for req_type in config.get("required_input_types", []):
             art = next((a for a in input_artifacts if a["type"] == req_type), None)
+            var_name = req_type[0].lower() + req_type[1:]
             if art:
-                var_name = req_type[0].lower() + req_type[1:]
                 context[var_name] = json.dumps(art["content"], indent=2)
             else:
                 logger.warning(f"Required input type '{req_type}' not found")

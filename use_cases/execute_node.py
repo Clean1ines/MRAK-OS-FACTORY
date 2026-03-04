@@ -40,7 +40,7 @@ class ExecuteNodeUseCase:
         node = await workflow_repository.get_workflow_node_by_id(node_definition_id)
         if not node:
             raise ValueError(f"Node {node_definition_id} not found")
-        if node["workflow_id"] != run["workflow_id"]:
+        if str(node["workflow_id"]) != str(run["workflow_id"]):
             raise ValueError(f"Node does not belong to workflow {run['workflow_id']}")
 
         # 3. Проверяем родителя
@@ -51,14 +51,15 @@ class ExecuteNodeUseCase:
             if parent["status"] not in ("COMPLETED", "VALIDATED"):
                 raise ValueError(f"Parent status must be COMPLETED or VALIDATED, got {parent['status']}")
 
-        # 4. Ищем существующее
+        # 4. Ищем существующее выполнение по идемпотентному ключу
         existing = await node_execution_repository.find_existing_execution(
             run_id=run_id,
             node_definition_id=node_definition_id,
             parent_execution_id=parent_execution_id,
             idempotency_key=idempotency_key,
         )
-        if existing and existing["status"] != "FAILED":
+        if existing:
+            # Возвращаем существующее выполнение независимо от его статуса
             return existing
 
         # 5. Создаём новое выполнение
@@ -99,7 +100,6 @@ class ExecuteNodeUseCase:
             if not node:
                 raise RuntimeError(f"Node {node_definition_id} not found")
 
-            # Извлекаем generation_config из node.config
             node_config = node.get('config', {})
             generation_config = {
                 'system_prompt': node_config.get('system_prompt'),
@@ -107,8 +107,7 @@ class ExecuteNodeUseCase:
                 'required_input_types': node_config.get('required_input_types', [])
             }
 
-            artifact_type = node.get('node_id')  # или можно взять из node_config.get('artifact_type', node['node_id'])
-
+            artifact_type = node.get('node_id')
             input_artifacts = await artifact_repository.get_artifacts_by_ids(input_artifact_ids)
 
             artifact_id = await self.artifact_service.generate_artifact(

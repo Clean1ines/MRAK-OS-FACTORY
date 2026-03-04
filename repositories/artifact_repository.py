@@ -224,3 +224,29 @@ async def get_artifact(artifact_id: str, tx=None) -> Optional[Dict[str, Any]]:
     finally:
         if close_conn:
             await conn.close()
+
+async def get_artifacts_by_ids(artifact_ids: List[str], tx=None) -> List[Dict[str, Any]]:
+    """Возвращает список артефактов по их ID."""
+    if not artifact_ids:
+        return []
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
+        conn = await get_connection()
+        close_conn = True
+    try:
+        rows = await conn.fetch('SELECT * FROM artifacts WHERE id = ANY($1::uuid[])', artifact_ids)
+        artifacts = []
+        for row in rows:
+            art = dict(row)
+            art['id'] = str(art['id'])
+            art['parent_id'] = str(art['parent_id']) if art['parent_id'] else None
+            art['created_at'] = art['created_at'].isoformat() if art['created_at'] else None
+            art['updated_at'] = art['updated_at'].isoformat() if art['updated_at'] else None
+            # asyncpg уже десериализовал JSONB
+            artifacts.append(art)
+        return artifacts
+    finally:
+        if close_conn:
+            await conn.close()

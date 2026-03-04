@@ -3,7 +3,7 @@ from schemas import (
     RunCreate, RunResponse,
     NodeExecutionCreate, NodeExecutionResponse
 )
-from repositories import run_repository, node_execution_repository
+from repositories import run_repository, node_execution_repository, project_repository, workflow_repository
 from repositories.base import transaction
 from use_cases.execute_node import ExecuteNodeUseCase
 from dependencies import get_execute_use_case
@@ -15,17 +15,47 @@ router = APIRouter(prefix="/api", tags=["runs"])
 
 @router.post("/runs", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
 async def create_run(run_data: RunCreate):
-    """Создаёт новый Run."""
+
+    """Создаёт новый Run с проверкой существования проекта и воркфлоу."""
+
+    # Проверить существование проекта
+
+    project = await project_repository.get_project(run_data.project_id)
+
+    if not project:
+
+        raise HTTPException(status_code=400, detail="Project not found")
+
+    # Проверить существование воркфлоу
+
+    workflow = await workflow_repository.get_workflow(run_data.workflow_id)
+
+    if not workflow:
+
+        raise HTTPException(status_code=400, detail="Workflow not found")
+
+
+
     async with transaction() as tx:
+
         run_id = await run_repository.create_run(
+
             project_id=run_data.project_id,
+
             workflow_id=run_data.workflow_id,
+
             created_by=None,  # позже можно достать из сессии
+
             tx=tx,
+
         )
+
         run = await run_repository.get_run(run_id, tx=tx)
+
     if not run:
+
         raise HTTPException(status_code=500, detail="Failed to create run")
+
     return run
 
 @router.get("/runs/{run_id}", response_model=RunResponse)

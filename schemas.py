@@ -53,7 +53,7 @@ class ArtifactCreate(BaseModel):
 
 class GenerateArtifactRequest(BaseModel):
     artifact_type: str
-    parent_id: str
+    parent_id: Optional[str] = None
     feedback: str = ""
     model: Optional[str] = None
     project_id: str
@@ -61,7 +61,7 @@ class GenerateArtifactRequest(BaseModel):
 
 class SavePackageRequest(BaseModel):
     project_id: str
-    parent_id: str
+    parent_id: Optional[str] = None
     artifact_type: str
     content: Any
 

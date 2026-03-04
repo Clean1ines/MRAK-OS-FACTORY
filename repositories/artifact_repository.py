@@ -250,3 +250,20 @@ async def get_artifacts_by_ids(artifact_ids: List[str], tx=None) -> List[Dict[st
     finally:
         if close_conn:
             await conn.close()
+
+async def update_artifact_node_execution(artifact_id: str, node_execution_id: str, tx=None) -> None:
+    """Привязывает артефакт к выполнению (заполняет node_execution_id)."""
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
+        conn = await get_connection()
+        close_conn = True
+    try:
+        await conn.execute(
+            "UPDATE artifacts SET node_execution_id = $1 WHERE id = $2",
+            node_execution_id, artifact_id
+        )
+    finally:
+        if close_conn:
+            await conn.close()

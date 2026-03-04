@@ -64,7 +64,7 @@ async def create_artifact(
                     artifact_type=artifact.artifact_type,
                     content=content_data,
                     owner="user",
-                    status="DRAFT",
+                    status="CREATED",
                     project_id=artifact.project_id,
                     parent_id=artifact.parent_id,
                     tx=tx
@@ -155,6 +155,18 @@ async def save_artifact_package(req: SavePackageRequest):
 async def get_project_messages(project_id: str):
     artifacts = await db.get_artifacts(project_id, artifact_type="LLMResponse")
     artifacts.sort(key=lambda x: x['created_at'])
+    return JSONResponse(content=artifacts)
+
+# ==================== ВЕРСИОНИРОВАНИЕ АРТЕФАКТОВ (ADR-002) ====================
+@router.get("/artifacts/{logical_key}/versions")
+async def get_artifact_versions(project_id: str, logical_key: str):
+    """
+    Возвращает все версии артефакта с данным logical_key в проекте.
+    Параметры:
+    - project_id: query parameter
+    - logical_key: path parameter
+    """
+    artifacts = await db.get_artifacts(project_id, logical_key=logical_key)
     return JSONResponse(content=artifacts)
 
 # ==================== ТИПЫ АРТЕФАКТОВ ====================

@@ -3,7 +3,7 @@ import asyncio
 import logging
 from typing import Optional, Dict, Any, List
 
-from repositories.artifact_repository import save_artifact
+from repositories.artifact_repository import save_artifact, get_last_version, supersede_artifact
 from repositories.base import transaction
 from validation import validate_json_output, ValidationError, REQUIRED_FIELDS
 
@@ -94,7 +94,8 @@ class ArtifactService:
         user_input: str = "",
         model_id: Optional[str] = None,
         project_id: Optional[str] = None,
-        generation_config: Optional[Dict] = None
+        generation_config: Optional[Dict] = None,
+        logical_key: Optional[str] = None  # новый параметр для версионирования
     ) -> Optional[str]:
         """
         Генерирует артефакт.
@@ -107,6 +108,7 @@ class ArtifactService:
             - system_prompt (str) – обязательный,
             - user_prompt_template (str) – опциональный (по умолчанию "Context:\n{all_artifacts}\n\nUser input:\n{user_input}"),
             - required_input_types (list) – опционально.
+        :param logical_key: логический ключ для версионирования (например, ADR-007).
         """
         if input_artifacts is None:
             input_artifacts = []
@@ -133,15 +135,31 @@ class ArtifactService:
             artifact_type=artifact_type
         )
 
+        # Логика версионирования: если указан logical_key, определяем следующую версию и заменяем активную
         async with transaction() as tx:
+            next_version = 1
+            old_id = None
+            if logical_key and project_id:
+                last = await get_last_version(project_id, logical_key, tx=tx)
+                if last:
+                    next_version = last['version'] + 1
+                    if last['status'] == 'ACTIVE':
+                        old_id = last['id']
+
             artifact_id = await save_artifact(
                 artifact_type=artifact_type,
                 content=result_data,
                 owner="system",
-                status="GENERATED",
+                version=next_version,
+                status="ACTIVE",  # новая версия становится активной
                 project_id=project_id,
                 parent_id=None,
+                logical_key=logical_key,
                 tx=tx
             )
-        logger.info(f"Generated artifact {artifact_id} of type {artifact_type}")
+
+            if old_id:
+                await supersede_artifact(old_id, artifact_id, tx=tx)
+
+        logger.info(f"Generated artifact {artifact_id} of type {artifact_type} (version {next_version}, logical_key={logical_key})")
         return artifact_id

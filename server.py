@@ -9,6 +9,7 @@ import structlog
 
 from routers import projects, artifacts, workflows, auth
 from routers import runs
+from routers import modes
 import db
 from groq_client import GroqClient
 from artifact_service import ArtifactService
@@ -65,7 +66,7 @@ app.include_router(auth.router)
 app.include_router(runs.router)
 
 # Модуль modes временно отключён — будет переписан позже
-# app.include_router(modes.router)
+app.include_router(modes.router)
 
 # ==================== STARTUP EVENT ====================
 @app.on_event("startup")
@@ -99,7 +100,7 @@ async def validate_session_middleware(request: Request, call_next):
     request_logger = logger.bind(path=request.url.path)
     if os.getenv("TEST_MODE") == "true":
         return await call_next(request)
-    if request.url.path.startswith("/api/auth"):
+    if request.url.path.startswith("/api/auth") or request.url.path == "/api/models":
         request_logger.debug("Skipping auth for endpoint")
         return await call_next(request)
     if request.url.path.startswith("/assets"):

@@ -21,13 +21,14 @@ class GenerateArtifactUseCase:
                     if parent:
                         input_artifacts = [parent]
 
-            # Универсальный вызов генерации
+            # Универсальный вызов генерации с поддержкой logical_key
             new_id = await self.artifact_service.generate_artifact(
                 artifact_type=req.artifact_type,
                 input_artifacts=input_artifacts,
                 user_input=req.feedback,
                 model_id=req.model,
-                project_id=req.project_id
+                project_id=req.project_id,
+                logical_key=req.logical_key  # передаём logical_key
             )
 
             # Возвращаем содержимое созданного артефакта

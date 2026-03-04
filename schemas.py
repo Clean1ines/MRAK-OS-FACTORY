@@ -1,4 +1,4 @@
-# CHANGED: Pydantic V2 migration + new Run/NodeExecution models
+# CHANGED: Pydantic V2 migration + all models consolidated (Project, Workflow, Artifact, Run, NodeExecution, etc.)
 from __future__ import annotations
 
 import re
@@ -41,7 +41,7 @@ class ProjectResponse(ProjectBase):
         json_encoders={datetime: lambda v: v.isoformat() if v else None}
     )
 
-# ==================== Artifact Schemas ====================
+# ==================== Artifact Schemas (with versioning) ====================
 
 class ArtifactCreate(BaseModel):
     project_id: str
@@ -50,6 +50,7 @@ class ArtifactCreate(BaseModel):
     parent_id: Optional[str] = None
     generate: bool = False
     model: Optional[str] = None
+    logical_key: Optional[str] = Field(None, description="Логический ключ для версионирования (например, ADR-007)")
 
 class GenerateArtifactRequest(BaseModel):
     artifact_type: str
@@ -58,45 +59,26 @@ class GenerateArtifactRequest(BaseModel):
     model: Optional[str] = None
     project_id: str
     existing_content: Optional[Any] = None
+    logical_key: Optional[str] = Field(None, description="Логический ключ для версионирования")
 
 class SavePackageRequest(BaseModel):
     project_id: str
     parent_id: Optional[str] = None
     artifact_type: str
     content: Any
+    logical_key: Optional[str] = Field(None, description="Логический ключ для версионирования")
 
 class ValidateArtifactRequest(BaseModel):
     artifact_id: str
     status: str  # "VALIDATED" или "REJECTED"
 
-# ==================== Workflow / NextStep ====================
+# ==================== Workflow / NextStep (simple mode, kept for compatibility) ====================
 
 class NextStepResponse(BaseModel):
     next_stage: str
     prompt_type: str
     parent_id: Optional[str]
     description: str
-
-# ==================== Clarification ====================
-
-class StartClarificationRequest(BaseModel):
-    project_id: str
-    target_artifact_type: str
-    model: Optional[str] = None
-
-class MessageRequest(BaseModel):
-    message: str
-
-class ClarificationSessionResponse(BaseModel):
-    id: str
-    project_id: str
-    target_artifact_type: str
-    history: List[Dict[str, Any]]
-    status: str
-    context_summary: Optional[Dict[str, Any]] = None
-    final_artifact_id: Optional[str] = None
-    created_at: str
-    updated_at: str
 
 # ==================== Workflow Models ====================
 
@@ -150,7 +132,28 @@ class WorkflowDetailResponse(BaseModel):
     nodes: List[Dict[str, Any]]
     edges: List[Dict[str, Any]]
 
-# ==================== NEW: Run & NodeExecution Models (ADR-001) ====================
+# ==================== Clarification Models (temporarily disabled) ====================
+
+class StartClarificationRequest(BaseModel):
+    project_id: str
+    target_artifact_type: str
+    model: Optional[str] = None
+
+class MessageRequest(BaseModel):
+    message: str
+
+class ClarificationSessionResponse(BaseModel):
+    id: str
+    project_id: str
+    target_artifact_type: str
+    history: List[Dict[str, Any]]
+    status: str
+    context_summary: Optional[Dict[str, Any]] = None
+    final_artifact_id: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+# ==================== Run & NodeExecution Models (ADR-001) ====================
 
 class RunStatus(str, Enum):
     OPEN = "OPEN"
@@ -207,3 +210,21 @@ class NodeExecutionResponse(BaseModel):
         from_attributes=True,
         json_encoders={datetime: lambda v: v.isoformat() if v else None}
     )
+
+# ==================== Execute Step Request (ADR-003) ====================
+class ExecuteStepRequest(BaseModel):
+    """Запрос на выполнение шага воркфлоу с поддержкой Run и идемпотентности."""
+    node_id: str
+    run_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    parent_execution_id: Optional[str] = None
+    input_artifact_ids: Optional[List[str]] = Field(default_factory=list)
+    feedback: str = ""
+    model: Optional[str] = None
+
+# ==================== Validation Response (ADR-004) ====================
+class ValidateExecutionResponse(BaseModel):
+    id: str
+    status: NodeExecutionStatus
+    superseded_id: Optional[str] = None
+    previous_active_id: Optional[str] = None

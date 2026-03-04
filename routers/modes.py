@@ -1,4 +1,3 @@
-# CHANGED: Use services directly, remove orchestrator
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 import logging
@@ -10,7 +9,9 @@ router = APIRouter(prefix="/api", tags=["modes"])
 
 @router.get("/models")
 async def get_models():
+    print(f"GET /api/models called, prompt_service.groq_client: {prompt_service.groq_client}")
     models = prompt_service.groq_client.get_active_models()
+    print(f"models: {models}")
     return JSONResponse(content=models)
 
 @router.get("/modes")

@@ -13,9 +13,9 @@ async def test_create_workflow(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    name = "Test WF"
+    name = f"Test WF {uuid.uuid4().hex[:8]}"
     desc = "Description"
     wf_id = await create_workflow(name, project_id, desc, is_default=False, tx=tx)
 
@@ -27,24 +27,35 @@ async def test_create_workflow(tx):
     assert wf["project_id"] == project_id
 
 async def test_list_workflows(tx):
+
     project_id = str(uuid.uuid4())
+
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    await create_workflow("WF1", project_id, "", False, tx=tx)
-    await create_workflow("WF2", project_id, "", True, tx=tx)
+
+    name1 = f"WF1 {uuid.uuid4().hex[:8]}"
+
+    name2 = f"WF2 {uuid.uuid4().hex[:8]}"
+
+    await create_workflow(name1, project_id, "", False, tx=tx)
+
+    await create_workflow(name2, project_id, "", True, tx=tx)
+
+
 
     workflows = await list_workflows(tx=tx)
-    names = [w["name"] for w in workflows]
-    assert "WF1" in names
-    assert "WF2" in names
 
-async def test_update_workflow(tx):
+    names = [w["name"] for w in workflows]
+
+    assert name1 in names
+
+    assert name2 in names
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
     wf_id = await create_workflow("Old", project_id, "Old desc", False, tx=tx)
     await update_workflow(wf_id, name="New", description="New desc", is_default=True, tx=tx)
@@ -58,9 +69,9 @@ async def test_delete_workflow(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    wf_id = await create_workflow("ToDelete", project_id, "", False, tx=tx)
+    wf_id = await create_workflow(f"ToDelete {uuid.uuid4().hex[:8]}", project_id, "", False, tx=tx)
     await delete_workflow(wf_id, tx=tx)
     wf = await get_workflow(wf_id, tx=tx)
     assert wf is None
@@ -69,9 +80,9 @@ async def test_create_workflow_node(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
+    wf_id = await create_workflow(f"Test WF {uuid.uuid4().hex[:8]}", project_id, "", False, tx=tx)
     node_id = "node1"
     prompt_key = "02_IDEA_CLARIFIER"
     config = {"temp": 0.7}
@@ -93,9 +104,9 @@ async def test_update_workflow_node(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
+    wf_id = await create_workflow(f"Test WF {uuid.uuid4().hex[:8]}", project_id, "", False, tx=tx)
     record_id = await create_workflow_node(wf_id, "node1", "02_IDEA_CLARIFIER", {}, 0, 0, tx=tx)
 
     await update_workflow_node(record_id, prompt_key="03_PRODUCT_COUNCIL", config={"key": "val"}, position_x=10, position_y=20, tx=tx)
@@ -111,9 +122,9 @@ async def test_delete_workflow_node(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
+    wf_id = await create_workflow(f"Test WF {uuid.uuid4().hex[:8]}", project_id, "", False, tx=tx)
     record_id = await create_workflow_node(wf_id, "node1", "02_IDEA_CLARIFIER", {}, 0, 0, tx=tx)
     await delete_workflow_node(record_id, tx=tx)
 
@@ -124,9 +135,9 @@ async def test_create_workflow_edge(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
+    wf_id = await create_workflow(f"Test WF {uuid.uuid4().hex[:8]}", project_id, "", False, tx=tx)
     await create_workflow_node(wf_id, "node1", "02_IDEA_CLARIFIER", {}, 0, 0, tx=tx)
     await create_workflow_node(wf_id, "node2", "03_PRODUCT_COUNCIL", {}, 100, 0, tx=tx)
 
@@ -144,9 +155,9 @@ async def test_delete_workflow_edge(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    wf_id = await create_workflow("Test WF", project_id, "", False, tx=tx)
+    wf_id = await create_workflow(f"Test WF {uuid.uuid4().hex[:8]}", project_id, "", False, tx=tx)
     await create_workflow_node(wf_id, "node1", "02_IDEA_CLARIFIER", {}, 0, 0, tx=tx)
     await create_workflow_node(wf_id, "node2", "03_PRODUCT_COUNCIL", {}, 100, 0, tx=tx)
     edge_id = await create_workflow_edge(wf_id, "node1", "node2", tx=tx)
@@ -163,9 +174,9 @@ async def test_cascade_delete_node_with_edges(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    wf_id = await create_workflow("Cascade WF", project_id, tx=tx)
+    wf_id = await create_workflow(f"Cascade WF {uuid.uuid4().hex[:8]}", project_id, tx=tx)
 
     # Создаём узлы
     node_a_id = await create_workflow_node(wf_id, "a", "A", {}, 0, 0, tx=tx)
@@ -193,9 +204,9 @@ async def test_create_workflow_with_initial_graph(tx):
     project_id = str(uuid.uuid4())
     await tx.conn.execute(
         "INSERT INTO projects (id, name) VALUES ($1, $2)",
-        project_id, "Test Project"
+        project_id, f"Test Project {uuid.uuid4().hex[:8]}"
     )
-    wf_id = await create_workflow("Initial Graph", project_id, tx=tx)
+    wf_id = await create_workflow(f"Initial Graph {uuid.uuid4().hex[:8]}", project_id, tx=tx)
 
     nodes = [
         {

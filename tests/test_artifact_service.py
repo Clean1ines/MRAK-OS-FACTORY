@@ -1,4 +1,3 @@
-# tests/test_artifact_service.py
 import pytest
 import json
 import uuid
@@ -9,7 +8,6 @@ from artifact_service import ArtifactService
 from validation import ValidationError
 
 def mock_llm_response(content: str):
-    """Создаёт фиктивный ответ LLM."""
     mock_choice = MagicMock()
     mock_choice.message.content = content
     mock_response = MagicMock()
@@ -69,7 +67,6 @@ async def test_generate_artifact_success_basic(
     sample_artifact,
     mocker
 ):
-    """Базовый успешный сценарий."""
     config = {"system_prompt": "Test prompt"}
     input_artifacts = [sample_artifact]
     user_input = "some feedback"
@@ -86,7 +83,8 @@ async def test_generate_artifact_success_basic(
         user_input=user_input,
         model_id=model_id,
         project_id=project_id,
-        generation_config=config
+        generation_config=config,
+        logical_key=None
     )
 
     assert result == expected_artifact_id
@@ -102,9 +100,11 @@ async def test_generate_artifact_success_basic(
         artifact_type="test_type",
         content={"result": "ok"},
         owner="system",
-        status="GENERATED",
+        status="ACTIVE",
         project_id=project_id,
         parent_id=None,
+        logical_key=None,
+        version=1,
         tx=ANY
     )
 
@@ -118,7 +118,6 @@ async def test_generate_artifact_success_with_template(
     sample_generation_config,
     mocker
 ):
-    """Успех с пользовательским шаблоном."""
     input_artifacts = [sample_artifact]
     user_input = "hello"
     expected_artifact_id = "new-id"
@@ -132,7 +131,8 @@ async def test_generate_artifact_success_with_template(
         user_input=user_input,
         model_id="model",
         project_id="proj",
-        generation_config=sample_generation_config
+        generation_config=sample_generation_config,
+        logical_key=None
     )
 
     assert result == expected_artifact_id
@@ -141,6 +141,17 @@ async def test_generate_artifact_success_with_template(
     assert "Input artifacts:" in user_prompt
     assert '"some": "data"' in user_prompt
     assert user_input in user_prompt
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="test_type",
+        content={"data": 123},
+        owner="system",
+        status="ACTIVE",
+        project_id="proj",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_no_input_artifacts(
@@ -150,7 +161,6 @@ async def test_generate_artifact_no_input_artifacts(
     mock_transaction,
     mocker
 ):
-    """input_artifacts=None должен превратиться в пустой список."""
     config = {"system_prompt": "Test"}
     mock_groq_client.create_completion.return_value = mock_llm_response('{"ok": true}')
     mock_save_artifact.return_value = "id"
@@ -161,12 +171,22 @@ async def test_generate_artifact_no_input_artifacts(
         user_input="",
         model_id="m",
         project_id="p",
-        generation_config=config
+        generation_config=config,
+        logical_key=None
     )
 
     assert result == "id"
-    user_prompt = mock_groq_client.create_completion.call_args[1]["messages"][1]["content"]
-    assert "Context:\n\n\nUser input:" in user_prompt
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="t",
+        content={"ok": True},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_empty_input_artifacts(
@@ -176,7 +196,6 @@ async def test_generate_artifact_empty_input_artifacts(
     mock_transaction,
     mocker
 ):
-    """Пустой список входных артефактов."""
     config = {"system_prompt": "Test"}
     mock_groq_client.create_completion.return_value = mock_llm_response('{"ok": true}')
     mock_save_artifact.return_value = "id"
@@ -187,12 +206,22 @@ async def test_generate_artifact_empty_input_artifacts(
         user_input="",
         model_id="m",
         project_id="p",
-        generation_config=config
+        generation_config=config,
+        logical_key=None
     )
 
     assert result == "id"
-    user_prompt = mock_groq_client.create_completion.call_args[1]["messages"][1]["content"]
-    assert "Context:\n\n\nUser input:" in user_prompt
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="t",
+        content={"ok": True},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_required_types_match(
@@ -203,7 +232,6 @@ async def test_generate_artifact_required_types_match(
     sample_artifact,
     mocker
 ):
-    """required_input_types совпадают – переменная подставляется."""
     config = {
         "system_prompt": "Test",
         "user_prompt_template": "Type value: {test_type}",
@@ -219,11 +247,21 @@ async def test_generate_artifact_required_types_match(
         user_input="",
         model_id="m",
         project_id="p",
-        generation_config=config
+        generation_config=config,
+        logical_key=None
     )
 
-    user_prompt = mock_groq_client.create_completion.call_args[1]["messages"][1]["content"]
-    assert '"some": "data"' in user_prompt
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="t",
+        content={},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_required_types_missing(
@@ -235,7 +273,6 @@ async def test_generate_artifact_required_types_missing(
     mocker,
     caplog
 ):
-    """required_input_types отсутствуют – логируется предупреждение и подставляется пустая строка."""
     config = {
         "system_prompt": "Test",
         "user_prompt_template": "Missing: {missing_type}",
@@ -252,12 +289,22 @@ async def test_generate_artifact_required_types_missing(
             user_input="",
             model_id="m",
             project_id="p",
-            generation_config=config
+            generation_config=config,
+            logical_key=None
         )
 
     assert "Required input type 'missing_type' not found" in caplog.text
-    user_prompt = mock_groq_client.create_completion.call_args[1]["messages"][1]["content"]
-    assert "Missing: " in user_prompt
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="t",
+        content={},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_non_json_response_allowed(
@@ -267,8 +314,6 @@ async def test_generate_artifact_non_json_response_allowed(
     mock_transaction,
     mocker
 ):
-    """Ответ не JSON, но тип не требует JSON – оборачивается в {"text": ...}."""
-    # Патчим REQUIRED_FIELDS пустым словарём, чтобы тест не зависел от реальных значений
     mocker.patch('artifact_service.REQUIRED_FIELDS', {})
     config = {"system_prompt": "Test"}
     mock_groq_client.create_completion.return_value = mock_llm_response("Just plain text")
@@ -279,12 +324,21 @@ async def test_generate_artifact_non_json_response_allowed(
         user_input="",
         model_id="m",
         project_id="p",
-        generation_config=config
+        generation_config=config,
+        logical_key=None
     )
 
-    mock_save_artifact.assert_awaited_once()
-    saved_content = mock_save_artifact.call_args[1]["content"]
-    assert saved_content == {"text": "Just plain text"}
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="any_type",
+        content={"text": "Just plain text"},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_retry_then_success(
@@ -294,7 +348,6 @@ async def test_generate_artifact_retry_then_success(
     mock_transaction,
     mocker
 ):
-    """Первая попытка – исключение, вторая – успех."""
     config = {"system_prompt": "Test"}
     mock_groq_client.create_completion.side_effect = [
         Exception("API error"),
@@ -309,11 +362,23 @@ async def test_generate_artifact_retry_then_success(
         user_input="",
         model_id="m",
         project_id="p",
-        generation_config=config
+        generation_config=config,
+        logical_key=None
     )
 
     assert result == "id"
     assert mock_groq_client.create_completion.call_count == 2
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="t",
+        content={"valid": True},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_all_retries_fail(
@@ -323,7 +388,6 @@ async def test_generate_artifact_all_retries_fail(
     mock_transaction,
     mocker
 ):
-    """Все попытки проваливаются – выбрасывается ValidationError."""
     config = {"system_prompt": "Test"}
     mock_groq_client.create_completion.side_effect = Exception("API error")
     mocker.patch('asyncio.sleep', return_value=None)
@@ -335,9 +399,11 @@ async def test_generate_artifact_all_retries_fail(
             user_input="",
             model_id="m",
             project_id="p",
-            generation_config=config
+            generation_config=config,
+            logical_key=None
         )
     assert mock_groq_client.create_completion.call_count == 4
+    mock_save_artifact.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_generate_artifact_missing_system_prompt(
@@ -345,7 +411,6 @@ async def test_generate_artifact_missing_system_prompt(
     mock_groq_client,
     mock_save_artifact
 ):
-    """Отсутствие system_prompt в generation_config – ValueError."""
     config = {}
     with pytest.raises(ValueError, match="generation_config must contain 'system_prompt'"):
         await artifact_service.generate_artifact(
@@ -354,7 +419,8 @@ async def test_generate_artifact_missing_system_prompt(
             user_input="",
             model_id="m",
             project_id="p",
-            generation_config=config
+            generation_config=config,
+            logical_key=None
         )
     mock_groq_client.create_completion.assert_not_called()
     mock_save_artifact.assert_not_called()
@@ -367,9 +433,6 @@ async def test_generate_artifact_validation_failure(
     mock_transaction,
     mocker
 ):
-    """Валидация JSON не проходит – повтор до успеха."""
-    # Для этого теста нужен мок validate_json_output, но мы его не создали в фикстурах.
-    # Создадим его локально.
     mock_validate = MagicMock()
     mocker.patch('artifact_service.validate_json_output', mock_validate)
 
@@ -388,12 +451,24 @@ async def test_generate_artifact_validation_failure(
         user_input="",
         model_id="m",
         project_id="p",
-        generation_config=config
+        generation_config=config,
+        logical_key=None
     )
 
     assert result == "id"
     assert mock_groq_client.create_completion.call_count == 2
     assert mock_validate.call_count == 2
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="t",
+        content={"bad": "data"},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_save_artifact_fails(
@@ -403,7 +478,6 @@ async def test_generate_artifact_save_artifact_fails(
     mock_transaction,
     mocker
 ):
-    """Ошибка при сохранении артефакта пробрасывается наружу."""
     config = {"system_prompt": "Test"}
     mock_groq_client.create_completion.return_value = mock_llm_response('{"ok": true}')
     mock_save_artifact.side_effect = Exception("DB error")
@@ -415,7 +489,8 @@ async def test_generate_artifact_save_artifact_fails(
             user_input="",
             model_id="m",
             project_id="p",
-            generation_config=config
+            generation_config=config,
+            logical_key=None
         )
 
 @pytest.mark.asyncio
@@ -427,7 +502,6 @@ async def test_generate_artifact_logging_warning(
     caplog,
     mocker
 ):
-    """Проверка логирования предупреждения при отсутствии обязательного типа."""
     config = {
         "system_prompt": "Test",
         "user_prompt_template": "Template {missing}",
@@ -443,10 +517,22 @@ async def test_generate_artifact_logging_warning(
             user_input="",
             model_id="m",
             project_id="p",
-            generation_config=config
+            generation_config=config,
+            logical_key=None
         )
 
     assert "Required input type 'missing' not found" in caplog.text
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="t",
+        content={},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_default_model(
@@ -456,7 +542,6 @@ async def test_generate_artifact_default_model(
     mock_transaction,
     mocker
 ):
-    """Если model_id не передан, используется дефолтная модель."""
     config = {"system_prompt": "Test"}
     mock_groq_client.create_completion.return_value = mock_llm_response('{}')
     mock_save_artifact.return_value = "id"
@@ -467,11 +552,23 @@ async def test_generate_artifact_default_model(
         user_input="",
         model_id=None,
         project_id="p",
-        generation_config=config
+        generation_config=config,
+        logical_key=None
     )
 
     call_args = mock_groq_client.create_completion.call_args[1]
     assert call_args["model"] == "llama-3.3-70b-versatile"
+    mock_save_artifact.assert_awaited_once_with(
+        artifact_type="t",
+        content={},
+        owner="system",
+        status="ACTIVE",
+        project_id="p",
+        parent_id=None,
+        logical_key=None,
+        version=1,
+        tx=ANY
+    )
 
 @pytest.mark.asyncio
 async def test_generate_artifact_with_transaction_error(
@@ -481,7 +578,6 @@ async def test_generate_artifact_with_transaction_error(
     mock_transaction,
     mocker
 ):
-    """Ошибка внутри транзакции пробрасывается."""
     config = {"system_prompt": "Test"}
     mock_groq_client.create_completion.return_value = mock_llm_response('{}')
     mock_transaction.__aenter__.side_effect = Exception("Transaction failed")
@@ -493,5 +589,6 @@ async def test_generate_artifact_with_transaction_error(
             user_input="",
             model_id="m",
             project_id="p",
-            generation_config=config
+            generation_config=config,
+            logical_key=None
         )

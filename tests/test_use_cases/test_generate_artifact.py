@@ -29,5 +29,6 @@ async def test_generate_artifact_use_case():
             input_artifacts=[{"id": "parent-id", "content": {}}],
             user_input="feedback",
             model_id=None,
-            project_id="proj-id"
+            project_id="proj-id",
+            logical_key=None
         )

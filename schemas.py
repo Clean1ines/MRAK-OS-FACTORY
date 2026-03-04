@@ -1,9 +1,12 @@
-# CHANGED: Добавлены поля nodes и edges для передачи графа воркфлоу
-# CHANGED: Добавлено поле project_id в WorkflowCreate и WorkflowResponse
+# CHANGED: Pydantic V2 migration + new Run/NodeExecution models
+from __future__ import annotations
+
 import re
-from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from enum import Enum
+from typing import Optional, List, Dict, Any
+
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 # ==================== Project Schemas ====================
 
@@ -12,38 +15,33 @@ class ProjectBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Project name, 1-100 characters")
     description: str = Field(default="", description="Project description")
 
-    @validator('name')
-    def validate_name_chars(cls, v):
+    @field_validator('name')
+    @classmethod
+    def validate_name_chars(cls, v: str) -> str:
         """Запрещаем символы, опасные для инъекций или path traversal."""
-        # Разрешены: буквы, цифры, пробел, дефис, подчёркивание, точка
-        # Запрещены: / \ .. < > : ; " ' ` | ? * [ ] { } ( ) & $ # @ ! ~
         if re.search(r'[<>:"/\\|?*\[\]{}()&$#@!~`;\']', v):
             raise ValueError('Name contains forbidden characters')
-        # Дополнительно проверяем на двойные точки (..) — признак path traversal
         if '..' in v:
             raise ValueError('Name cannot contain ".."')
-        return v.strip()  # убираем лишние пробелы в начале/конце
+        return v.strip()
 
 class ProjectCreate(ProjectBase):
-    """Схема для создания нового проекта."""
     pass
 
 class ProjectUpdate(ProjectBase):
-    """Схема для обновления проекта (PUT — все поля обязательны)."""
-    # Можно оставить как есть, все поля наследуются обязательными.
     pass
 
 class ProjectResponse(ProjectBase):
-    """Схема для ответа с данными проекта."""
     id: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True  # позволяет работать с dict/row
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={datetime: lambda v: v.isoformat() if v else None}
+    )
+
+# ==================== Artifact Schemas ====================
 
 class ArtifactCreate(BaseModel):
     project_id: str
@@ -71,11 +69,15 @@ class ValidateArtifactRequest(BaseModel):
     artifact_id: str
     status: str  # "VALIDATED" или "REJECTED"
 
+# ==================== Workflow / NextStep ====================
+
 class NextStepResponse(BaseModel):
     next_stage: str
     prompt_type: str
     parent_id: Optional[str]
     description: str
+
+# ==================== Clarification ====================
 
 class StartClarificationRequest(BaseModel):
     project_id: str
@@ -96,24 +98,7 @@ class ClarificationSessionResponse(BaseModel):
     created_at: str
     updated_at: str
 
-class WorkflowCreate(BaseModel):
-    """Схема создания воркфлоу с опциональным графом."""
-    name: str
-    description: str = ""
-    is_default: bool = False
-    # ADDED: обязательное поле project_id
-    project_id: str
-    nodes: List["WorkflowNodeCreate"] = Field(default_factory=list, description="Начальные узлы графа")
-    edges: List["WorkflowEdgeCreate"] = Field(default_factory=list, description="Начальные рёбра графа")
-
-class WorkflowUpdate(BaseModel):
-    """Схема обновления воркфлоу. Поля nodes/edges могут отсутствовать (тогда граф не меняется)."""
-    name: Optional[str] = None
-    description: Optional[str] = None
-    is_default: Optional[bool] = None
-    nodes: Optional[List["WorkflowNodeCreate"]] = Field(None, description="Полный новый набор узлов (если указан)")
-    edges: Optional[List["WorkflowEdgeCreate"]] = Field(None, description="Полный новый набор рёбер (если указан)")
-    # project_id не включаем – он не обновляется
+# ==================== Workflow Models ====================
 
 class WorkflowNodeCreate(BaseModel):
     node_id: str
@@ -122,33 +107,103 @@ class WorkflowNodeCreate(BaseModel):
     position_x: float
     position_y: float
 
-class WorkflowNodeUpdate(BaseModel):
-    prompt_key: Optional[str] = None
-    config: Optional[Dict[str, Any]] = None
-    position_x: Optional[float] = None
-    position_y: Optional[float] = None
-
 class WorkflowEdgeCreate(BaseModel):
     source_node: str
     target_node: str
     source_output: str = "output"
     target_input: str = "input"
 
+class WorkflowCreate(BaseModel):
+    name: str
+    description: str = ""
+    is_default: bool = False
+    project_id: str
+    nodes: List[WorkflowNodeCreate] = Field(default_factory=list)
+    edges: List[WorkflowEdgeCreate] = Field(default_factory=list)
+
+class WorkflowUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_default: Optional[bool] = None
+    nodes: Optional[List[WorkflowNodeCreate]] = None
+    edges: Optional[List[WorkflowEdgeCreate]] = None
+
+class WorkflowNodeUpdate(BaseModel):
+    prompt_key: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
+
 class WorkflowResponse(BaseModel):
     id: str
     name: str
     description: str
     is_default: bool
-    # ADDED
     project_id: str
     created_at: str
     updated_at: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 class WorkflowDetailResponse(BaseModel):
     workflow: WorkflowResponse
     nodes: List[Dict[str, Any]]
     edges: List[Dict[str, Any]]
 
-# Для корректной работы forward references
-WorkflowCreate.update_forward_refs()
-WorkflowUpdate.update_forward_refs()
+# ==================== NEW: Run & NodeExecution Models (ADR-001) ====================
+
+class RunStatus(str, Enum):
+    OPEN = "OPEN"
+    FROZEN = "FROZEN"
+    ARCHIVED = "ARCHIVED"
+
+class NodeExecutionStatus(str, Enum):
+    DRAFT = "DRAFT"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    VALIDATED = "VALIDATED"
+    SUPERSEDED = "SUPERSEDED"
+    ARCHIVED = "ARCHIVED"
+
+class RunCreate(BaseModel):
+    project_id: str
+    workflow_id: str
+    # created_by будет добавлен автоматически из сессии
+
+class RunResponse(BaseModel):
+    id: str
+    project_id: str
+    workflow_id: str
+    status: RunStatus
+    created_at: datetime
+    created_by: Optional[str] = None
+    frozen_at: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={datetime: lambda v: v.isoformat() if v else None}
+    )
+
+class NodeExecutionCreate(BaseModel):
+    idempotency_key: str = Field(..., min_length=1, max_length=255)
+    parent_execution_id: Optional[str] = None
+    input_artifact_ids: Optional[List[str]] = None
+
+class NodeExecutionResponse(BaseModel):
+    id: str
+    run_id: str
+    node_definition_id: str
+    parent_execution_id: Optional[str] = None
+    status: NodeExecutionStatus
+    input_artifact_ids: Optional[List[str]] = None
+    output_artifact_id: Optional[str] = None
+    idempotency_key: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={datetime: lambda v: v.isoformat() if v else None}
+    )

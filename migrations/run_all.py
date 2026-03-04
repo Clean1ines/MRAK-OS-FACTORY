@@ -4,7 +4,6 @@
 Поддерживает SQL-файлы (с несколькими командами) и Python-скрипты.
 Ведёт таблицу schema_migrations для отслеживания применённых миграций.
 """
-
 import asyncio
 import os
 import sys
@@ -22,16 +21,17 @@ if not DATABASE_URL:
     print("❌ DATABASE_URL not set in environment")
     sys.exit(1)
 
-# migrations/run_all.py (фрагмент с порядком)
+# Порядок применения миграций (новые добавляем в конец)
 MIGRATION_ORDER = [
     "add_workflow_tables.sql",
     "fix_artifacts_schema.sql",
     "add_artifact_types.sql",
     "add_clarification_sessions.py",
-    "cleanup_duplicate_projects.py",   # ← добавить здесь
+    "cleanup_duplicate_projects.py",
     "add_projects_name_unique.sql",
-    "add_project_constraints.py",    # теперь можно применять после очистки
+    "add_project_constraints.py",
     "add_default_workflow.sql",
+    "001_add_runs_and_node_executions.sql",      # ✨ Новая миграция
 ]
 
 async def ensure_migrations_table(conn):
@@ -43,47 +43,28 @@ async def ensure_migrations_table(conn):
         )
     """)
 
-
 async def is_migration_applied(conn, filename):
     return await conn.fetchval(
         "SELECT 1 FROM schema_migrations WHERE filename = $1", filename
     ) is not None
-
 
 async def mark_migration_applied(conn, filename):
     await conn.execute(
         "INSERT INTO schema_migrations (filename) VALUES ($1)", filename
     )
 
-
 async def run_sql_file(conn, filename):
-    """Выполняет SQL-команды из файла, игнорируя комментарии и пустые строки."""
+    """Выполняет SQL-команды из файла, отправляя весь файл как один скрипт."""
     filepath = MIGRATIONS_DIR / filename
     print(f"📄 Applying SQL migration: {filename}")
     with open(filepath, "r", encoding="utf-8") as f:
         sql = f.read()
-
-    # Разделяем на команды по точке с запятой
-    raw_commands = sql.split(';')
-    for raw_cmd in raw_commands:
-        cmd = raw_cmd.strip()
-        # Пропускаем пустые команды и однострочные комментарии
-        if not cmd or cmd.startswith('--'):
-            continue
-        # Удаляем встроенные комментарии (всё после -- в этой строке) – упрощённо
-        # Если команда содержит -- внутри строки, это может сломать, но в наших миграциях таких нет
-        if '--' in cmd:
-            # Обрезаем до первого вхождения --, но только если оно не в кавычках – упрощаем
-            cmd = cmd.split('--', 1)[0].strip()
-        if not cmd:
-            continue
-        try:
-            await conn.execute(cmd)
-        except Exception as e:
-            print(f"❌ Error executing command in {filename}:\n{cmd}")
-            raise e
+    try:
+        await conn.execute(sql)
+    except Exception as e:
+        print(f"❌ Error executing {filename}: {e}")
+        raise
     print(f"✅ {filename} applied")
-
 
 async def run_python_migration(filename):
     filepath = MIGRATIONS_DIR / filename
@@ -96,7 +77,6 @@ async def run_python_migration(filename):
         raise RuntimeError(f"Migration {filename} failed with code {result.returncode}")
     print(result.stdout)
     print(f"✅ {filename} applied")
-
 
 async def main():
     print("🚀 Starting unified migration runner")
@@ -129,7 +109,6 @@ async def main():
         sys.exit(1)
     finally:
         await conn.close()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

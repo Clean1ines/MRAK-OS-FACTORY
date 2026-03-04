@@ -1,5 +1,4 @@
-# CHANGED: Use artifact_service directly, remove orchestrator
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Optional
 import db
@@ -12,14 +11,22 @@ from validation import ValidationError
 from use_cases.generate_artifact import GenerateArtifactUseCase
 from use_cases.save_artifact_package import SaveArtifactPackageUseCase
 from utils.hash import compute_content_hash
-from services import artifact_service
+from dependencies import get_artifact_service
+from artifact_service import ArtifactService
 import logging
-import json
-import uuid
 
 logger = logging.getLogger("MRAK-SERVER")
 
 router = APIRouter(prefix="/api", tags=["artifacts"])
+
+# Вспомогательная функция для создания generation_config (временный костыль)
+def _make_generation_config(artifact_type: str) -> dict:
+    # TODO: в будущем generation_config должен браться из ноды
+    return {
+        "system_prompt": f"You are generating a {artifact_type}.",
+        "user_prompt_template": "Context:\n{all_artifacts}\n\nUser input:\n{user_input}",
+        "required_input_types": []
+    }
 
 @router.get("/projects/{project_id}/artifacts")
 async def list_artifacts(project_id: str, type: Optional[str] = None):
@@ -27,21 +34,29 @@ async def list_artifacts(project_id: str, type: Optional[str] = None):
     return JSONResponse(content=artifacts)
 
 @router.post("/artifact")
-async def create_artifact(artifact: ArtifactCreate):
+async def create_artifact(
+    artifact: ArtifactCreate,
+    artifact_service: ArtifactService = Depends(get_artifact_service)
+):
     try:
         if artifact.generate:
-            parent = None
+            input_artifacts = []
             if artifact.parent_id:
                 async with transaction() as tx:
                     parent = await db.get_artifact(artifact.parent_id, tx=tx)
                     if not parent:
                         return JSONResponse(content={"error": "Parent artifact not found"}, status_code=404)
+                    input_artifacts = [parent]
+
+            generation_config = _make_generation_config(artifact.artifact_type)
+
             new_id = await artifact_service.generate_artifact(
                 artifact_type=artifact.artifact_type,
+                input_artifacts=input_artifacts,
                 user_input=artifact.content,
-                parent_artifact=parent,
                 model_id=artifact.model,
-                project_id=artifact.project_id
+                project_id=artifact.project_id,
+                generation_config=generation_config
             )
             return JSONResponse(content={"id": new_id, "generated": True})
         else:
@@ -97,11 +112,32 @@ async def delete_artifact_endpoint(artifact_id: str):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @router.post("/generate_artifact")
-async def generate_artifact_endpoint(req: GenerateArtifactRequest):
-    use_case = GenerateArtifactUseCase(artifact_service)
+async def generate_artifact_endpoint(
+    req: GenerateArtifactRequest,
+    artifact_service: ArtifactService = Depends(get_artifact_service)
+):
     try:
-        result = await use_case.execute(req)
-        return JSONResponse(content=result)
+        input_artifacts = []
+        if req.parent_id:
+            async with transaction() as tx:
+                parent = await db.get_artifact(req.parent_id, tx=tx)
+                if parent:
+                    input_artifacts = [parent]
+        generation_config = _make_generation_config(req.artifact_type)
+        new_id = await artifact_service.generate_artifact(
+            artifact_type=req.artifact_type,
+            input_artifacts=input_artifacts,
+            user_input=req.feedback,
+            model_id=req.model,
+            project_id=req.project_id,
+            generation_config=generation_config
+        )
+        async with transaction() as tx:
+            artifact = await db.get_artifact(new_id, tx=tx)
+        if artifact:
+            return JSONResponse(content={"result": artifact['content']})
+        else:
+            return JSONResponse(content={"result": {"id": new_id}})
     except ValidationError as e:
         return JSONResponse(content={"error": str(e)}, status_code=422)
     except Exception as e:
@@ -123,14 +159,11 @@ async def get_project_messages(project_id: str):
     artifacts.sort(key=lambda x: x['created_at'])
     return JSONResponse(content=artifacts)
 
-# ==================== ТИПЫ АРТЕФАКТОВ ====================
-
+# ==================== ТИПЫ АРТЕФАКТОВ (без изменений) ====================
 @router.get("/artifact-types")
 async def list_artifact_types():
     async with transaction() as tx:
         rows = await tx.fetch("SELECT * FROM artifact_types ORDER BY type")
-    
-    # Конвертируем datetime в ISO-строки
     types = []
     for row in rows:
         types.append({
@@ -142,7 +175,6 @@ async def list_artifact_types():
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
         })
-    
     return JSONResponse(content=types)
 
 @router.get("/artifact-types/{type}")

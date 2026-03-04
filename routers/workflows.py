@@ -14,7 +14,7 @@ from schemas import (
 )
 from validation import ValidationError
 from use_cases.execute_workflow_step import ExecuteWorkflowStepUseCase
-from services import workflow_engine
+from workflow_engine import WorkflowEngine
 import logging
 
 logger = logging.getLogger("MRAK-SERVER")
@@ -40,8 +40,8 @@ async def create_workflow(workflow: WorkflowCreate):
             tx=tx
         )
         if workflow.nodes or workflow.edges:
-            nodes_data = [node.dict() for node in workflow.nodes]
-            edges_data = [edge.dict() for edge in workflow.edges]
+            nodes_data = [node.model_dump() for node in workflow.nodes]
+            edges_data = [edge.model_dump() for edge in workflow.edges]
             print(f"   nodes: {len(nodes_data)}, edges: {len(edges_data)}")
             await db.sync_workflow_graph(wf_id, nodes_data, edges_data, tx)
     print(f"📤 POST /workflows created {wf_id}")

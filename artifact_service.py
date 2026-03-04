@@ -1,63 +1,32 @@
-# CHANGED: Restored validation and retries in generate_artifact
 import json
 import asyncio
 import logging
 from typing import Optional, Dict, Any, List
 
-from repositories.artifact_repository import save_artifact, get_artifact
+from repositories.artifact_repository import save_artifact
 from repositories.base import transaction
 from validation import validate_json_output, ValidationError
-
-from generators import (
-    BusinessRequirementsGenerator,
-    ReqEngineeringGenerator,
-    FunctionalRequirementsGenerator,
-)
 
 logger = logging.getLogger("artifact-service")
 
 class ArtifactService:
-    def __init__(self, groq_client, prompt_loader, mode_map, type_to_mode):
+    """
+    Универсальный сервис для генерации артефактов.
+    Все настройки передаются через generation_config (из ноды).
+    """
+
+    def __init__(self, groq_client):
         self.groq_client = groq_client
-        self.prompt_loader = prompt_loader
-        self.mode_map = mode_map
-        self.type_to_mode = type_to_mode
 
-        # Instantiate generators
-        self.business_req_gen = BusinessRequirementsGenerator(
-            groq_client, prompt_loader, mode_map, type_to_mode
-        )
-        self.req_engineering_gen = ReqEngineeringGenerator(
-            groq_client, prompt_loader, mode_map, type_to_mode
-        )
-        self.functional_req_gen = FunctionalRequirementsGenerator(
-            groq_client, prompt_loader, mode_map, type_to_mode
-        )
-
-    async def generate_artifact(
+    async def _call_llm_with_retry(
         self,
+        sys_prompt: str,
+        user_prompt: str,
+        model_id: Optional[str],
         artifact_type: str,
-        user_input: str,
-        parent_artifact: Optional[Dict[str, Any]] = None,
-        model_id: Optional[str] = None,
-        project_id: Optional[str] = None
-    ) -> Optional[str]:
-        mode = self.type_to_mode.get(artifact_type)
-        if not mode:
-            raise ValueError(f"No generation mode defined for artifact type {artifact_type}")
-
-        sys_prompt = await self.prompt_loader.get_system_prompt(mode, self.mode_map)
-        if sys_prompt.startswith("Error") or sys_prompt.startswith("System Error"):
-            raise Exception(f"Failed to get system prompt: {sys_prompt}")
-
-        if parent_artifact:
-            user_prompt = f"Parent artifact ({parent_artifact['type']}):\n{json.dumps(parent_artifact['content'])}\n\nUser input:\n{user_input}"
-        else:
-            user_prompt = user_input
-
-        # Retry logic with validation (copied from old _call_llm_with_retry)
+        retries: int = 3
+    ) -> Any:
         attempt = 0
-        retries = 3
         last_error = None
         while attempt <= retries:
             try:
@@ -71,33 +40,19 @@ class ArtifactService:
                 )
                 result_text = response.choices[0].message.content
 
-                # Try to parse JSON
                 try:
                     result_data = json.loads(result_text)
                 except json.JSONDecodeError:
-                    # If not JSON, maybe it's text – for structured types this is an error
                     if artifact_type in validation.REQUIRED_FIELDS:
                         raise ValueError("Response is not valid JSON")
                     else:
                         result_data = {"text": result_text}
 
-                # Validate for structured types
                 valid, msg = validate_json_output(result_data, artifact_type)
                 if not valid:
                     raise ValueError(f"Validation failed: {msg}")
 
-                # Save in transaction
-                async with transaction() as tx:
-                    artifact_id = await save_artifact(
-                        artifact_type=artifact_type,
-                        content=result_data,
-                        owner="system",
-                        status="GENERATED",
-                        project_id=project_id,
-                        parent_id=parent_artifact['id'] if parent_artifact else None,
-                        tx=tx
-                    )
-                return artifact_id
+                return result_data
 
             except Exception as e:
                 last_error = e
@@ -112,50 +67,81 @@ class ArtifactService:
 
         raise ValidationError(f"Failed to generate valid {artifact_type} after {retries+1} attempts. Last error: {last_error}")
 
-    async def generate_business_requirements(
+    def _prepare_context(self, config: dict, input_artifacts: List[Dict]) -> Dict[str, str]:
+        """Преобразует входные артефакты в переменные для шаблона."""
+        context = {}
+
+        all_parts = []
+        for art in input_artifacts:
+            all_parts.append(f"--- {art['type']} (id: {art['id']}) ---\n{json.dumps(art['content'], indent=2)}")
+        context["all_artifacts"] = "\n\n".join(all_parts)
+
+        for req_type in config.get("required_input_types", []):
+            art = next((a for a in input_artifacts if a["type"] == req_type), None)
+            if art:
+                var_name = req_type[0].lower() + req_type[1:]
+                context[var_name] = json.dumps(art["content"], indent=2)
+            else:
+                logger.warning(f"Required input type '{req_type}' not found")
+                context[var_name] = ""
+
+        return context
+
+    async def generate_artifact(
         self,
-        analysis_id: str,
-        user_feedback: str = "",
+        artifact_type: str,
+        input_artifacts: Optional[List[Dict]] = None,
+        user_input: str = "",
         model_id: Optional[str] = None,
         project_id: Optional[str] = None,
-        existing_requirements: Optional[List[Dict]] = None
-    ) -> List[Dict[str, Any]]:
-        return await self.business_req_gen.generate(
-            analysis_id=analysis_id,
-            user_feedback=user_feedback,
+        generation_config: Optional[Dict] = None
+    ) -> Optional[str]:
+        """
+        Генерирует артефакт.
+        :param artifact_type: метка типа (будет сохранена в поле type артефакта).
+        :param input_artifacts: список входных артефактов.
+        :param user_input: пользовательский ввод (feedback).
+        :param model_id: идентификатор модели.
+        :param project_id: идентификатор проекта.
+        :param generation_config: словарь с ключами:
+            - system_prompt (str) – обязательный,
+            - user_prompt_template (str) – опциональный (по умолчанию "Context:\n{all_artifacts}\n\nUser input:\n{user_input}"),
+            - required_input_types (list) – опционально.
+        """
+        if input_artifacts is None:
+            input_artifacts = []
+        if generation_config is None:
+            generation_config = {}
+
+        system_prompt = generation_config.get("system_prompt")
+        if not system_prompt:
+            raise ValueError("generation_config must contain 'system_prompt'")
+
+        template = generation_config.get("user_prompt_template")
+        if not template:
+            template = "Context:\n{all_artifacts}\n\nUser input:\n{user_input}"
+
+        context = self._prepare_context(generation_config, input_artifacts)
+        context["user_input"] = user_input
+
+        user_prompt = template.format(**context)
+
+        result_data = await self._call_llm_with_retry(
+            sys_prompt=system_prompt,
+            user_prompt=user_prompt,
             model_id=model_id,
-            project_id=project_id,
-            existing_requirements=existing_requirements
+            artifact_type=artifact_type
         )
 
-    async def generate_req_engineering_analysis(
-        self,
-        parent_id: str,
-        user_feedback: str = "",
-        model_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        existing_analysis: Optional[Dict] = None
-    ) -> Dict[str, Any]:
-        return await self.req_engineering_gen.generate(
-            parent_id=parent_id,
-            user_feedback=user_feedback,
-            model_id=model_id,
-            project_id=project_id,
-            existing_analysis=existing_analysis
-        )
-
-    async def generate_functional_requirements(
-        self,
-        analysis_id: str,
-        user_feedback: str = "",
-        model_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        existing_requirements: Optional[List[Dict]] = None
-    ) -> List[Dict[str, Any]]:
-        return await self.functional_req_gen.generate(
-            analysis_id=analysis_id,
-            user_feedback=user_feedback,
-            model_id=model_id,
-            project_id=project_id,
-            existing_requirements=existing_requirements
-        )
+        async with transaction() as tx:
+            artifact_id = await save_artifact(
+                artifact_type=artifact_type,
+                content=result_data,
+                owner="system",
+                status="GENERATED",
+                project_id=project_id,
+                parent_id=None,
+                tx=tx
+            )
+        logger.info(f"Generated artifact {artifact_id} of type {artifact_type}")
+        return artifact_id

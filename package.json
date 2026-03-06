@@ -2,11 +2,15 @@
   "name": "mrak-os-factory-root",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n \"BACK,FRONT\" -c \"magenta,cyan\" \"uvicorn server:app --reload --port 8000\" \"npm run dev --prefix frontend\"",
+    "dev": "concurrently -n \"BACK,FRONT\" -c \"magenta,cyan\" \"dotenv -e .env -o -- uvicorn server:app --reload --port 8000\" \"npm run dev --prefix frontend\"",
     "install:all": "npm install && npm install --prefix frontend",
     "test:e2e": "npm run test:e2e --prefix frontend",
-    "type-check": "tsc --noEmit",
-    "lint": "eslint .",
+    "test:front": "npm run test:run --prefix frontend",
+    "test:front:ui": "npm run test:ui --prefix frontend",
+    "type-check:front": "npm run type-check --prefix frontend",
+    "lint:front": "npm run lint --prefix frontend",
+    "type-check": "npm run type-check:front",
+    "lint": "npm run lint:front",
     "playwright:install": "npm run playwright:install --prefix frontend"
   },
   "devDependencies": {
@@ -14,6 +18,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "dotenv-cli": "^11.0.0"
   }
 }

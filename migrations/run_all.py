@@ -1,106 +1,130 @@
 #!/usr/bin/env python3
 """
-Универсальный скрипт для применения всех миграций в правильном порядке.
-Поддерживает SQL-файлы (с несколькими командами) и Python-скрипты.
-Ведёт таблицу schema_migrations для отслеживания применённых миграций.
+Автоматическое применение миграций ко всем окружениям.
+Скрипт обрабатывает только файлы из списка ALLOWED_ENV_FILES (по умолчанию:
+.env, .env.test, .env.prod). Для .env.prod запрашивает подтверждение.
 """
 import asyncio
 import os
 import sys
-import subprocess
 from pathlib import Path
 
 import asyncpg
 from dotenv import load_dotenv
 
-load_dotenv()
+# Разрешённые имена файлов окружения (можно добавить свои)
+ALLOWED_ENV_FILES = [".env", ".env.test", ".env.prod"]
 
-MIGRATIONS_DIR = Path(__file__).parent
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    print("❌ DATABASE_URL not set in environment")
-    sys.exit(1)
+# Цвета для вывода (опционально)
+class Colors:
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    RESET = '\033[0m'
 
-# Порядок применения миграций (новые добавляем в конец)
-MIGRATION_ORDER = [
-     "000_full_schema.sql",   
-]
+def find_env_files():
+    """Возвращает список разрешённых файлов .env, найденных в корне проекта."""
+    root = Path(__file__).parent.parent  # корень проекта
+    env_files = []
+    for name in ALLOWED_ENV_FILES:
+        path = root / name
+        if path.exists():
+            env_files.append(path)
+    return env_files
 
-async def ensure_migrations_table(conn):
-    await conn.execute("""
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-            id SERIAL PRIMARY KEY,
-            filename TEXT NOT NULL UNIQUE,
-            applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-    """)
+def is_prod_env(env_file):
+    """Определяет, является ли окружение продакшном (по имени файла)."""
+    return "prod" in env_file.name.lower()
 
-async def is_migration_applied(conn, filename):
-    return await conn.fetchval(
-        "SELECT 1 FROM schema_migrations WHERE filename = $1", filename
-    ) is not None
+async def apply_migrations_for_env(env_file):
+    """Загружает переменные из env_file и применяет миграции к соответствующей БД."""
+    print(f"\n{Colors.YELLOW}=== Применение миграций для {env_file.name} ==={Colors.RESET}")
 
-async def mark_migration_applied(conn, filename):
-    await conn.execute(
-        "INSERT INTO schema_migrations (filename) VALUES ($1)", filename
-    )
+    # Загружаем переменные из файла
+    load_dotenv(dotenv_path=env_file, override=True)
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        print(f"{Colors.RED}❌ DATABASE_URL не задан в {env_file.name}, пропускаем{Colors.RESET}")
+        return
 
-async def run_sql_file(conn, filename):
-    """Выполняет SQL-команды из файла, отправляя весь файл как один скрипт."""
-    filepath = MIGRATIONS_DIR / filename
-    print(f"📄 Applying SQL migration: {filename}")
-    with open(filepath, "r", encoding="utf-8") as f:
-        sql = f.read()
+    # Проверка на prod
+    if is_prod_env(env_file):
+        print(f"{Colors.RED}⚠️  Это ПРОДАКШН база!{Colors.RESET}")
+        response = input("Продолжить? (введите 'yes' для подтверждения): ").strip().lower()
+        if response != 'yes':
+            print("❌ Отменено пользователем, переходим к следующему окружению")
+            return
+
+    # Маскируем пароль в выводе
+    db_display = DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else DATABASE_URL
+    print(f"🔌 Подключение к БД: {db_display}")
+
+    conn = None
     try:
-        await conn.execute(sql)
+        conn = await asyncpg.connect(DATABASE_URL)
     except Exception as e:
-        print(f"❌ Error executing {filename}: {e}")
-        raise
-    print(f"✅ {filename} applied")
-
-async def run_python_migration(filename):
-    filepath = MIGRATIONS_DIR / filename
-    print(f"🐍 Applying Python migration: {filename}")
-    env = os.environ.copy()
-    result = subprocess.run([sys.executable, str(filepath)], env=env, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"❌ Python migration {filename} failed:")
-        print(result.stderr)
-        raise RuntimeError(f"Migration {filename} failed with code {result.returncode}")
-    print(result.stdout)
-    print(f"✅ {filename} applied")
-
-async def main():
-    print("🚀 Starting unified migration runner")
-    conn = await asyncpg.connect(DATABASE_URL)
+        print(f"{Colors.RED}❌ Не удалось подключиться к БД: {e}{Colors.RESET}")
+        return
 
     try:
-        await ensure_migrations_table(conn)
+        # Таблица schema_migrations (с явной схемой public)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS public.schema_migrations (
+                id SERIAL PRIMARY KEY,
+                filename TEXT NOT NULL UNIQUE,
+                applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+        """)
 
-        for filename in MIGRATION_ORDER:
-            if await is_migration_applied(conn, filename):
-                print(f"⏭️  Skipping already applied migration: {filename}")
+        applied = set()
+        for row in await conn.fetch("SELECT filename FROM public.schema_migrations"):
+            applied.add(row['filename'])
+
+        # Все .sql файлы из папки migrations
+        mig_dir = Path(__file__).parent
+        sql_files = sorted(mig_dir.glob("*.sql"))
+
+        for filepath in sql_files:
+            if filepath.name in applied:
+                print(f"⏭️  Skipping already applied migration: {filepath.name}")
                 continue
 
-            if filename.endswith(".sql"):
-                await run_sql_file(conn, filename)
-            elif filename.endswith(".py"):
-                await conn.close()
-                await run_python_migration(filename)
-                conn = await asyncpg.connect(DATABASE_URL)
-                await ensure_migrations_table(conn)
-            else:
-                print(f"⚠️  Unknown file type: {filename}, skipping")
+            print(f"📄 Applying SQL migration: {filepath.name}")
+            sql = filepath.read_text(encoding='utf-8')
+            try:
+                await conn.execute(sql)
+                await conn.execute(
+                    "INSERT INTO public.schema_migrations (filename) VALUES ($1)",
+                    filepath.name
+                )
+                print(f"✅ {filepath.name} applied")
+            except Exception as e:
+                print(f"{Colors.RED}❌ Error executing {filepath.name}: {e}{Colors.RESET}")
+                # Прерываем только для текущей БД
+                break
 
-            await mark_migration_applied(conn, filename)
-
-        print("🎉 All migrations applied successfully")
+        print(f"{Colors.GREEN}🎉 Миграции для {env_file.name} успешно применены{Colors.RESET}")
 
     except Exception as e:
-        print(f"❌ Migration failed: {e}")
-        sys.exit(1)
+        print(f"{Colors.RED}❌ Ошибка при применении миграций для {env_file.name}: {e}{Colors.RESET}")
     finally:
-        await conn.close()
+        if conn:
+            await conn.close()
+
+async def main():
+    env_files = find_env_files()
+    if not env_files:
+        print("❌ Не найдено файлов окружения из списка разрешённых:")
+        print(f"   {ALLOWED_ENV_FILES}")
+        print("   Создайте нужные файлы или добавьте имена в ALLOWED_ENV_FILES в скрипте.")
+        sys.exit(1)
+
+    print(f"Найдено файлов окружения: {[f.name for f in env_files]}")
+
+    for env_file in env_files:
+        await apply_migrations_for_env(env_file)
+
+    print("\n✅ Все операции завершены")
 
 if __name__ == "__main__":
     asyncio.run(main())

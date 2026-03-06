@@ -29,41 +29,46 @@ class ExecuteNodeUseCase:
         model: Optional[str],
         background_tasks: BackgroundTasks,
     ):
-        # 1. Проверяем run
-        run = await run_repository.get_run(run_id)
-        if not run:
-            raise ValueError(f"Run {run_id} not found")
-        if run["status"] != "OPEN":
-            raise ValueError(f"Run {run_id} is not OPEN (status={run['status']})")
-
-        # 2. Проверяем узел
-        node = await workflow_repository.get_workflow_node_by_id(node_definition_id)
-        if not node:
-            raise ValueError(f"Node {node_definition_id} not found")
-        if str(node["workflow_id"]) != str(run["workflow_id"]):
-            raise ValueError(f"Node does not belong to workflow {run['workflow_id']}")
-
-        # 3. Проверяем родителя
-        if parent_execution_id:
-            parent = await node_execution_repository.get_node_execution(parent_execution_id)
-            if not parent:
-                raise ValueError(f"Parent execution {parent_execution_id} not found")
-            if parent["status"] not in ("COMPLETED", "VALIDATED"):
-                raise ValueError(f"Parent status must be COMPLETED or VALIDATED, got {parent['status']}")
-
-        # 4. Ищем существующее выполнение по идемпотентному ключу
-        existing = await node_execution_repository.find_existing_execution(
-            run_id=run_id,
-            node_definition_id=node_definition_id,
-            parent_execution_id=parent_execution_id,
-            idempotency_key=idempotency_key,
-        )
-        if existing:
-            # Возвращаем существующее выполнение независимо от его статуса
-            return existing
-
-        # 5. Создаём новое выполнение
+        # Вся критическая логика выполняется в транзакции с блокировкой run
         async with transaction() as tx:
+            # 1. Блокируем run и проверяем статус
+            run_row = await tx.conn.fetchrow(
+                "SELECT * FROM runs WHERE id = $1 FOR UPDATE", run_id
+            )
+            if not run_row:
+                raise ValueError(f"Run {run_id} not found")
+            run = dict(run_row)
+            if run["status"] != "OPEN":
+                raise ValueError(f"Run {run_id} is not OPEN (status={run['status']})")
+
+            # 2. Проверяем узел (блокировка не требуется, но используем tx для консистентности)
+            node = await workflow_repository.get_workflow_node_by_id(node_definition_id)
+            if not node:
+                raise ValueError(f"Node {node_definition_id} not found")
+            if str(node["workflow_id"]) != str(run["workflow_id"]):
+                raise ValueError(f"Node does not belong to workflow {run['workflow_id']}")
+
+            # 3. Проверяем родителя (используем tx для чтения)
+            if parent_execution_id:
+                parent = await node_execution_repository.get_node_execution(parent_execution_id, tx=tx)
+                if not parent:
+                    raise ValueError(f"Parent execution {parent_execution_id} not found")
+                if parent["status"] not in ("COMPLETED", "VALIDATED"):
+                    raise ValueError(f"Parent status must be COMPLETED or VALIDATED, got {parent['status']}")
+
+            # 4. Ищем существующее выполнение по идемпотентному ключу (внутри транзакции)
+            existing = await node_execution_repository.find_existing_execution(
+                run_id=run_id,
+                node_definition_id=node_definition_id,
+                parent_execution_id=parent_execution_id,
+                idempotency_key=idempotency_key,
+                tx=tx,  # ADDED for ADR-010: use transaction
+            )
+            if existing:
+                # Возвращаем существующее выполнение независимо от его статуса
+                return existing
+
+            # 5. Создаём новое выполнение
             exec_id = await node_execution_repository.create_node_execution(
                 run_id=run_id,
                 node_definition_id=node_definition_id,
@@ -74,7 +79,7 @@ class ExecuteNodeUseCase:
             )
             new_exec = await node_execution_repository.get_node_execution(exec_id, tx=tx)
 
-        # 6. Запускаем фоновую задачу
+        # 6. Фоновая задача (уже вне транзакции)
         background_tasks.add_task(
             self._complete_execution,
             exec_id=exec_id,

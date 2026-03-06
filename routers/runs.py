@@ -72,7 +72,7 @@ async def validate_execution(exec_id: str):
     Требует статус COMPLETED и run в состоянии OPEN.
     """
     async with transaction() as tx:
-        # 1. Блокируем целевую запись
+        # 1. Блокируем целевую запись выполнения
         target_row = await tx.conn.fetchrow(
             "SELECT * FROM node_executions WHERE id = $1 FOR UPDATE", exec_id
         )
@@ -89,11 +89,17 @@ async def validate_execution(exec_id: str):
                 detail=f"Cannot validate execution with status {target['status']}"
             )
 
-        run = await run_repository.get_run(target["run_id"], tx=tx)
-        if not run or run["status"] != "OPEN":
+        # 2. Блокируем соответствующий run и проверяем его статус
+        run_row = await tx.conn.fetchrow(
+            "SELECT * FROM runs WHERE id = $1 FOR UPDATE", target["run_id"]
+        )
+        if not run_row:
+            raise HTTPException(status_code=404, detail="Run not found")
+        run = dict(run_row)
+        if run["status"] != "OPEN":
             raise HTTPException(status_code=409, detail="Run is not OPEN, cannot validate")
 
-        # FIX: use project_id instead of run_id to find active execution project-wide
+        # 3. Ищем активное выполнение для этого node_definition_id и блокируем его
         active_row = await tx.conn.fetchrow("""
             SELECT * FROM node_executions
             WHERE project_id = $1
@@ -121,6 +127,7 @@ async def validate_execution(exec_id: str):
                     active["output_artifact_id"], "SUPERSEDED", tx=tx
                 )
 
+        # 4. Валидируем текущее выполнение
         await node_execution_repository.validate_execution(exec_id, tx=tx)
 
         if target.get("output_artifact_id"):
@@ -128,7 +135,7 @@ async def validate_execution(exec_id: str):
                 target["output_artifact_id"], "ACTIVE", tx=tx
             )
 
-        # ADDED for ADR-006: update project_truth_snapshot
+        # 5. Обновляем снапшот истины (ADR-006)
         project_id = run["project_id"]
         node_def_id = target["node_definition_id"]
         artifact_id = target.get("output_artifact_id")
@@ -137,7 +144,6 @@ async def validate_execution(exec_id: str):
             logical_key = artifact.get("logical_key") if artifact else None
             version = artifact.get("version") if artifact else None
         else:
-            # По ограничению validated_requires_artifact это не должно происходить, но оставим защиту
             logical_key = None
             version = None
 
@@ -164,18 +170,51 @@ async def validate_execution(exec_id: str):
         previous_active_id=previous_active_id,
     )
 
-@router.post("/runs/{run_id}/freeze")
+@router.post("/runs/{run_id}/freeze", response_model=RunResponse)
 async def freeze_run(run_id: str):
-    run = await run_repository.get_run(run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if run["status"] != "OPEN":
-        raise HTTPException(status_code=400, detail=f"Run is not OPEN (status={run['status']})")
-    await run_repository.update_run_status(run_id, "FROZEN")
-    return {"status": "frozen"}
+    """
+    Переводит run из OPEN в FROZEN. Атомарная операция с проверкой ожидаемого статуса.
+    """
+    async with transaction() as tx:
+        updated = await run_repository.update_run_status(
+            run_id, "FROZEN", expected_status="OPEN", tx=tx
+        )
+        if not updated:
+            run = await run_repository.get_run(run_id, tx=tx)
+            if not run:
+                raise HTTPException(status_code=404, detail="Run not found")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot freeze run with status {run['status']} (expected OPEN)"
+            )
+        run = await run_repository.get_run(run_id, tx=tx)
+    return run
+
+@router.post("/runs/{run_id}/archive", response_model=RunResponse)
+async def archive_run(run_id: str):
+    """
+    Переводит run из FROZEN в ARCHIVED. Атомарная операция с проверкой ожидаемого статуса.
+    """
+    async with transaction() as tx:
+        updated = await run_repository.update_run_status(
+            run_id, "ARCHIVED", expected_status="FROZEN", tx=tx
+        )
+        if not updated:
+            run = await run_repository.get_run(run_id, tx=tx)
+            if not run:
+                raise HTTPException(status_code=404, detail="Run not found")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot archive run with status {run['status']} (expected FROZEN)"
+            )
+        run = await run_repository.get_run(run_id, tx=tx)
+    return run
 
 @router.post("/executions/{exec_id}/supersede")
 async def supersede_execution(exec_id: str, new_execution_id: str):
+    """
+    Замещает одно выполнение другим. Работает только в OPEN run.
+    """
     async with transaction() as tx:
         exec_record = await node_execution_repository.get_node_execution(exec_id, tx=tx)
         if not exec_record:
@@ -185,8 +224,18 @@ async def supersede_execution(exec_id: str, new_execution_id: str):
                 status_code=400,
                 detail=f"Cannot supersede execution with status {exec_record['status']}"
             )
+
+        # Блокируем run и проверяем статус
+        run_row = await tx.conn.fetchrow(
+            "SELECT * FROM runs WHERE id = $1 FOR UPDATE", exec_record["run_id"]
+        )
+        if not run_row or run_row["status"] != "OPEN":
+            raise HTTPException(status_code=409, detail="Run is not OPEN, cannot supersede")
+
         new_exec = await node_execution_repository.get_node_execution(new_execution_id, tx=tx)
         if not new_exec:
             raise HTTPException(status_code=404, detail="New execution not found")
+
         await node_execution_repository.supersede_execution(exec_id, new_execution_id, tx=tx)
+
     return {"status": "superseded"}

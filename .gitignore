@@ -45,6 +45,7 @@ scripts/*
 
 # Backups
 *.sql
+!migrations/000_full_schema.sql
 project_dump.txt
 backups/
 *.db
@@ -82,3 +83,6 @@ migrations/*.sql
 test-results/
 frontend/test-results/
 frontend/playwright-report/
+
+migrations_backup_20260306_113223/
+.envrc

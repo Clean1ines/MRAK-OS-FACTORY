@@ -97,8 +97,12 @@ async def find_existing_execution(
     node_definition_id: str,
     parent_execution_id: Optional[str],
     idempotency_key: str,
-    tx=None
+    tx=None  # ADDED for ADR-010: support transaction
 ) -> Optional[Dict[str, Any]]:
+    """
+    Ищет существующее выполнение по идемпотентному ключу.
+    Если передан tx, используется его соединение, иначе создаётся новое.
+    """
     if tx:
         conn = tx.conn
         close_conn = False

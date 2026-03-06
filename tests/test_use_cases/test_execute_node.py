@@ -1,4 +1,3 @@
-# tests/test_use_cases/test_execute_node.py
 """
 Unit tests for ExecuteNodeUseCase with proper async mocks.
 """
@@ -53,12 +52,23 @@ def mock_background_tasks(mocker):
 
 @pytest.fixture
 def mock_transaction(mocker):
-    # Mock the transaction context manager so it returns an async context manager
+    """Provides a mocked transaction context manager with an accessible transaction object."""
+    # Create the mock transaction object that will be returned by __aenter__
+    mock_tx = AsyncMock()
+    mock_tx.conn = AsyncMock()
+    mock_tx.conn.fetchrow = AsyncMock()  # this will be configured per test
+
+    # Create the context manager mock
     mock_ctx = AsyncMock()
-    mock_ctx.__aenter__ = AsyncMock(return_value=MagicMock())  # return a dummy tx object
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_tx)
     mock_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    # Patch the transaction function to return our context manager
     mocker.patch('use_cases.execute_node.transaction', return_value=mock_ctx)
-    return mock_ctx  # this is the context manager, not the tx object
+
+    # Attach the transaction mock to the context manager so tests can configure it
+    mock_ctx.tx = mock_tx
+    return mock_ctx
 
 @pytest.fixture
 def use_case(mock_artifact_service):
@@ -102,16 +112,19 @@ async def test_execute_new_execution_success(
     input_artifact_ids = ["art1", "art2"]
     model = "test-model"
     project_id = str(uuid.uuid4())
+    workflow_id = str(uuid.uuid4())
 
-    mock_run_repo.get_run.return_value = {
+    # Configure the transaction mock to return a run row
+    mock_transaction.tx.conn.fetchrow.return_value = {
         "id": run_id,
         "status": "OPEN",
         "project_id": project_id,
-        "workflow_id": str(uuid.uuid4())
+        "workflow_id": workflow_id
     }
+
     mock_workflow_repo.get_workflow_node_by_id.return_value = {
         "id": node_id,
-        "workflow_id": mock_run_repo.get_run.return_value["workflow_id"],
+        "workflow_id": workflow_id,
         "config": {}
     }
     mock_node_exec_repo.find_existing_execution.return_value = None
@@ -131,13 +144,18 @@ async def test_execute_new_execution_success(
         background_tasks=mock_background_tasks
     )
 
-    mock_run_repo.get_run.assert_awaited_once_with(run_id)
+    # Verify that the direct SQL query was called
+    mock_transaction.tx.conn.fetchrow.assert_awaited_once_with(
+        "SELECT * FROM runs WHERE id = $1 FOR UPDATE", run_id
+    )
+
     mock_workflow_repo.get_workflow_node_by_id.assert_awaited_once_with(node_id)
     mock_node_exec_repo.find_existing_execution.assert_awaited_once_with(
         run_id=run_id,
         node_definition_id=node_id,
         parent_execution_id=parent_id,
-        idempotency_key=idempotency_key
+        idempotency_key=idempotency_key,
+        tx=mock_transaction.tx
     )
     mock_node_exec_repo.create_node_execution.assert_awaited_once_with(
         run_id=run_id,
@@ -145,9 +163,9 @@ async def test_execute_new_execution_success(
         parent_execution_id=parent_id,
         idempotency_key=idempotency_key,
         input_artifact_ids=input_artifact_ids,
-        tx=mocker.ANY
+        tx=mock_transaction.tx
     )
-    mock_node_exec_repo.get_node_execution.assert_awaited_with(new_exec_id, tx=mocker.ANY)
+    mock_node_exec_repo.get_node_execution.assert_awaited_with(new_exec_id, tx=mock_transaction.tx)
 
     # Verify background task was scheduled with correct kwargs
     mock_background_tasks.add_task.assert_called_once()
@@ -175,16 +193,19 @@ async def test_execute_existing_execution(
     run_id = str(uuid.uuid4())
     node_id = str(uuid.uuid4())
     existing_exec = dummy_execution(status="COMPLETED")
+    workflow_id = str(uuid.uuid4())
 
-    mock_run_repo.get_run.return_value = {
+    # Configure transaction to return a run row
+    mock_transaction.tx.conn.fetchrow.return_value = {
         "id": run_id,
         "status": "OPEN",
         "project_id": "proj",
-        "workflow_id": "wf"
+        "workflow_id": workflow_id
     }
+
     mock_workflow_repo.get_workflow_node_by_id.return_value = {
         "id": node_id,
-        "workflow_id": "wf",
+        "workflow_id": workflow_id,
         "config": {}
     }
     mock_node_exec_repo.find_existing_execution.return_value = existing_exec
@@ -209,13 +230,19 @@ async def test_execute_run_not_found(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
-    mock_background_tasks
+    mock_background_tasks,
+    mock_transaction
 ):
-    mock_run_repo.get_run.return_value = None
+    run_id = "missing"  # Not a UUID, but fetchrow is mocked so no real DB call
+    node_id = "node"
+
+    # Simulate run not found: fetchrow returns None
+    mock_transaction.tx.conn.fetchrow.return_value = None
+
     with pytest.raises(ValueError, match="Run .* not found"):
         await use_case.execute(
-            run_id="missing",
-            node_definition_id="node",
+            run_id=run_id,
+            node_definition_id=node_id,
             parent_execution_id=None,
             idempotency_key="key",
             input_artifact_ids=[],
@@ -229,13 +256,24 @@ async def test_execute_run_not_open(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
-    mock_background_tasks
+    mock_background_tasks,
+    mock_transaction
 ):
-    mock_run_repo.get_run.return_value = {"id": "r", "status": "FROZEN"}
+    run_id = "r"
+    node_id = "node"
+
+    # Return a run with status FROZEN
+    mock_transaction.tx.conn.fetchrow.return_value = {
+        "id": run_id,
+        "status": "FROZEN",
+        "project_id": "proj",
+        "workflow_id": "wf"
+    }
+
     with pytest.raises(ValueError, match="Run .* is not OPEN"):
         await use_case.execute(
-            run_id="r",
-            node_definition_id="node",
+            run_id=run_id,
+            node_definition_id=node_id,
             parent_execution_id=None,
             idempotency_key="key",
             input_artifact_ids=[],
@@ -249,14 +287,26 @@ async def test_execute_node_not_found(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
-    mock_background_tasks
+    mock_background_tasks,
+    mock_transaction
 ):
-    mock_run_repo.get_run.return_value = {"id": "r", "status": "OPEN"}
+    run_id = "r"
+    node_id = "missing"
+
+    # Return a valid run
+    mock_transaction.tx.conn.fetchrow.return_value = {
+        "id": run_id,
+        "status": "OPEN",
+        "project_id": "proj",
+        "workflow_id": "wf"
+    }
+
     mock_workflow_repo.get_workflow_node_by_id.return_value = None
+
     with pytest.raises(ValueError, match="Node .* not found"):
         await use_case.execute(
-            run_id="r",
-            node_definition_id="missing",
+            run_id=run_id,
+            node_definition_id=node_id,
             parent_execution_id=None,
             idempotency_key="key",
             input_artifact_ids=[],
@@ -270,17 +320,26 @@ async def test_execute_node_workflow_mismatch(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
-    mock_background_tasks
+    mock_background_tasks,
+    mock_transaction
 ):
-    mock_run_repo.get_run.return_value = {"id": "r", "status": "OPEN", "workflow_id": "wf1"}
+    run_id = "r"
+    node_id = "node"
+
+    mock_transaction.tx.conn.fetchrow.return_value = {
+        "id": run_id,
+        "status": "OPEN",
+        "workflow_id": "wf1"
+    }
     mock_workflow_repo.get_workflow_node_by_id.return_value = {
-        "id": "node",
+        "id": node_id,
         "workflow_id": "wf2"
     }
+
     with pytest.raises(ValueError, match="Node does not belong to workflow"):
         await use_case.execute(
-            run_id="r",
-            node_definition_id="node",
+            run_id=run_id,
+            node_definition_id=node_id,
             parent_execution_id=None,
             idempotency_key="key",
             input_artifact_ids=[],
@@ -294,24 +353,37 @@ async def test_execute_parent_not_found(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
-    mock_background_tasks
+    mock_background_tasks,
+    mock_transaction
 ):
-    mock_run_repo.get_run.return_value = {"id": "r", "status": "OPEN", "workflow_id": "wf"}
-    mock_workflow_repo.get_workflow_node_by_id.return_value = {"id": "node", "workflow_id": "wf"}
-    mock_node_exec_repo.get_node_execution.return_value = None
+    run_id = "r"
+    node_id = "node"
     parent_id = str(uuid.uuid4())
+
+    mock_transaction.tx.conn.fetchrow.return_value = {
+        "id": run_id,
+        "status": "OPEN",
+        "project_id": "proj",
+        "workflow_id": "wf"
+    }
+    mock_workflow_repo.get_workflow_node_by_id.return_value = {
+        "id": node_id,
+        "workflow_id": "wf"
+    }
+    mock_node_exec_repo.get_node_execution.return_value = None
+
     with pytest.raises(ValueError, match="Parent execution .* not found"):
         await use_case.execute(
-            run_id="r",
-            node_definition_id="node",
+            run_id=run_id,
+            node_definition_id=node_id,
             parent_execution_id=parent_id,
             idempotency_key="key",
             input_artifact_ids=[],
             model=None,
             background_tasks=mock_background_tasks
         )
-    # Real call does not pass tx=None
-    mock_node_exec_repo.get_node_execution.assert_awaited_once_with(parent_id)
+
+    mock_node_exec_repo.get_node_execution.assert_awaited_once_with(parent_id, tx=mock_transaction.tx)
 
 @pytest.mark.asyncio
 async def test_execute_parent_invalid_status(
@@ -319,19 +391,32 @@ async def test_execute_parent_invalid_status(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
-    mock_background_tasks
+    mock_background_tasks,
+    mock_transaction
 ):
-    mock_run_repo.get_run.return_value = {"id": "r", "status": "OPEN", "workflow_id": "wf"}
-    mock_workflow_repo.get_workflow_node_by_id.return_value = {"id": "node", "workflow_id": "wf"}
+    run_id = "r"
+    node_id = "node"
     parent_id = str(uuid.uuid4())
+
+    mock_transaction.tx.conn.fetchrow.return_value = {
+        "id": run_id,
+        "status": "OPEN",
+        "project_id": "proj",
+        "workflow_id": "wf"
+    }
+    mock_workflow_repo.get_workflow_node_by_id.return_value = {
+        "id": node_id,
+        "workflow_id": "wf"
+    }
     mock_node_exec_repo.get_node_execution.return_value = {
         "id": parent_id,
         "status": "FAILED"
     }
+
     with pytest.raises(ValueError, match="Parent status must be COMPLETED or VALIDATED"):
         await use_case.execute(
-            run_id="r",
-            node_definition_id="node",
+            run_id=run_id,
+            node_definition_id=node_id,
             parent_execution_id=parent_id,
             idempotency_key="key",
             input_artifact_ids=[],
@@ -352,8 +437,20 @@ async def test_execute_unique_violation(
     """Simulate a UniqueViolationError when creating node execution."""
     run_id = str(uuid.uuid4())
     node_id = str(uuid.uuid4())
-    mock_run_repo.get_run.return_value = {"id": run_id, "status": "OPEN", "project_id": "proj", "workflow_id": "wf"}
-    mock_workflow_repo.get_workflow_node_by_id.return_value = {"id": node_id, "workflow_id": "wf", "config": {}}
+    workflow_id = str(uuid.uuid4())
+
+    mock_transaction.tx.conn.fetchrow.return_value = {
+        "id": run_id,
+        "status": "OPEN",
+        "project_id": "proj",
+        "workflow_id": workflow_id
+    }
+
+    mock_workflow_repo.get_workflow_node_by_id.return_value = {
+        "id": node_id,
+        "workflow_id": workflow_id,
+        "config": {}
+    }
     mock_node_exec_repo.find_existing_execution.return_value = None
 
     from asyncpg.exceptions import UniqueViolationError
@@ -371,7 +468,7 @@ async def test_execute_unique_violation(
         )
 
 # ----------------------------------------------------------------------
-# Tests for _complete_execution (background task)
+# Tests for _complete_execution (background task) - unchanged
 # ----------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -428,7 +525,6 @@ async def test_complete_execution_success(
             'required_input_types': []
         }
     )
-    # We cannot know the exact tx object, so use ANY
     mock_node_exec_repo.update_node_execution_status.assert_awaited_once_with(
         exec_id=exec_id,
         status="COMPLETED",
@@ -458,7 +554,6 @@ async def test_complete_execution_node_not_found(
         input_artifact_ids=[]
     )
 
-    # Should catch exception and set status to FAILED
     mock_node_exec_repo.update_node_execution_status.assert_awaited_once_with(
         exec_id=exec_id,
         status="FAILED",

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Response, Request, HTTPException, Depends, Securi
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta
+
 import os
 import hashlib
 import secrets
@@ -52,7 +53,7 @@ async def login(body: dict):
     if not master_key:
         raise HTTPException(status_code=400, detail="Master key required")
     
-    expected_key = os.getenv("MASTER_KEY")
+    expected_key = os.getenv("MASTER_KEY")   
     if not expected_key:
         if len(master_key) < 8:
             raise HTTPException(status_code=401, detail="Invalid master key")

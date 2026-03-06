@@ -53,8 +53,17 @@ async def get_run(run_id: str, tx=None) -> Optional[Dict[str, Any]]:
         if close_conn:
             await conn.close()
 
-async def update_run_status(run_id: str, status: str, tx=None) -> None:
-    """Обновляет статус Run. Если статус FROZEN, заполняет frozen_at, если ARCHIVED – archived_at."""
+async def update_run_status(
+    run_id: str,
+    new_status: str,
+    expected_status: Optional[str] = None,
+    tx=None
+) -> bool:
+    """
+    Обновляет статус Run. Возвращает True, если обновление выполнено, иначе False.
+    Если указан expected_status, обновление происходит только при совпадении текущего статуса.
+    При статусах FROZEN или ARCHIVED автоматически заполняет соответствующие временные метки.
+    """
     if tx:
         conn = tx.conn
         close_conn = False
@@ -62,24 +71,28 @@ async def update_run_status(run_id: str, status: str, tx=None) -> None:
         conn = await get_connection()
         close_conn = True
     try:
-        if status == "FROZEN":
-            await conn.execute("""
-                UPDATE runs
-                SET status = $1, frozen_at = NOW()
-                WHERE id = $2
-            """, status, run_id)
-        elif status == "ARCHIVED":
-            await conn.execute("""
-                UPDATE runs
-                SET status = $1, archived_at = NOW()
-                WHERE id = $2
-            """, status, run_id)
+        # Формируем запрос с условием на ожидаемый статус
+        query = "UPDATE runs SET status = $1"
+        params = [new_status]
+        if expected_status:
+            query += " WHERE id = $2 AND status = $3"
+            params.extend([run_id, expected_status])
         else:
-            await conn.execute("""
-                UPDATE runs
-                SET status = $1
-                WHERE id = $2
-            """, status, run_id)
+            query += " WHERE id = $2"
+            params.append(run_id)
+
+        result = await conn.execute(query, *params)
+        if result == "UPDATE 0":
+            return False
+
+        # Заполняем временные метки в зависимости от нового статуса
+        if new_status == "FROZEN":
+            await conn.execute("UPDATE runs SET frozen_at = NOW() WHERE id = $1", run_id)
+        elif new_status == "ARCHIVED":
+            await conn.execute("UPDATE runs SET archived_at = NOW() WHERE id = $1", run_id)
+        # Для других статусов (например, OPEN) метки не трогаем
+
+        return True
     finally:
         if close_conn:
             await conn.close()

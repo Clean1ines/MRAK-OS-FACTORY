@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
-import { NodeData, EdgeData } from '@shared/lib';
+import { GraphNode, GraphEdge } from '@/entities/workflow/store/types';
 
 interface IOSNodeProps {
-  node: NodeData;
-  nodes: NodeData[]; // ADDED: для поиска имени узла по ID
-  edges: EdgeData[];
+  node: GraphNode;
+  position: { x: number; y: number };
+  edges: GraphEdge[];
   isSelected: boolean;
   isConnecting?: boolean;
   onDragStart: (nodeId: string, e: React.MouseEvent | React.TouchEvent, element: HTMLDivElement) => void;
   onStartConnection?: (nodeId: string) => void;
   onCompleteConnection?: (targetNodeId: string) => void;
-  onEdit?: (recordId: string, promptKey: string, config: Record<string, unknown>) => void;
-  onRequestDelete: (recordId: string | undefined, nodeId: string, name: string) => void;
-  onRequestDeleteEdge?: (edgeId: string, sourceNode: string, targetNode: string) => void;
+  onEdit?: (nodeId: string, promptKey: string, config: Record<string, unknown>) => void;
+  onRequestDelete: (nodeId: string) => void;
+  onRequestDeleteEdge?: (edgeId: string) => void;
 }
 
 export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
   node,
-  nodes,
+  position,
   edges,
   isSelected,
   isConnecting = false,
@@ -46,29 +46,24 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
   })();
 
   // Находим все рёбра, связанные с этим узлом
-  const connectedEdges = edges.filter(e => e.source_node === node.node_id || e.target_node === node.node_id);
-  // Для каждого ребра определяем, с каким узлом оно связывает, и ищем его имя
-  const connections = connectedEdges.map(e => {
-    const otherNodeId = e.source_node === node.node_id ? e.target_node : e.source_node;
-    const otherNode = nodes.find(n => n.node_id === otherNodeId);
-    return {
-      edgeId: e.id,
-      otherNodeId,
-      otherNodeName: otherNode?.prompt_key || otherNodeId.substring(0, 6),
-      direction: e.source_node === node.node_id ? 'outgoing' : 'incoming',
-    };
-  });
+  const connectedEdges = edges.filter(e => e.source === node.id || e.target === node.id);
+  // Для каждого ребра определяем, с каким узлом оно связывает
+  const connections = connectedEdges.map(e => ({
+    edgeId: e.id,
+    otherNodeId: e.source === node.id ? e.target : e.source,
+    direction: e.source === node.id ? 'outgoing' : 'incoming' as const,
+  }));
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onEdit && node.recordId) {
-      onEdit(node.recordId, node.prompt_key, node.config || {});
+    if (onEdit) {
+      onEdit(node.id, node.promptKey, node.config);
     }
   };
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onRequestDelete(node.recordId, node.node_id, node.prompt_key);
+    onRequestDelete(node.id);
   };
 
   const toggleEdgeMenu = (e: React.MouseEvent) => {
@@ -90,18 +85,18 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
         ${isConnecting ? 'ring-2 ring-[var(--bronze-base)] ring-offset-2 ring-offset-black' : ''}
       `}
       style={{
-        transform: `translate3d(${node.position_x}px, ${node.position_y}px, 0)`,
+        transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
         background: 'linear-gradient(145deg, rgba(30,30,32,0.9), rgba(20,20,22,0.95))',
         transitionProperty: 'opacity, border-color, box-shadow, ring-color, background-color',
       }}
-      onMouseDown={(e) => onDragStart(node.node_id, e, e.currentTarget)}
-      onTouchStart={(e) => onDragStart(node.node_id, e, e.currentTarget)}
+      onMouseDown={(e) => onDragStart(node.id, e, e.currentTarget)}
+      onTouchStart={(e) => onDragStart(node.id, e, e.currentTarget)}
       onTouchMove={(e) => e.preventDefault()}
       onDoubleClick={handleDoubleClick}
     >
       <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--ios-border)] pointer-events-none">
         <span className="text-[10px] text-[var(--bronze-base)] uppercase tracking-wider font-bold">
-          {node.prompt_key}
+          {node.promptKey}
         </span>
         <div className="flex items-center gap-1 pointer-events-auto">
           {/* Кнопка для отображения списка рёбер (иконка минуса/удаления) */}
@@ -131,7 +126,7 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
           </button>
           {onStartConnection && onCompleteConnection && (
             <button
-              onClick={(e) => { e.stopPropagation(); onStartConnection(node.node_id); }}
+              onClick={(e) => { e.stopPropagation(); onStartConnection(node.id); }}
               className="w-4 h-4 rounded-full bg-[var(--bronze-dim)] hover:bg-[var(--bronze-base)] transition-colors flex items-center justify-center"
               title="Start connection"
             >
@@ -163,13 +158,13 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
             connections.map(conn => (
               <div key={conn.edgeId} className="flex items-center justify-between p-1 hover:bg-[var(--ios-glass-bright)] rounded">
                 <span className="text-xs text-[var(--text-main)] truncate">
-                  {conn.otherNodeName} {conn.direction === 'outgoing' ? '→' : '←'}
+                  {conn.otherNodeId.substring(0, 6)} {conn.direction === 'outgoing' ? '→' : '←'}
                 </span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     if (onRequestDeleteEdge) {
-                      onRequestDeleteEdge(conn.edgeId, node.node_id, conn.otherNodeId);
+                      onRequestDeleteEdge(conn.edgeId);
                     }
                     setShowEdgeMenu(false);
                   }}
@@ -190,12 +185,12 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
       {!isCollapsed && (
         <>
           <div className="text-sm font-semibold text-[var(--text-main)] mb-2 pointer-events-none">
-            {node.prompt_key.replace(/_/g, ' ')}
+            {node.promptKey.replace(/_/g, ' ')}
           </div>
 
           {onCompleteConnection && (
             <div
-              onClick={(e) => { e.stopPropagation(); onCompleteConnection(node.node_id); }}
+              onClick={(e) => { e.stopPropagation(); onCompleteConnection(node.id); }}
               className="mt-2 pt-2 border-t border-[var(--ios-border)] text-[9px] text-[var(--text-muted)] hover:text-[var(--bronze-bright)] cursor-pointer transition-colors"
             >
               ⚡ Click to connect
@@ -217,4 +212,5 @@ export const IOSNode = React.forwardRef<HTMLDivElement, IOSNodeProps>(({
     </div>
   );
 });
+
 IOSNode.displayName = 'IOSNode';

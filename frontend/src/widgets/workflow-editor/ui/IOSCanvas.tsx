@@ -1,55 +1,55 @@
-import React, { useRef, useCallback, useState, useMemo } from 'react';
-import { NodeData, EdgeData } from '@shared/lib';
-import { useCanvasEngine } from '@/widgets/workflow-editor/lib/useCanvasEngine';
+import React, { useRef, useCallback, useState, useMemo, useEffect } from 'react';
+import { useWorkflowStore } from '@/entities/workflow/store/workflowStore';
+import { useVisibleNodes } from '@/entities/workflow/store/selectors';
 import { IOSNode } from '@/entities/node/ui/Node';
+import { Edge } from '@/entities/edge/ui/Edge';
 import { NODE_HALF_WIDTH, NODE_HALF_HEIGHT } from '@/shared/lib/constants/canvas';
 
 interface IOSCanvasProps {
-  nodes: NodeData[];
-  edges: EdgeData[];
-  onNodesChange: (nodes: NodeData[]) => void;
-  onEdgesChange: (edges: EdgeData[]) => void;
-  onAddCustomNode?: (x: number, y: number) => void;
-  onEditNode?: (recordId: string, promptKey: string, config: Record<string, unknown>) => void;
-  onRequestDeleteNode: (recordId: string | undefined, nodeId: string, name: string) => void;
-  onStartConnection?: (nodeId: string) => void; // ADDED
-  onCompleteConnection?: (targetNodeId: string) => void;
-  onRequestDeleteEdge?: (edgeId: string, sourceNode: string, targetNode: string) => void;
+  onOpenCreateModal?: (x: number, y: number) => void;
+  onOpenEditModal?: (nodeId: string) => void;
 }
 
 export const IOSCanvas: React.FC<IOSCanvasProps> = ({
-  nodes,
-  edges,
-  onNodesChange,
-  onEdgesChange,
-  onAddCustomNode,
-  onEditNode,
-  onRequestDeleteNode,
-  onStartConnection, // ADDED
-  onCompleteConnection,
-  onRequestDeleteEdge,
+  onOpenCreateModal,
+  onOpenEditModal,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
   const [connectingNode, setConnectingNode] = useState<string | null>(null);
 
-  const { pan, scale, selectedNode, handleWheel, handlePanStart, handleNodeDragStart } = useCanvasEngine(
-    nodes,
-    edges,
-    onNodesChange,
-    onEdgesChange
-  );
+  // Store
+  const visibleNodes = useWorkflowStore(state => state.graph.nodes);
+  const edges = useWorkflowStore(state => state.graph.edges);
+  const positions = useWorkflowStore(state => state.layout.positions);
+  const viewport = useWorkflowStore(state => state.viewport);
+  const selectedNodeId = useWorkflowStore(state => state.ui.selectedNodeId);
+  const currentWorkflowId = useWorkflowStore(state => state.ui.currentWorkflowId);
+  const moveNode = useWorkflowStore(state => state.moveNode);
+  const addEdge = useWorkflowStore(state => state.addEdge);
+  const updateNodeConfig = useWorkflowStore(state => state.updateNodeConfig);
+  const removeNode = useWorkflowStore(state => state.removeNode);
+  const removeEdge = useWorkflowStore(state => state.removeEdge);
+
+  // Логи
+  console.log('[IOSCanvas] render, currentWorkflowId:', currentWorkflowId);
+  console.log('[IOSCanvas] nodes count:', visibleNodes.length);
+  console.log('[IOSCanvas] edges count:', edges.length);
+
+  useEffect(() => {
+    console.log('[IOSCanvas] workflow changed to:', currentWorkflowId);
+  }, [currentWorkflowId]);
 
   const getVisibleCanvasBounds = useCallback(() => {
     if (!containerRef.current) return null;
     const rect = containerRef.current.getBoundingClientRect();
     return {
-      left: -pan.x / scale,
-      top: -pan.y / scale,
-      right: (rect.width - pan.x) / scale,
-      bottom: (rect.height - pan.y) / scale,
+      left: -viewport.cameraX / viewport.zoom,
+      top: -viewport.cameraY / viewport.zoom,
+      right: (rect.width - viewport.cameraX) / viewport.zoom,
+      bottom: (rect.height - viewport.cameraY) / viewport.zoom,
     };
-  }, [pan, scale]);
+  }, [viewport]);
 
   const adjustToViewport = useCallback((x: number, y: number) => {
     const bounds = getVisibleCanvasBounds();
@@ -75,158 +75,105 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     if (!containerRef.current) return { x: 0, y: 0 };
     const rect = containerRef.current.getBoundingClientRect();
     return {
-      x: (clientX - rect.left - pan.x) / scale,
-      y: (clientY - rect.top - pan.y) / scale,
+      x: (clientX - rect.left - viewport.cameraX) / viewport.zoom,
+      y: (clientY - rect.top - viewport.cameraY) / viewport.zoom,
     };
-  }, [pan, scale]);
+  }, [viewport]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const { x, y } = getCanvasCoords(e.clientX, e.clientY);
-    const { x: adjX, y: adjY } = adjustToViewport(x, y);
-    if (onAddCustomNode) {
-      onAddCustomNode(adjX, adjY);
+    console.log('[IOSCanvas] double click at screen', e.clientX, e.clientY);
+    if (onOpenCreateModal) {
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      const { x: adjX, y: adjY } = adjustToViewport(x, y);
+      console.log('[IOSCanvas] adjusted coords', adjX, adjY);
+      onOpenCreateModal(adjX, adjY);
+    } else {
+      // Старое поведение (на случай обратной совместимости)
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      const { x: adjX, y: adjY } = adjustToViewport(x, y);
+      useWorkflowStore.getState().addNode(
+        { type: 'prompt', promptKey: 'New Node', config: {} },
+        { x: adjX, y: adjY }
+      );
     }
-    setContextMenu(null);
-  }, [getCanvasCoords, adjustToViewport, onAddCustomNode]);
+  }, [getCanvasCoords, adjustToViewport, onOpenCreateModal]);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const { x, y } = getCanvasCoords(e.clientX, e.clientY);
-    setContextMenu({ x: e.clientX, y: e.clientY, canvasX: x, canvasY: y });
-  }, [getCanvasCoords]);
-
-  const addNodeFromMenu = useCallback((prompt_key: string) => {
+  const addNodeFromMenu = useCallback((type: string, promptKey: string) => {
     if (!contextMenu) return;
     const { x: adjX, y: adjY } = adjustToViewport(contextMenu.canvasX, contextMenu.canvasY);
-    const newNode: NodeData = {
-      id: crypto.randomUUID(),
-      node_id: crypto.randomUUID(),
-      prompt_key,
-      position_x: adjX,
-      position_y: adjY,
-      config: {},
-      recordId: undefined,
-    };
-    onNodesChange([...nodes, newNode]);
+    useWorkflowStore.getState().addNode(
+      { type, promptKey, config: {} },
+      { x: adjX, y: adjY }
+    );
     setContextMenu(null);
-  }, [contextMenu, nodes, onNodesChange, adjustToViewport]);
+  }, [contextMenu, adjustToViewport]);
 
-  const handleStartConnection = useCallback((nodeId: string) => {
-    console.log('🔵 handleStartConnection', nodeId);
-    setConnectingNode(nodeId);
-    if (onStartConnection) { // ADDED
-      onStartConnection(nodeId);
-    }
-  }, [onStartConnection]);
-
-  const handleCompleteConnection = useCallback((targetNodeId: string) => {
-    console.log('🟢 handleCompleteConnection', targetNodeId, 'connectingNode:', connectingNode);
-    if (connectingNode && connectingNode !== targetNodeId) {
-      const edgeExists = edges.some(
-        e => e.source_node === connectingNode && e.target_node === targetNodeId
-      );
-      if (!edgeExists) {
-        const newEdge: EdgeData = {
-          id: crypto.randomUUID(),
-          source_node: connectingNode,
-          target_node: targetNodeId,
-        };
-        onEdgesChange([...edges, newEdge]);
-      }
-    }
-    if (onCompleteConnection) {
-      onCompleteConnection(targetNodeId);
-    }
-    setConnectingNode(null);
-  }, [connectingNode, edges, onEdgesChange, onCompleteConnection]);
-
-  const handleCloseMenu = useCallback(() => {
-    setContextMenu(null);
+  const handleNodeDragStart = useCallback((nodeId: string, e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    // Будет восстановлено позже
   }, []);
 
-  const onWheelHandler = useCallback((e: React.WheelEvent) => {
-    if (containerRef.current) {
-      handleWheel(e, containerRef.current.getBoundingClientRect());
+  const handleNodeDragStop = useCallback((nodeId: string, pos: { x: number; y: number }) => {
+    moveNode(nodeId, pos);
+  }, [moveNode]);
+
+  const handleStartConnection = useCallback((nodeId: string) => {
+    setConnectingNode(nodeId);
+  }, []);
+
+  const handleCompleteConnection = useCallback((targetNodeId: string) => {
+    if (connectingNode && connectingNode !== targetNodeId) {
+      addEdge(connectingNode, targetNodeId);
     }
-  }, [handleWheel]);
+    setConnectingNode(null);
+  }, [connectingNode, addEdge]);
 
   const edgeElements = useMemo(() => {
     return edges.map(edge => {
-      const from = nodes.find(n => n.node_id === edge.source_node);
-      const to = nodes.find(n => n.node_id === edge.target_node);
-      if (!from || !to) return null;
-      const x1 = from.position_x + 140;
-      const y1 = from.position_y + 50;
-      const x2 = to.position_x;
-      const y2 = to.position_y + 50;
-      const cp1x = x1 + (x2 - x1) * 0.5;
+      const fromPos = positions[edge.source];
+      const toPos = positions[edge.target];
+      if (!fromPos || !toPos) return null;
       return (
-        <path
+        <Edge
           key={edge.id}
-          d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp1x} ${y2}, ${x2} ${y2}`}
-          stroke="var(--bronze-base)"
-          strokeWidth="1.5"
-          fill="none"
-          filter="url(#glow-line)"
-          markerEnd="url(#arrowhead)"
-          opacity="0.6"
-          style={{ pointerEvents: 'none' }}
+          edge={edge}
+          fromPos={fromPos}
+          toPos={toPos}
         />
       );
     });
-  }, [edges, nodes]);
+  }, [edges, positions]);
 
   const connectionLine = useMemo(() => {
     if (!connectingNode) return null;
-    const from = nodes.find(n => n.node_id === connectingNode);
-    if (!from) return null;
+    const fromPos = positions[connectingNode];
+    if (!fromPos) return null;
     return (
       <line
-        x1={from.position_x + 140}
-        y1={from.position_y + 50}
-        x2={(pan.x + 0) / scale}
-        y2={(pan.y + 0) / scale}
+        x1={fromPos.x + 140}
+        y1={fromPos.y + 50}
+        x2={(viewport.cameraX + 0) / viewport.zoom}
+        y2={(viewport.cameraY + 0) / viewport.zoom}
         stroke="var(--bronze-base)"
         strokeWidth="1.5"
         strokeDasharray="5,5"
         opacity="0.6"
       />
     );
-  }, [connectingNode, nodes, pan, scale]);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      handlePanStart(e);
-    }
-  }, [handlePanStart]);
+  }, [connectingNode, positions, viewport]);
 
   return (
     <div
       ref={containerRef}
       className="flex-1 relative overflow-hidden bg-[var(--bg-canvas)] cursor-crosshair touch-none"
-      data-testid="workspace-canvas"
-      onWheel={onWheelHandler}
-      onMouseDown={(e) => {
-        handleCloseMenu();
-        handlePanStart(e);
-      }}
-      onTouchStart={handleTouchStart}
       onDoubleClick={handleDoubleClick}
-      onContextMenu={handleContextMenu}
     >
-      <div className="absolute top-[15%] left-1/2 -translate-x-1/2 text-6xl font-bold text-[var(--bronze-base)] opacity-[0.03] select-none" style={{ pointerEvents: 'none' }}>
-        CRAFT IN SILENCE
-      </div>
-
       <div
         className="absolute w-full h-full origin-top-left"
         style={{
-          transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})`,
-          pointerEvents: 'none',
+          transform: `translate3d(${viewport.cameraX}px, ${viewport.cameraY}px, 0) scale(${viewport.zoom})`,
           willChange: 'transform',
         }}
       >
@@ -248,68 +195,31 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
         </svg>
 
         <div style={{ pointerEvents: 'auto' }}>
-          {nodes.map(node => (
+          {visibleNodes.map(node => (
             <IOSNode
               key={node.id}
               node={node}
-              nodes={nodes}
-              edges={edges}
-              isSelected={selectedNode === node.node_id}
-              isConnecting={connectingNode === node.node_id}
+              position={positions[node.id]}
+              isSelected={selectedNodeId === node.id}
+              isConnecting={connectingNode === node.id}
               onDragStart={handleNodeDragStart}
               onStartConnection={handleStartConnection}
               onCompleteConnection={handleCompleteConnection}
-              onEdit={onEditNode}
-              onRequestDelete={onRequestDeleteNode}
-              onRequestDeleteEdge={onRequestDeleteEdge}
+              onEdit={onOpenEditModal ? (id) => onOpenEditModal(id) : (id, promptKey, config) => updateNodeConfig(id, { promptKey, config })}
+              onRequestDelete={(id) => removeNode(id)}
+              onRequestDeleteEdge={(edgeId) => removeEdge(edgeId)}
+              edges={edges}
             />
           ))}
         </div>
       </div>
 
-      {contextMenu && (
-        <div
-          className="absolute z-[1000] bg-[var(--ios-glass)] backdrop-blur-md border border-[var(--ios-border)] rounded-lg p-2 shadow-[var(--shadow-heavy)]"
-          style={{ left: contextMenu.x, top: contextMenu.y, pointerEvents: 'auto' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="text-[10px] text-[var(--text-muted)] mb-2 px-2">Add Node</div>
-          <button
-            onClick={() => addNodeFromMenu('IDEA_CLARIFIER')}
-            className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--bronze-dim)] rounded text-[var(--text-main)]"
-          >
-            💡 Idea Clarifier
-          </button>
-          <button
-            onClick={() => addNodeFromMenu('BUSINESS_REQ_GEN')}
-            className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--bronze-dim)] rounded text-[var(--text-main)]"
-          >
-            📋 Business Req
-          </button>
-          <button
-            onClick={() => addNodeFromMenu('CODE_GEN')}
-            className="w-full text-left px-3 py-2 text-xs hover:bg-[var(--bronze-dim)] rounded text-[var(--text-main)]"
-          >
-            💻 Code Gen
-          </button>
-        </div>
-      )}
-
       <div className="absolute bottom-4 right-4 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-2 py-1 rounded border border-[var(--ios-border)]" style={{ pointerEvents: 'none' }}>
-        {Math.round(scale * 100)}%
-      </div>
-
-      <div className="absolute bottom-20 left-6 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-3 py-2 rounded border border-[var(--ios-border)] pointer-events-none">
-        <div>🖱️ Double-click: Custom node</div>
-        <div>🖱️ Right-click: Quick add</div>
-        <div>🔗 Click node port: Start connection</div>
-        <div>✋ Alt+Drag / 2-finger: Pan canvas</div>
-        <div>🎯 Drag node: Move</div>
-        <div>🔍 Scroll: Zoom</div>
+        {Math.round(viewport.zoom * 100)}%
       </div>
 
       <div className="absolute top-4 right-4 text-[10px] text-[var(--bronze-dim)] bg-black/80 px-2 py-1 rounded font-mono border border-[var(--bronze-dim)]" style={{ pointerEvents: 'none' }}>
-        Scale: {scale.toFixed(2)} | Pan: {Math.round(pan.x)}, {Math.round(pan.y)}
+        Scale: {viewport.zoom.toFixed(2)} | Pan: {Math.round(viewport.cameraX)}, {Math.round(viewport.cameraY)}
       </div>
     </div>
   );

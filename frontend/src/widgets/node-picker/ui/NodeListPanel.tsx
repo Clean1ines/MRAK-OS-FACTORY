@@ -1,22 +1,18 @@
-// frontend/src/components/ios/NodeListPanel.tsx
-// ADDED: Preview/Edit before import, exclude current workflow from list
-// ADDED: Clone on double-click, edit/delete buttons in created tab
-// ADDED: Duplicate check on import (same prompt_key and config)
-// FIXED: Removed duplicate check from clone (created tab)
-
+// src/widgets/node-picker/ui/NodeListPanel.tsx
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { NodeData } from '@shared/lib';
 import { EditNodeModal } from '@/features/node/edit-content/ui/EditNodeModal';
+import { useWorkflowStore } from '@/entities/workflow/store/workflowStore';
+import { GraphNode } from '@/entities/workflow/store/types';
 
 interface NodeListPanelProps {
   visible: boolean;
   onClose: () => void;
-  nodes: NodeData[];
-  onAddNode: (node: NodeData) => void;
-  onUpdateNode?: (recordId: string, promptKey: string, config: Record<string, unknown>) => Promise<void>;
-  onDeleteNode?: (recordId: string, nodeId: string) => void; // for deletion with confirmation (parent handles modal)
-  currentWorkflowId?: string | null; // to exclude current workflow from import list
+  nodes: GraphNode[]; // теперь GraphNode[]
+  onAddNode: (node: Omit<GraphNode, 'id'>, position?: { x: number; y: number }) => void;
+  onUpdateNode?: (nodeId: string, promptKey: string, config: Record<string, unknown>) => Promise<void>;
+  onDeleteNode?: (nodeId: string) => void;
+  currentWorkflowId?: string | null;
 }
 
 type TabType = 'created' | 'import';
@@ -38,13 +34,11 @@ interface NodeSummary {
   config?: Record<string, unknown>;
 }
 
-// Center of canvas (in world coordinates) – adjust if needed
 const CANVAS_CENTER = { x: 600, y: 400 };
 
-// Проверка на дубликат: сравниваем prompt_key и config (только для импорта)
-const isDuplicate = (nodes: NodeData[], promptKey: string, config: Record<string, unknown>): boolean => {
+const isDuplicate = (nodes: GraphNode[], promptKey: string, config: Record<string, unknown>): boolean => {
   return nodes.some(node => 
-    node.prompt_key === promptKey && 
+    node.promptKey === promptKey && 
     JSON.stringify(node.config) === JSON.stringify(config)
   );
 };
@@ -64,9 +58,10 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
   const [availableNodes, setAvailableNodes] = useState<NodeSummary[]>([]);
   const [loading, setLoading] = useState(false);
-
   const [previewNode, setPreviewNode] = useState<NodeSummary | null>(null);
-  const [editingNode, setEditingNode] = useState<NodeData | null>(null);
+  const [editingNode, setEditingNode] = useState<GraphNode | null>(null);
+
+  const store = useWorkflowStore();
 
   useEffect(() => {
     if (!visible) {
@@ -170,46 +165,40 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
     }
 
     onAddNode({
-      id: crypto.randomUUID(),
-      node_id: crypto.randomUUID(),
-      prompt_key: promptKey,
-      position_x: CANVAS_CENTER.x,
-      position_y: CANVAS_CENTER.y,
-      config: config,
-    });
+      type: 'prompt',
+      promptKey,
+      config,
+    }, CANVAS_CENTER);
 
     setPreviewNode(null);
   };
 
-  const handleNodeDoubleClick = (node: NodeData) => {
-    // Клонируем без проверки на дубликат (можно иметь несколько одинаковых)
+  const handleNodeDoubleClick = (node: GraphNode) => {
+    // Клонирование: создаём новый узел с теми же данными
     onAddNode({
-      id: crypto.randomUUID(),
-      node_id: crypto.randomUUID(),
-      prompt_key: node.prompt_key,
-      position_x: CANVAS_CENTER.x,
-      position_y: CANVAS_CENTER.y,
-      config: node.config ? JSON.parse(JSON.stringify(node.config)) : {},
-    });
+      type: node.type,
+      promptKey: node.promptKey,
+      config: JSON.parse(JSON.stringify(node.config)), // глубокое копирование
+    }, CANVAS_CENTER);
   };
 
-  const handleEditNode = (node: NodeData) => {
+  const handleEditNode = (node: GraphNode) => {
     setEditingNode(node);
   };
 
   const handleEditSave = async (promptKey: string, config: Record<string, unknown>) => {
     if (!editingNode) return;
-    if (editingNode.recordId && onUpdateNode) {
-      await onUpdateNode(editingNode.recordId, promptKey, config);
+    if (onUpdateNode) {
+      await onUpdateNode(editingNode.id, promptKey, config);
     } else {
-      toast.error('Cannot update unsaved node');
+      toast.error('Cannot update node');
     }
     setEditingNode(null);
   };
 
-  const handleDeleteNode = (node: NodeData) => {
+  const handleDeleteNode = (node: GraphNode) => {
     if (onDeleteNode) {
-      onDeleteNode(node.recordId || node.node_id, node.node_id);
+      onDeleteNode(node.id);
     }
   };
 
@@ -370,12 +359,12 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
             ) : (
               nodes.map(node => (
                 <div
-                  key={node.node_id}
+                  key={node.id}
                   className="p-2 mb-2 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded text-xs cursor-pointer hover:border-[var(--bronze-base)] transition-colors"
                   onDoubleClick={() => handleNodeDoubleClick(node)}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="font-semibold text-[var(--bronze-bright)]">{node.prompt_key}</div>
+                    <div className="font-semibold text-[var(--bronze-bright)]">{node.promptKey}</div>
                     <div className="flex gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleEditNode(node); }}
@@ -399,7 +388,7 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
                     </div>
                   </div>
                   <div className="text-[9px] text-[var(--text-muted)] mt-1">
-                    Pos: {Math.round(node.position_x)}, {Math.round(node.position_y)}
+                    Pos: {Math.round(store.layout.positions[node.id]?.x || 0)}, {Math.round(store.layout.positions[node.id]?.y || 0)}
                   </div>
                 </div>
               ))
@@ -433,7 +422,7 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
       <EditNodeModal
         isOpen={!!editingNode}
         onClose={() => setEditingNode(null)}
-        initialPromptKey={editingNode?.prompt_key || ''}
+        initialPromptKey={editingNode?.promptKey || ''}
         initialConfig={editingNode?.config || {}}
         onSave={handleEditSave}
         isSaving={false}

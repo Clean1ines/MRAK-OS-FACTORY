@@ -1,40 +1,12 @@
-// frontend/src/components/ios/useNodeValidation.ts
-// ADDED: Hook for node validation logic (SRP extraction)
+import { GraphNode } from '@/entities/workflow/store/types';
 
-import { useCallback } from 'react';
-import { NodeData } from '@shared/lib';
-
-export interface ValidationOptions {
-  excludeCustomPrompt?: boolean;
-}
-
-export const useNodeValidation = (nodes: NodeData[]) => {
-  const validateNodeUnique = useCallback((
-    title: string, 
-    prompt: string, 
-    options: ValidationOptions = {}
-  ): string | null => {
-    const { excludeCustomPrompt = true } = options;
-    
-    const duplicateTitle = nodes.find(n => 
-      n.prompt_key.toLowerCase() === title.toLowerCase() && 
-      (excludeCustomPrompt ? n.prompt_key !== 'CUSTOM_PROMPT' : true)
+export const useNodeValidation = (nodes: GraphNode[]) => {
+  const validateNodeUnique = (title: string, prompt: string): string | null => {
+    const exists = nodes.some(
+      node => node.promptKey === title && node.config?.custom_prompt === prompt
     );
-    
-    if (duplicateTitle) {
-      return `Node with name "${title}" already exists`;
-    }
-
-    const duplicateContent = nodes.find(n => 
-      n.config?.custom_prompt === prompt
-    );
-    
-    if (duplicateContent) {
-      return `Node with identical prompt already exists`;
-    }
-
-    return null;
-  }, [nodes]);
+    return exists ? 'Node with same name and prompt already exists' : null;
+  };
 
   return { validateNodeUnique };
 };

@@ -10,12 +10,12 @@ def _row_to_dict(row) -> Dict[str, Any]:
     if not row:
         return None
     data = dict(row)
-    for key in ['id', 'run_id', 'node_definition_id', 'parent_execution_id', 'output_artifact_id', 'superseded_by_id']:
+    for key in ['id', 'run_id', 'node_definition_id', 'parent_execution_id', 'output_artifact_id', 'superseded_by_id', 'retry_parent_id']:
         if key in data and data[key] is not None:
             data[key] = str(data[key])
     if data.get('input_artifact_ids') and isinstance(data['input_artifact_ids'], str):
         data['input_artifact_ids'] = json.loads(data['input_artifact_ids'])
-    for key in ['created_at', 'updated_at', 'validated_at']:
+    for key in ['created_at', 'updated_at', 'validated_at', 'locked_at']:
         if key in data and data[key] is not None:
             data[key] = data[key].isoformat()
     return data
@@ -24,10 +24,17 @@ async def create_node_execution(
     run_id: str,
     node_definition_id: str,
     parent_execution_id: Optional[str],
-    idempotency_key: str,
+    idempotency_key: str,                 # исходный ключ (без суффикса)
     input_artifact_ids: Optional[List[str]] = None,
+    attempt: int = 1,
+    max_attempts: int = 3,
+    retry_parent_id: Optional[str] = None,
     tx=None
 ) -> str:
+    """
+    Создаёт запись о выполнении узла с учётом попыток.
+    base_idempotency_key устанавливается равным idempotency_key.
+    """
     if tx:
         conn = tx.conn
         close_conn = False
@@ -39,11 +46,13 @@ async def create_node_execution(
         exec_id = await conn.fetchval("""
             INSERT INTO node_executions (
                 run_id, node_definition_id, parent_execution_id,
-                idempotency_key, input_artifact_ids
-            ) VALUES ($1, $2, $3, $4, $5)
+                idempotency_key, input_artifact_ids, base_idempotency_key,
+                attempt, max_attempts, retry_parent_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id
         """, run_id, node_definition_id, parent_execution_id,
-            idempotency_key, input_artifacts_json)
+            idempotency_key, input_artifacts_json, idempotency_key,
+            attempt, max_attempts, retry_parent_id)
         return str(exec_id)
     finally:
         if close_conn:
@@ -97,7 +106,7 @@ async def find_existing_execution(
     node_definition_id: str,
     parent_execution_id: Optional[str],
     idempotency_key: str,
-    tx=None  # ADDED for ADR-010: support transaction
+    tx=None
 ) -> Optional[Dict[str, Any]]:
     """
     Ищет существующее выполнение по идемпотентному ключу.
@@ -208,3 +217,52 @@ async def validate_execution(exec_id: str, tx=None) -> None:
     finally:
         if close_conn:
             await conn.close()
+
+# ========== Новые функции для поддержки повторных попыток ==========
+
+async def find_last_attempt_by_base_key(
+    run_id: str,
+    node_definition_id: str,
+    parent_execution_id: Optional[str],
+    base_idempotency_key: str,
+    tx=None
+) -> Optional[Dict[str, Any]]:
+    """Возвращает последнюю попытку (с максимальным attempt) по base_key."""
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
+        conn = await get_connection()
+        close_conn = True
+    try:
+        row = await conn.fetchrow("""
+            SELECT * FROM node_executions
+            WHERE run_id = $1
+              AND node_definition_id = $2
+              AND parent_execution_id IS NOT DISTINCT FROM $3
+              AND base_idempotency_key = $4
+            ORDER BY attempt DESC
+            LIMIT 1
+        """, run_id, node_definition_id, parent_execution_id, base_idempotency_key)
+        return _row_to_dict(row) if row else None
+    finally:
+        if close_conn:
+            await conn.close()
+
+async def create_retry_attempt(
+    failed_execution: Dict[str, Any],
+    tx=None
+) -> str:
+    """Создаёт новую попытку на основе неудачного выполнения."""
+    new_attempt = failed_execution['attempt'] + 1
+    return await create_node_execution(
+        run_id=failed_execution['run_id'],
+        node_definition_id=failed_execution['node_definition_id'],
+        parent_execution_id=failed_execution['parent_execution_id'],
+        idempotency_key=failed_execution['idempotency_key'],
+        input_artifact_ids=failed_execution['input_artifact_ids'],
+        attempt=new_attempt,
+        max_attempts=failed_execution['max_attempts'],
+        retry_parent_id=failed_execution['id'],
+        tx=tx
+    )

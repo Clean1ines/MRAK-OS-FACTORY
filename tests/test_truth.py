@@ -6,13 +6,14 @@ import pytest
 import uuid
 import time
 import asyncio
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from datetime import datetime
+from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 from server import app
 from dependencies import get_artifact_service
 from repositories.base import transaction
+from repositories import node_execution_repository
 
 client = TestClient(app)
 
@@ -24,16 +25,53 @@ def unique_name(prefix):
 # ----------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def mock_groq_client(mocker):
-    """Mock the groq_client to return a successful response."""
+    """Mock the groq_client in both dependencies and worker to return a successful response."""
     mock = MagicMock()
     mock.create_completion = MagicMock()
     mock.create_completion.return_value = MagicMock(
         choices=[MagicMock(message=MagicMock(content='{"result": "ok"}'))]
     )
+    
+    # Мокаем в dependencies (для get_artifact_service)
     from dependencies import get_artifact_service
     real_service = get_artifact_service()
     mocker.patch.object(real_service, 'groq_client', mock)
+    
+    # Мокаем глобальный artifact_service в worker
+    import worker
+    worker.artifact_service.groq_client = mock  # FIXED: directly replace the client
+
     return mock
+
+# ----------------------------------------------------------------------
+# Helper to simulate worker completing an execution (real perform_node_processing with mocked LLM)
+# ----------------------------------------------------------------------
+async def complete_execution(exec_id: str):
+    """Fetch execution data, add project_id, call real perform_node_processing, update status to COMPLETED."""
+    # Импортируем внутри, чтобы избежать проблем с моками
+    from worker import perform_node_processing
+
+    exec_data = await node_execution_repository.get_node_execution(exec_id)
+    # Получаем project_id по run_id
+    run_id = exec_data['run_id']
+    async with transaction() as tx:
+        run_row = await tx.conn.fetchrow("SELECT project_id FROM runs WHERE id = $1", run_id)
+    if not run_row:
+        raise ValueError(f"Run {run_id} not found")
+    project_id = run_row['project_id']
+
+    # Добавляем project_id в данные выполнения (копируем, чтобы не менять оригинал)
+    exec_data_with_project = dict(exec_data)
+    exec_data_with_project['project_id'] = str(project_id)
+
+    artifact_id = await perform_node_processing(exec_data_with_project)  # реальная функция
+    async with transaction() as tx:
+        await node_execution_repository.update_node_execution_status(
+            exec_id=exec_id,
+            status="COMPLETED",
+            output_artifact_id=artifact_id,
+            tx=tx
+        )
 
 # ----------------------------------------------------------------------
 # Tests for /truth endpoint
@@ -89,7 +127,9 @@ def test_truth_single_node(sync_client):
     })
     exec_id = exec_resp.json()["id"]
 
-    time.sleep(0.5)
+    # Simulate worker completing the execution (real function with mocked LLM)
+    asyncio.run(complete_execution(exec_id))
+
     validate_resp = sync_client.post(f"/api/executions/{exec_id}/validate")
     assert validate_resp.status_code == 200
 
@@ -147,7 +187,7 @@ def test_truth_two_nodes(sync_client):
             "input_artifact_ids": []
         })
         exec_id = exec_resp.json()["id"]
-        time.sleep(0.5)
+        asyncio.run(complete_execution(exec_id))
         sync_client.post(f"/api/executions/{exec_id}/validate")
 
     truth_resp = sync_client.get(f"/api/projects/{project_id}/truth")
@@ -192,7 +232,7 @@ def test_truth_supersede(sync_client):
         "input_artifact_ids": []
     })
     exec1_id = exec1_resp.json()["id"]
-    time.sleep(0.5)
+    asyncio.run(complete_execution(exec1_id))
     validate1_resp = sync_client.post(f"/api/executions/{exec1_id}/validate")
     assert validate1_resp.status_code == 200
 
@@ -209,7 +249,7 @@ def test_truth_supersede(sync_client):
         "input_artifact_ids": []
     })
     exec2_id = exec2_resp.json()["id"]
-    time.sleep(0.5)
+    asyncio.run(complete_execution(exec2_id))
     validate2_resp = sync_client.post(f"/api/executions/{exec2_id}/validate")
     assert validate2_resp.status_code == 200
 
@@ -260,16 +300,13 @@ def test_truth_as_of(sync_client):
         "input_artifact_ids": []
     })
     exec1_id = exec1_resp.json()["id"]
-    time.sleep(0.5)
+    asyncio.run(complete_execution(exec1_id))
     validate1_resp = sync_client.post(f"/api/executions/{exec1_id}/validate")
     assert validate1_resp.status_code == 200
 
-    # Получаем точное время валидации первого выполнения из truth
     truth_after_first = sync_client.get(f"/api/projects/{project_id}/truth").json()
     assert len(truth_after_first["nodes"]) == 1
     validated_at_first = truth_after_first["nodes"][0]["validated_at"]
-    # Преобразуем строку ISO в datetime (с сохранением таймзоны)
-    from datetime import datetime, timezone
     dt_first = datetime.fromisoformat(validated_at_first.replace('Z', '+00:00'))
 
     # Wait a bit, then second execution
@@ -280,19 +317,18 @@ def test_truth_as_of(sync_client):
         "input_artifact_ids": []
     })
     exec2_id = exec2_resp.json()["id"]
-    time.sleep(0.5)
+    asyncio.run(complete_execution(exec2_id))
     validate2_resp = sync_client.post(f"/api/executions/{exec2_id}/validate")
     assert validate2_resp.status_code == 200
 
     truth_now = sync_client.get(f"/api/projects/{project_id}/truth").json()
     assert truth_now["nodes"][0]["execution_id"] == exec2_id
 
-    # as_of с временем первого выполнения (включительно) должно вернуть его
-    as_of_time = dt_first.isoformat().replace('+00:00', '') + '+00:00'  # полная точность
+    as_of_time = dt_first.isoformat().replace('+00:00', '') + '+00:00'
     truth_as_of = sync_client.get(f"/api/projects/{project_id}/truth", params={"as_of": as_of_time})
     assert truth_as_of.status_code == 200
     data = truth_as_of.json()
-    assert len(data["nodes"]) == 1, f"Nodes: {data['nodes']}"
+    assert len(data["nodes"]) == 1
     assert data["nodes"][0]["execution_id"] == exec1_id
 
     as_of_early = "2000-01-01T00:00:00+00:00"
@@ -341,7 +377,7 @@ def test_validate_updates_snapshot(sync_client):
     })
     exec_id = exec_resp.json()["id"]
 
-    time.sleep(0.5)
+    asyncio.run(complete_execution(exec_id))
     sync_client.post(f"/api/executions/{exec_id}/validate")
 
     async def check_snapshot():
@@ -390,7 +426,8 @@ def test_validate_without_artifact_raises(sync_client):
     })
     exec_id = exec_resp.json()["id"]
 
-    time.sleep(0.5)
+    # Complete execution normally (real function with mocked LLM)
+    asyncio.run(complete_execution(exec_id))
 
     # Manually delete the artifact and set output_artifact_id to NULL
     async def remove_artifact():
@@ -443,7 +480,9 @@ def test_validate_frozen_run(sync_client):
     })
     exec_id = exec_resp.json()["id"]
 
-    time.sleep(0.5)
+    # Complete execution (real function with mocked LLM)
+    asyncio.run(complete_execution(exec_id))
+
     sync_client.post(f"/api/runs/{run_id}/freeze")
 
     resp = sync_client.post(f"/api/executions/{exec_id}/validate")
@@ -498,7 +537,9 @@ async def test_concurrent_validation(sync_client):
     })
     exec2_id = exec2_resp.json()["id"]
 
-    time.sleep(1)
+    # Complete both executions (real function with mocked LLM)
+    await complete_execution(exec1_id)
+    await complete_execution(exec2_id)
 
     async def validate(eid):
         def sync_validate():

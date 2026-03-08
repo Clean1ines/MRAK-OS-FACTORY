@@ -14,8 +14,8 @@ RUN npm run build
 # ==================== STAGE 2: Minimal Python Runtime ====================
 FROM python:3.10-alpine
 
-# Install system dependencies
-RUN apk add --no-cache libffi openssl ca-certificates && \
+# Install system dependencies (including supervisor for process management)
+RUN apk add --no-cache libffi openssl ca-certificates supervisor && \
     update-ca-certificates
 
 WORKDIR /app
@@ -35,11 +35,16 @@ COPY domain/ ./domain/
 COPY generators/ ./generators/
 COPY use_cases/ ./use_cases/
 COPY utils/ ./utils/
-# #ADDED: groq_client.py (was missing, causing import error)
-COPY prompt_service.py prompt_loader.py artifact_service.py session_service.py workflow_engine.py logic.py groq_client.py ./
+# Worker for background job processing
+COPY worker.py ./
+# Additional backend modules
+COPY prompt_service.py prompt_loader.py artifact_service.py session_service.py dependencies.py logic.py groq_client.py ./
 
 # Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/frontend/dist ./static
+
+# Copy supervisor configuration
+COPY supervisord.conf /etc/supervisord.conf
 
 # Cleanup pycache
 RUN find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
@@ -47,4 +52,5 @@ RUN find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && 
 
 EXPOSE 8000
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start supervisor to run both API and worker
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

@@ -194,6 +194,7 @@ class NodeExecutionCreate(BaseModel):
     parent_execution_id: Optional[str] = None
     input_artifact_ids: Optional[List[str]] = None
 
+# в schemas.py, класс NodeExecutionResponse
 class NodeExecutionResponse(BaseModel):
     id: str
     run_id: str
@@ -205,6 +206,10 @@ class NodeExecutionResponse(BaseModel):
     idempotency_key: str
     created_at: datetime
     updated_at: datetime
+    # Новые поля (опционально)
+    attempt: Optional[int] = Field(None, description="Номер попытки выполнения")
+    max_attempts: Optional[int] = Field(None, description="Максимальное количество попыток")
+    base_idempotency_key: Optional[str] = Field(None, description="Базовый ключ идемпотентности (без суффикса попытки)")
 
     model_config = ConfigDict(
         from_attributes=True,

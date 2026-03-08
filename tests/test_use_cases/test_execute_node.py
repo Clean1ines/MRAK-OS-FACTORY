@@ -27,21 +27,21 @@ def mock_workflow_repo(mocker):
 def mock_node_exec_repo(mocker):
     mock = mocker.patch('use_cases.execute_node.node_execution_repository')
     mock.get_node_execution = AsyncMock()
-    mock.find_existing_execution = AsyncMock()
+    mock.find_last_attempt_by_base_key = AsyncMock()          # FIXED: was find_existing_execution
     mock.create_node_execution = AsyncMock()
     mock.get_node_execution = AsyncMock()  # for after creation
     mock.update_node_execution_status = AsyncMock()
+    mock.create_retry_attempt = AsyncMock()
     return mock
 
 @pytest.fixture
-def mock_artifact_repo(mocker):
-    mock = mocker.patch('use_cases.execute_node.artifact_repository')
-    mock.get_artifacts_by_ids = AsyncMock()
+def mock_queue_repo(mocker):                                  # ADDED
+    mock = mocker.patch('use_cases.execute_node.execution_queue_repository')
+    mock.enqueue = AsyncMock()
     return mock
 
 @pytest.fixture
 def mock_artifact_service():
-    # Create AsyncMock without spec to avoid attribute issues
     mock = AsyncMock()
     mock.generate_artifact = AsyncMock()
     return mock
@@ -53,20 +53,15 @@ def mock_background_tasks(mocker):
 @pytest.fixture
 def mock_transaction(mocker):
     """Provides a mocked transaction context manager with an accessible transaction object."""
-    # Create the mock transaction object that will be returned by __aenter__
     mock_tx = AsyncMock()
     mock_tx.conn = AsyncMock()
-    mock_tx.conn.fetchrow = AsyncMock()  # this will be configured per test
+    mock_tx.conn.fetchrow = AsyncMock()
 
-    # Create the context manager mock
     mock_ctx = AsyncMock()
     mock_ctx.__aenter__ = AsyncMock(return_value=mock_tx)
     mock_ctx.__aexit__ = AsyncMock(return_value=None)
 
-    # Patch the transaction function to return our context manager
     mocker.patch('use_cases.execute_node.transaction', return_value=mock_ctx)
-
-    # Attach the transaction mock to the context manager so tests can configure it
     mock_ctx.tx = mock_tx
     return mock_ctx
 
@@ -77,7 +72,8 @@ def use_case(mock_artifact_service):
 # ----------------------------------------------------------------------
 # Helper to create dummy execution dict (as returned by repository)
 # ----------------------------------------------------------------------
-def dummy_execution(exec_id=None, status="PROCESSING", parent_id=None, output_id=None):
+def dummy_execution(exec_id=None, status="PROCESSING", parent_id=None, output_id=None,
+                    attempt=1, max_attempts=3, base_idempotency_key="base"):
     return {
         "id": exec_id or str(uuid.uuid4()),
         "run_id": str(uuid.uuid4()),
@@ -87,6 +83,9 @@ def dummy_execution(exec_id=None, status="PROCESSING", parent_id=None, output_id
         "input_artifact_ids": [],
         "output_artifact_id": output_id,
         "idempotency_key": "dummy",
+        "base_idempotency_key": base_idempotency_key,
+        "attempt": attempt,
+        "max_attempts": max_attempts,
         "created_at": "2025-01-01T00:00:00",
         "updated_at": "2025-01-01T00:00:00"
     }
@@ -101,6 +100,7 @@ async def test_execute_new_execution_success(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,                                            # ADDED
     mock_background_tasks,
     mock_transaction,
     mocker
@@ -114,7 +114,6 @@ async def test_execute_new_execution_success(
     project_id = str(uuid.uuid4())
     workflow_id = str(uuid.uuid4())
 
-    # Configure the transaction mock to return a run row
     mock_transaction.tx.conn.fetchrow.return_value = {
         "id": run_id,
         "status": "OPEN",
@@ -127,11 +126,11 @@ async def test_execute_new_execution_success(
         "workflow_id": workflow_id,
         "config": {}
     }
-    mock_node_exec_repo.find_existing_execution.return_value = None
+    mock_node_exec_repo.find_last_attempt_by_base_key.return_value = None   # FIXED
     new_exec_id = str(uuid.uuid4())
     mock_node_exec_repo.create_node_execution.return_value = new_exec_id
     mock_node_exec_repo.get_node_execution.side_effect = [
-        dummy_execution(exec_id=new_exec_id)  # for the return after creation
+        dummy_execution(exec_id=new_exec_id)
     ]
 
     result = await use_case.execute(
@@ -144,17 +143,15 @@ async def test_execute_new_execution_success(
         background_tasks=mock_background_tasks
     )
 
-    # Verify that the direct SQL query was called
     mock_transaction.tx.conn.fetchrow.assert_awaited_once_with(
         "SELECT * FROM runs WHERE id = $1 FOR UPDATE", run_id
     )
-
     mock_workflow_repo.get_workflow_node_by_id.assert_awaited_once_with(node_id)
-    mock_node_exec_repo.find_existing_execution.assert_awaited_once_with(
+    mock_node_exec_repo.find_last_attempt_by_base_key.assert_awaited_once_with(   # FIXED
         run_id=run_id,
         node_definition_id=node_id,
         parent_execution_id=parent_id,
-        idempotency_key=idempotency_key,
+        base_idempotency_key=idempotency_key,
         tx=mock_transaction.tx
     )
     mock_node_exec_repo.create_node_execution.assert_awaited_once_with(
@@ -163,21 +160,13 @@ async def test_execute_new_execution_success(
         parent_execution_id=parent_id,
         idempotency_key=idempotency_key,
         input_artifact_ids=input_artifact_ids,
+        attempt=1,
+        max_attempts=3,
+        retry_parent_id=None,
         tx=mock_transaction.tx
     )
+    mock_queue_repo.enqueue.assert_awaited_once_with(new_exec_id, tx=mock_transaction.tx)   # ADDED
     mock_node_exec_repo.get_node_execution.assert_awaited_with(new_exec_id, tx=mock_transaction.tx)
-
-    # Verify background task was scheduled with correct kwargs
-    mock_background_tasks.add_task.assert_called_once()
-    call_args = mock_background_tasks.add_task.call_args
-    args, kwargs = call_args
-    assert args[0] == use_case._complete_execution
-    assert kwargs['exec_id'] == new_exec_id
-    assert kwargs['node_definition_id'] == node_id
-    assert kwargs['project_id'] == project_id
-    assert kwargs['model'] == model
-    assert kwargs['input_artifact_ids'] == input_artifact_ids
-
     assert result["id"] == new_exec_id
     assert result["status"] == "PROCESSING"
 
@@ -187,6 +176,7 @@ async def test_execute_existing_execution(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,                                            # ADDED (though not used here)
     mock_background_tasks,
     mock_transaction
 ):
@@ -195,7 +185,6 @@ async def test_execute_existing_execution(
     existing_exec = dummy_execution(status="COMPLETED")
     workflow_id = str(uuid.uuid4())
 
-    # Configure transaction to return a run row
     mock_transaction.tx.conn.fetchrow.return_value = {
         "id": run_id,
         "status": "OPEN",
@@ -208,7 +197,7 @@ async def test_execute_existing_execution(
         "workflow_id": workflow_id,
         "config": {}
     }
-    mock_node_exec_repo.find_existing_execution.return_value = existing_exec
+    mock_node_exec_repo.find_last_attempt_by_base_key.return_value = existing_exec   # FIXED
 
     result = await use_case.execute(
         run_id=run_id,
@@ -222,7 +211,7 @@ async def test_execute_existing_execution(
 
     assert result == existing_exec
     mock_node_exec_repo.create_node_execution.assert_not_called()
-    mock_background_tasks.add_task.assert_not_called()
+    mock_queue_repo.enqueue.assert_not_called()                 # ADDED
 
 @pytest.mark.asyncio
 async def test_execute_run_not_found(
@@ -230,13 +219,13 @@ async def test_execute_run_not_found(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,
     mock_background_tasks,
     mock_transaction
 ):
-    run_id = "missing"  # Not a UUID, but fetchrow is mocked so no real DB call
+    run_id = "missing"
     node_id = "node"
 
-    # Simulate run not found: fetchrow returns None
     mock_transaction.tx.conn.fetchrow.return_value = None
 
     with pytest.raises(ValueError, match="Run .* not found"):
@@ -256,13 +245,13 @@ async def test_execute_run_not_open(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,
     mock_background_tasks,
     mock_transaction
 ):
     run_id = "r"
     node_id = "node"
 
-    # Return a run with status FROZEN
     mock_transaction.tx.conn.fetchrow.return_value = {
         "id": run_id,
         "status": "FROZEN",
@@ -287,20 +276,19 @@ async def test_execute_node_not_found(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,
     mock_background_tasks,
     mock_transaction
 ):
     run_id = "r"
     node_id = "missing"
 
-    # Return a valid run
     mock_transaction.tx.conn.fetchrow.return_value = {
         "id": run_id,
         "status": "OPEN",
         "project_id": "proj",
         "workflow_id": "wf"
     }
-
     mock_workflow_repo.get_workflow_node_by_id.return_value = None
 
     with pytest.raises(ValueError, match="Node .* not found"):
@@ -320,6 +308,7 @@ async def test_execute_node_workflow_mismatch(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,
     mock_background_tasks,
     mock_transaction
 ):
@@ -353,6 +342,7 @@ async def test_execute_parent_not_found(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,
     mock_background_tasks,
     mock_transaction
 ):
@@ -391,6 +381,7 @@ async def test_execute_parent_invalid_status(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,
     mock_background_tasks,
     mock_transaction
 ):
@@ -430,6 +421,7 @@ async def test_execute_unique_violation(
     mock_run_repo,
     mock_workflow_repo,
     mock_node_exec_repo,
+    mock_queue_repo,
     mock_background_tasks,
     mock_transaction,
     mocker
@@ -451,7 +443,7 @@ async def test_execute_unique_violation(
         "workflow_id": workflow_id,
         "config": {}
     }
-    mock_node_exec_repo.find_existing_execution.return_value = None
+    mock_node_exec_repo.find_last_attempt_by_base_key.return_value = None   # FIXED
 
     from asyncpg.exceptions import UniqueViolationError
     mock_node_exec_repo.create_node_execution.side_effect = UniqueViolationError()
@@ -468,165 +460,25 @@ async def test_execute_unique_violation(
         )
 
 # ----------------------------------------------------------------------
-# Tests for _complete_execution (background task) - unchanged
+# Tests for background completion (now obsolete – moved to worker)
 # ----------------------------------------------------------------------
 
+@pytest.mark.skip(reason="Functionality moved to worker (queue processing)")
 @pytest.mark.asyncio
-async def test_complete_execution_success(
-    use_case,
-    mock_workflow_repo,
-    mock_node_exec_repo,
-    mock_artifact_repo,
-    mock_artifact_service,
-    mock_transaction,
-    mocker
-):
-    exec_id = str(uuid.uuid4())
-    node_id = str(uuid.uuid4())
-    project_id = str(uuid.uuid4())
-    model = "test"
-    input_artifact_ids = ["art1", "art2"]
-    artifact_type = "test_node"
-    system_prompt = "You are a helpful assistant."
-    template = "Context: {all_artifacts}\nUser: {user_input}"
-    node_config = {
-        "system_prompt": system_prompt,
-        "user_prompt_template": template,
-        "required_input_types": []
-    }
-    mock_workflow_repo.get_workflow_node_by_id.return_value = {
-        "id": node_id,
-        "node_id": artifact_type,
-        "config": node_config
-    }
-    mock_artifact_repo.get_artifacts_by_ids.return_value = [{"id": "art1", "type": "test"}]
-    artifact_id = str(uuid.uuid4())
-    mock_artifact_service.generate_artifact.return_value = artifact_id
+async def test_complete_execution_success():
+    pass
 
-    await use_case._complete_execution(
-        exec_id=exec_id,
-        node_definition_id=node_id,
-        project_id=project_id,
-        model=model,
-        input_artifact_ids=input_artifact_ids
-    )
-
-    mock_workflow_repo.get_workflow_node_by_id.assert_awaited_once_with(node_id)
-    mock_artifact_repo.get_artifacts_by_ids.assert_awaited_once_with(input_artifact_ids)
-    mock_artifact_service.generate_artifact.assert_awaited_once_with(
-        artifact_type=artifact_type,
-        input_artifacts=[{"id": "art1", "type": "test"}],
-        user_input="",
-        model_id=model,
-        project_id=project_id,
-        generation_config={
-            'system_prompt': system_prompt,
-            'user_prompt_template': template,
-            'required_input_types': []
-        }
-    )
-    mock_node_exec_repo.update_node_execution_status.assert_awaited_once_with(
-        exec_id=exec_id,
-        status="COMPLETED",
-        output_artifact_id=artifact_id,
-        tx=mocker.ANY
-    )
-
+@pytest.mark.skip(reason="Functionality moved to worker (queue processing)")
 @pytest.mark.asyncio
-async def test_complete_execution_node_not_found(
-    use_case,
-    mock_workflow_repo,
-    mock_node_exec_repo,
-    mock_artifact_repo,
-    mock_artifact_service,
-    mock_transaction,
-    mocker
-):
-    exec_id = str(uuid.uuid4())
-    node_id = str(uuid.uuid4())
-    mock_workflow_repo.get_workflow_node_by_id.return_value = None
+async def test_complete_execution_node_not_found():
+    pass
 
-    await use_case._complete_execution(
-        exec_id=exec_id,
-        node_definition_id=node_id,
-        project_id="proj",
-        model=None,
-        input_artifact_ids=[]
-    )
-
-    mock_node_exec_repo.update_node_execution_status.assert_awaited_once_with(
-        exec_id=exec_id,
-        status="FAILED",
-        tx=mocker.ANY
-    )
-    mock_artifact_repo.get_artifacts_by_ids.assert_not_called()
-    mock_artifact_service.generate_artifact.assert_not_called()
-
+@pytest.mark.skip(reason="Functionality moved to worker (queue processing)")
 @pytest.mark.asyncio
-async def test_complete_execution_generation_fails(
-    use_case,
-    mock_workflow_repo,
-    mock_node_exec_repo,
-    mock_artifact_repo,
-    mock_artifact_service,
-    mock_transaction,
-    mocker
-):
-    exec_id = str(uuid.uuid4())
-    node_id = str(uuid.uuid4())
-    project_id = str(uuid.uuid4())
-    input_artifact_ids = ["art1"]
-    mock_workflow_repo.get_workflow_node_by_id.return_value = {
-        "id": node_id,
-        "node_id": "type",
-        "config": {}
-    }
-    mock_artifact_repo.get_artifacts_by_ids.return_value = []
-    mock_artifact_service.generate_artifact.side_effect = Exception("LLM failed")
+async def test_complete_execution_generation_fails():
+    pass
 
-    await use_case._complete_execution(
-        exec_id=exec_id,
-        node_definition_id=node_id,
-        project_id=project_id,
-        model=None,
-        input_artifact_ids=input_artifact_ids
-    )
-
-    mock_node_exec_repo.update_node_execution_status.assert_awaited_once_with(
-        exec_id=exec_id,
-        status="FAILED",
-        tx=mocker.ANY
-    )
-
+@pytest.mark.skip(reason="Functionality moved to worker (queue processing)")
 @pytest.mark.asyncio
-async def test_complete_execution_other_error(
-    use_case,
-    mock_workflow_repo,
-    mock_node_exec_repo,
-    mock_artifact_repo,
-    mock_artifact_service,
-    mock_transaction,
-    mocker
-):
-    exec_id = str(uuid.uuid4())
-    node_id = str(uuid.uuid4())
-    mock_workflow_repo.get_workflow_node_by_id.return_value = {
-        "id": node_id,
-        "node_id": "type",
-        "config": {}
-    }
-    mock_artifact_repo.get_artifacts_by_ids.side_effect = RuntimeError("DB error")
-
-    await use_case._complete_execution(
-        exec_id=exec_id,
-        node_definition_id=node_id,
-        project_id="proj",
-        model=None,
-        input_artifact_ids=["art1"]
-    )
-
-    mock_node_exec_repo.update_node_execution_status.assert_awaited_once_with(
-        exec_id=exec_id,
-        status="FAILED",
-        tx=mocker.ANY
-    )
+async def test_complete_execution_other_error():
+    pass

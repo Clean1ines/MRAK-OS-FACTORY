@@ -10,11 +10,6 @@ interface EditNodeModalProps {
   isSaving?: boolean;
 }
 
-/**
- * Модальное окно для редактирования узла.
- * Позволяет изменить prompt_key и custom_prompt (извлекаемый из config).
- * Не показывает JSON, только текстовое поле.
- */
 export const EditNodeModal: React.FC<EditNodeModalProps> = ({
   isOpen,
   onClose,
@@ -31,14 +26,14 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
   const prevIsOpenRef = useRef(isOpen);
 
   useEffect(() => {
-    // Сбрасываем поля только при открытии модалки (переход false -> true)
     if (isOpen && !prevIsOpenRef.current) {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPromptKey(initialPromptKey);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCustomPrompt(
         typeof initialConfig.custom_prompt === 'string' ? initialConfig.custom_prompt : ''
       );
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('');
     }
     prevIsOpenRef.current = isOpen;
@@ -50,7 +45,6 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
       setError('Prompt key is required');
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError('');
     const newConfig = { custom_prompt: customPrompt };
     await onSave(promptKey.trim(), newConfig);

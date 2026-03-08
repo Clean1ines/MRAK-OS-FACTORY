@@ -1,12 +1,18 @@
 import React from 'react';
 import { Sidebar } from '@shared/ui/Sidebar/Sidebar';
-import { WorkflowSummary } from '@/entities/workflow/api/useWorkflowsData';
+
+// Локальное определение типа вместо удалённого импорта
+interface WorkflowSummary {
+  id: string;
+  name: string;
+  description?: string;
+}
 
 interface WorkspaceSidebarProps {
   isMobile: boolean;
   sidebarOpen: boolean;
   onCloseSidebar: () => void;
-  onOpenSidebar: () => void; // для кнопки открытия (используется в HamburgerMenu)
+  onOpenSidebar: () => void;
   selectedProjectId: string | null;
   currentProjectName: string;
   workflows: WorkflowSummary[];
@@ -23,7 +29,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   isMobile,
   sidebarOpen,
   onCloseSidebar,
-  // onOpenSidebar не используется внутри, поэтому не включаем в деструктуризацию
   selectedProjectId,
   currentProjectName,
   workflows,
@@ -35,12 +40,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onOpenNodeList,
   onLogout,
 }) => {
-  // Если сайдбар закрыт, показываем только кнопку гамбургера (она передаётся извне)
-  // Компонент не рендерит сам гамбургер, так как это делает родитель.
-  // Возвращаем Sidebar только когда открыт, иначе null.
   if (!sidebarOpen) return null;
 
-  // Заголовок: текущий проект
   const headerContent = (
     <div className="p-3 border-b border-[var(--ios-border)]">
       <label className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider block mb-1">
@@ -52,14 +53,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     </div>
   );
 
-  // Футер: кнопки и счётчик
   const footerContent = (
     <div className="p-3 border-t border-[var(--ios-border)] space-y-2">
       <button
         onClick={onCreateWorkflow}
         disabled={!selectedProjectId}
         className="w-full px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors flex items-center justify-center gap-2 disabled:opacity-30"
-        data-testid="new-workflow-button"
       >
         <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <line x1="12" y1="5" x2="12" y2="19" />
@@ -73,14 +72,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           onClick={onOpenNodeList}
           disabled={!selectedProjectId}
           className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors disabled:opacity-30"
-          data-testid="nodes-button"
         >
           Nodes
         </button>
         <button
           onClick={onLogout}
           className="px-3 py-2 text-xs font-semibold rounded bg-[var(--bronze-dim)] text-[var(--bronze-bright)] hover:bg-[var(--bronze-base)] hover:text-black transition-colors"
-          data-testid="logout-button"
         >
           Logout
         </button>
@@ -119,8 +116,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                 ? 'bg-[var(--bronze-dim)] text-[var(--bronze-bright)]'
                 : 'text-[var(--text-secondary)] hover:bg-[var(--ios-glass-bright)]'
             }`}
-            onClick={() => onSelectWorkflow(wf.id!)}
-            data-testid="workflow-item"
+            onClick={() => onSelectWorkflow(wf.id)}
           >
             <div className="flex-1">
               <div className="font-semibold truncate">{wf.name}</div>

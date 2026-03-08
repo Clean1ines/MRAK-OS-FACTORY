@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWorkflowStore } from '../store/workflowStore';
 import { workflowApi } from '@/entities/workflow/api/workflowApi';
+import { ApiWorkflowDetail } from './types';
 
 export const useLoadWorkflow = (workflowId: string | null) => {
   return useQuery({
@@ -14,7 +15,7 @@ export const useLoadWorkflow = (workflowId: string | null) => {
       try {
         const response = await workflowApi.get(workflowId);
         console.log('[useLoadWorkflow] received response:', response);
-        const workflowData = response.data;
+        const workflowData = response.data as ApiWorkflowDetail;
         console.log('[useLoadWorkflow] workflowData:', workflowData);
         console.log('[useLoadWorkflow] nodes count:', workflowData?.nodes?.length);
         console.log('[useLoadWorkflow] edges count:', workflowData?.edges?.length);
@@ -30,6 +31,6 @@ export const useLoadWorkflow = (workflowId: string | null) => {
       }
     },
     enabled: !!workflowId,
-    staleTime: 0, // всегда заново запрашивать, даже если есть кеш
+    staleTime: 0,
   });
 };

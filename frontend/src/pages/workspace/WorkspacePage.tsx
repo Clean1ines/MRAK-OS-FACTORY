@@ -1,4 +1,3 @@
-// src/pages/workspace/WorkspacePage.tsx
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -20,32 +19,35 @@ import { useWorkflowStore } from '@/entities/workflow/store/workflowStore';
 import { useLoadWorkflow } from '@/entities/workflow/store/useLoadWorkflow';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar';
 
+interface WorkflowSummary {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export const WorkspacePage: React.FC = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [userClosedSidebar, setUserClosedSidebar] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const workflowIdFromUrl = searchParams.get('workflowId');
-  const projectIdFromUrl = searchParams.get('projectId');
 
   const { projects } = useProjects();
   const { selectedProjectId } = useSelectedProject(projects);
   const store = useWorkflowStore();
   const { workflows, currentWorkflowId } = store.ui;
 
-  // Загрузка списка воркфлоу для выбранного проекта
   const { data: workflowsList, isLoading: isLoadingWorkflows } = useQuery({
     queryKey: ['workflows', selectedProjectId],
     queryFn: async () => {
       console.log('[WorkspacePage] fetching workflows for project', selectedProjectId);
       if (!selectedProjectId) return [];
       const { data } = await api.workflows.list(selectedProjectId);
-      console.log('[WorkspacePage] workflows loaded:', data?.length);
-      return data || [];
+      console.log('[WorkspacePage] workflows loaded:', (data as WorkflowSummary[] | undefined)?.length);
+      return (data as WorkflowSummary[]) || [];
     },
     enabled: !!selectedProjectId,
   });
 
-  // Сохраняем список воркфлоу в стор при загрузке
   useEffect(() => {
     if (workflowsList) {
       console.log('[WorkspacePage] setting workflows to store, count:', workflowsList.length);
@@ -53,10 +55,8 @@ export const WorkspacePage: React.FC = () => {
     }
   }, [workflowsList]);
 
-  // Загрузка данных конкретного воркфлоу
   const { isLoading: isLoadingWorkflow } = useLoadWorkflow(workflowIdFromUrl);
 
-  // Синхронизация выбранного воркфлоу с URL (из URL в стор)
   useEffect(() => {
     console.log('[WorkspacePage] URL workflowId:', workflowIdFromUrl, 'store currentWorkflowId:', currentWorkflowId);
     if (workflowIdFromUrl && workflowIdFromUrl !== currentWorkflowId) {
@@ -65,7 +65,6 @@ export const WorkspacePage: React.FC = () => {
     }
   }, [workflowIdFromUrl, currentWorkflowId, store]);
 
-  // При загрузке, если нет выбранного воркфлоу и есть список, выбираем первый
   useEffect(() => {
     if (workflows.length > 0 && !currentWorkflowId && !workflowIdFromUrl) {
       const firstId = workflows[0].id;
@@ -75,7 +74,6 @@ export const WorkspacePage: React.FC = () => {
     }
   }, [workflows, currentWorkflowId, workflowIdFromUrl, selectedProjectId, store, setSearchParams]);
 
-  // Кастомный обработчик выбора воркфлоу (обновляет стор и URL)
   const handleSelectWorkflow = useCallback((id: string) => {
     console.log('[WorkspacePage] handleSelectWorkflow:', id);
     store.selectWorkflow(id);
@@ -88,7 +86,6 @@ export const WorkspacePage: React.FC = () => {
 
   const currentProject = projects.find(p => p.id === selectedProjectId);
 
-  // Состояния модалок
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<{ id: string; name: string; description: string } | null>(null);
   const [deletingWorkflow, setDeletingWorkflow] = useState<{ id: string; name: string } | null>(null);
@@ -98,7 +95,6 @@ export const WorkspacePage: React.FC = () => {
   const [deletingNode, setDeletingNode] = useState<{ id: string; name: string } | null>(null);
   const [deletingEdge, setDeletingEdge] = useState<{ edgeId: string; source: string; target: string } | null>(null);
 
-  // Состояние для NodeModal и координат узла
   const [nodeTitle, setNodeTitle] = useState('');
   const [nodePrompt, setNodePrompt] = useState('');
   const [nodePosition, setNodePosition] = useState<{ x: number; y: number } | null>(null);
@@ -107,10 +103,15 @@ export const WorkspacePage: React.FC = () => {
     console.log('[WorkspacePage] handleCreateWorkflow', { name, description, projectId: selectedProjectId });
     if (!name.trim() || !selectedProjectId) return;
     try {
-      const { data } = await api.workflows.create({ name, description, project_id: selectedProjectId });
+      const { data } = await api.workflows.create({
+        name,
+        description,
+        project_id: selectedProjectId,
+        is_default: false,
+      });
       if (data) {
         console.log('[WorkspacePage] workflow created:', data);
-        store.setWorkflows([...workflows, { id: data.id, name, description }]);
+        store.setWorkflows([...workflows, { id: (data as { id: string }).id, name, description }]);
         setShowCreateModal(false);
       }
     } catch (error) {
@@ -152,7 +153,6 @@ export const WorkspacePage: React.FC = () => {
     }
   }, []);
 
-  // Обработчики для модалки создания узла
   const handleOpenCreateModal = useCallback((x: number, y: number) => {
     console.log('[WorkspacePage] open create modal at', { x, y });
     setNodeTitle('');
@@ -178,7 +178,6 @@ export const WorkspacePage: React.FC = () => {
     setNodePosition(null);
   }, [currentWorkflowId, nodeTitle, nodePrompt, nodePosition, store]);
 
-  // Обработчик для редактирования узла
   const handleOpenEditModal = useCallback((nodeId: string) => {
     console.log('[WorkspacePage] open edit modal for node:', nodeId);
     const node = store.graph.nodes.find(n => n.id === nodeId);
@@ -186,6 +185,20 @@ export const WorkspacePage: React.FC = () => {
       setEditingNode({ id: node.id, promptKey: node.promptKey, config: node.config });
     }
   }, [store.graph.nodes]);
+
+  const handleRequestDeleteNode = useCallback((nodeId: string) => {
+    const node = store.graph.nodes.find(n => n.id === nodeId);
+    if (node) {
+      setDeletingNode({ id: node.id, name: node.promptKey });
+    }
+  }, [store.graph.nodes]);
+
+  const handleRequestDeleteEdge = useCallback((edgeId: string) => {
+    const edge = store.graph.edges.find(e => e.id === edgeId);
+    if (edge) {
+      setDeletingEdge({ edgeId, source: edge.source, target: edge.target });
+    }
+  }, [store.graph.edges]);
 
   if (isLoadingWorkflows || isLoadingWorkflow) {
     console.log('[WorkspacePage] loading...');
@@ -229,38 +242,34 @@ export const WorkspacePage: React.FC = () => {
           <IOSCanvas
             onOpenCreateModal={handleOpenCreateModal}
             onOpenEditModal={handleOpenEditModal}
+            onRequestDeleteNode={handleRequestDeleteNode}
+            onRequestDeleteEdge={handleRequestDeleteEdge}
           />
         </div>
 
         <NodeListPanel
           visible={showNodeList}
           onClose={() => setShowNodeList(false)}
-          nodes={store.graph.nodes.map(n => ({
-            id: n.id,
-            node_id: n.id,
-            prompt_key: n.promptKey,
-            position_x: store.layout.positions[n.id]?.x ?? 0,
-            position_y: store.layout.positions[n.id]?.y ?? 0,
-            config: n.config,
-            recordId: n.id,
-          }))}
-          onAddNode={(node) => {
+          nodes={store.graph.nodes}
+          onAddNode={(nodeData, position) => {
             store.addNode({
               type: 'prompt',
-              promptKey: node.prompt_key,
-              config: node.config || {},
-            }, { x: node.position_x, y: node.position_y });
+              promptKey: nodeData.promptKey,
+              config: nodeData.config || {},
+            }, position);
           }}
           onUpdateNode={async (recordId, promptKey, config) => {
             store.updateNodeConfig(recordId, { promptKey, config });
           }}
-          onDeleteNode={(recordId, nodeId) => {
-            if (recordId) setDeletingNode({ id: recordId, name: nodeId });
+          onDeleteNode={(nodeId) => {
+            const node = store.graph.nodes.find(n => n.id === nodeId);
+            if (node) {
+              setDeletingNode({ id: node.id, name: node.promptKey });
+            }
           }}
           currentWorkflowId={currentWorkflowId}
         />
 
-        {/* Модалка создания узла */}
         <NodeModal
           visible={showNodeModal}
           onClose={() => setShowNodeModal(false)}
@@ -297,7 +306,7 @@ export const WorkspacePage: React.FC = () => {
         <DeleteConfirmModal
           isOpen={!!deletingWorkflow}
           onClose={() => setDeletingWorkflow(null)}
-          onConfirm={() => handleDeleteWorkflow(deletingWorkflow!.id)}
+          onConfirm={async () => await handleDeleteWorkflow(deletingWorkflow!.id)}
           itemName={deletingWorkflow?.name || ''}
           itemType="workflow"
           isPending={false}
@@ -320,9 +329,11 @@ export const WorkspacePage: React.FC = () => {
         <DeleteConfirmModal
           isOpen={!!deletingNode}
           onClose={() => setDeletingNode(null)}
-          onConfirm={() => {
-            if (deletingNode) store.removeNode(deletingNode.id);
-            setDeletingNode(null);
+          onConfirm={async () => {
+            if (deletingNode) {
+              store.removeNode(deletingNode.id);
+              setDeletingNode(null);
+            }
           }}
           itemName={deletingNode?.name || ''}
           itemType="node"
@@ -332,9 +343,11 @@ export const WorkspacePage: React.FC = () => {
         <DeleteConfirmModal
           isOpen={!!deletingEdge}
           onClose={() => setDeletingEdge(null)}
-          onConfirm={() => {
-            if (deletingEdge) store.removeEdge(deletingEdge.edgeId);
-            setDeletingEdge(null);
+          onConfirm={async () => {
+            if (deletingEdge) {
+              store.removeEdge(deletingEdge.edgeId);
+              setDeletingEdge(null);
+            }
           }}
           itemName={`edge`}
           itemType="edge"

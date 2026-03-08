@@ -1,5 +1,6 @@
 export interface GraphNode {
   id: string;
+  recordId?: string;
   type: string;
   promptKey: string;
   config: Record<string, unknown>;
@@ -13,6 +14,7 @@ export interface GraphEdge {
 
 export interface Layout {
   positions: Record<string, { x: number; y: number }>;
+  sizes: Record<string, { width: number; height: number }>;
 }
 
 export interface Viewport {
@@ -28,6 +30,34 @@ export interface UIState {
   currentWorkflowId: string | null;
 }
 
+// Типы для данных, получаемых с сервера
+export interface ApiNode {
+  id: string;
+  node_id: string;
+  prompt_key: string;
+  config: Record<string, unknown>;
+  position_x: number;
+  position_y: number;
+  type?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ApiEdge {
+  id: string;
+  source_node: string;
+  target_node: string;
+  source_output?: string;
+  target_input?: string;
+  created_at?: string;
+}
+
+export interface ApiWorkflowDetail {
+  workflow: Record<string, unknown>; // можно уточнить позже
+  nodes: ApiNode[];
+  edges: ApiEdge[];
+}
+
 export interface WorkflowStore {
   graph: {
     nodes: GraphNode[];
@@ -37,8 +67,8 @@ export interface WorkflowStore {
   viewport: Viewport;
   ui: UIState;
 
-  loadWorkflow: (data: { nodes: any[]; edges: any[] }) => void;
-  addNode: (nodeData: Omit<GraphNode, 'id'>, position?: { x: number; y: number }) => void;
+  loadWorkflow: (data: ApiWorkflowDetail) => void;
+  addNode: (nodeData: Omit<GraphNode, 'id' | 'recordId'>, position?: { x: number; y: number }) => void;
   moveNode: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeConfig: (nodeId: string, config: Partial<GraphNode>) => void;
   removeNode: (nodeId: string) => void;
@@ -49,4 +79,6 @@ export interface WorkflowStore {
   toggleSidebar: () => void;
   setWorkflows: (workflows: UIState['workflows']) => void;
   selectWorkflow: (workflowId: string | null) => void;
+  setNodePositionOptimistic: (nodeId: string, position: { x: number; y: number }) => void;
+  updateNodeSize: (nodeId: string, size: { width: number; height: number }) => void;
 }

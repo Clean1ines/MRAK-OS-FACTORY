@@ -1,14 +1,14 @@
-// src/widgets/node-picker/ui/NodeListPanel.tsx
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { EditNodeModal } from '@/features/node/edit-content/ui/EditNodeModal';
 import { useWorkflowStore } from '@/entities/workflow/store/workflowStore';
-import { GraphNode } from '@/entities/workflow/store/types';
+import { GraphNode, ApiWorkflowDetail } from '@/entities/workflow/store/types';
+import { api } from '@shared/api';
 
 interface NodeListPanelProps {
   visible: boolean;
   onClose: () => void;
-  nodes: GraphNode[]; // теперь GraphNode[]
+  nodes: GraphNode[];
   onAddNode: (node: Omit<GraphNode, 'id'>, position?: { x: number; y: number }) => void;
   onUpdateNode?: (nodeId: string, promptKey: string, config: Record<string, unknown>) => Promise<void>;
   onDeleteNode?: (nodeId: string) => void;
@@ -84,13 +84,9 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
   const loadProjects = async () => {
     setLoading(true);
     try {
-      const token = sessionStorage.getItem('mrak_session_token');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch('/api/projects', { headers });
-      if (!res.ok) throw new Error('Failed to load projects');
-      const data = await res.json();
-      setProjects(data);
+      const { data, error } = await api.projects.list();
+      if (error) throw error;
+      setProjects(Array.isArray(data) ? data : []);
     } catch (err) {
       toast.error('Ошибка загрузки проектов');
       console.error(err);
@@ -103,15 +99,12 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
   const loadWorkflows = async (projectId: string) => {
     setLoading(true);
     try {
-      const token = sessionStorage.getItem('mrak_session_token');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`/api/workflows?project_id=${encodeURIComponent(projectId)}`, { headers });
-      if (!res.ok) throw new Error('Failed to load workflows');
-      const data = await res.json();
+      const { data, error } = await api.workflows.list(projectId);
+      if (error) throw error;
+      const workflowsData = Array.isArray(data) ? data : [];
       const filtered = currentWorkflowId
-        ? data.filter((wf: WorkflowSummary) => wf.id !== currentWorkflowId)
-        : data;
+        ? workflowsData.filter((wf: WorkflowSummary) => wf.id !== currentWorkflowId)
+        : workflowsData;
       setWorkflows(filtered);
     } catch (err) {
       toast.error('Ошибка загрузки воркфлоу');
@@ -125,13 +118,10 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
   const loadNodes = async (workflowId: string) => {
     setLoading(true);
     try {
-      const token = sessionStorage.getItem('mrak_session_token');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`/api/workflows/${workflowId}`, { headers });
-      if (!res.ok) throw new Error('Failed to load workflow details');
-      const data = await res.json();
-      setAvailableNodes(data.nodes || []);
+      const { data, error } = await api.workflows.get(workflowId);
+      if (error) throw error;
+      const detail = data as ApiWorkflowDetail;
+      setAvailableNodes(detail.nodes || []);
     } catch (err) {
       toast.error('Ошибка загрузки узлов');
       console.error(err);
@@ -152,11 +142,19 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
   };
 
   const handleNodeSelect = (node: NodeSummary) => {
-    setPreviewNode(node);
+    setPreviewNode({
+      ...node,
+      prompt_key: node.prompt_key || '',
+    });
   };
 
   const handlePreviewSave = async (promptKey: string, config: Record<string, unknown>) => {
     if (!previewNode) return;
+
+    if (!promptKey.trim()) {
+      toast.error('Node title cannot be empty');
+      return;
+    }
 
     if (isDuplicate(nodes, promptKey, config)) {
       toast.error('A node with the same name and configuration already exists');
@@ -168,18 +166,21 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
       type: 'prompt',
       promptKey,
       config,
-    }, CANVAS_CENTER);
+    }, { x: CANVAS_CENTER.x, y: CANVAS_CENTER.y });
 
     setPreviewNode(null);
   };
 
   const handleNodeDoubleClick = (node: GraphNode) => {
-    // Клонирование: создаём новый узел с теми же данными
+    if (!node.promptKey.trim()) {
+      toast.error('Cannot clone node without a name');
+      return;
+    }
     onAddNode({
       type: node.type,
       promptKey: node.promptKey,
-      config: JSON.parse(JSON.stringify(node.config)), // глубокое копирование
-    }, CANVAS_CENTER);
+      config: JSON.parse(JSON.stringify(node.config)),
+    }, { x: CANVAS_CENTER.x, y: CANVAS_CENTER.y });
   };
 
   const handleEditNode = (node: GraphNode) => {
@@ -364,7 +365,9 @@ export const NodeListPanel: React.FC<NodeListPanelProps> = ({
                   onDoubleClick={() => handleNodeDoubleClick(node)}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="font-semibold text-[var(--bronze-bright)]">{node.promptKey}</div>
+                    <div className="font-semibold text-[var(--bronze-bright)]">
+                      {node.promptKey || 'Unnamed'}
+                    </div>
                     <div className="flex gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleEditNode(node); }}

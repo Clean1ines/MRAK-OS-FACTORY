@@ -7,18 +7,16 @@ interface EdgeProps {
   toPos: { x: number; y: number };
 }
 
-export const Edge: React.FC<EdgeProps> = ({ edge, fromPos, toPos }) => {
-  const x1 = fromPos.x + 140; // смещение под размеры узла
-  const y1 = fromPos.y + 50;
-  const x2 = toPos.x;
-  const y2 = toPos.y + 50;
-  const cp1x = x1 + (x2 - x1) * 0.5;
-
+export const Edge: React.FC<EdgeProps> = ({ fromPos, toPos }) => {
   return (
-    <path
-      d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp1x} ${y2}, ${x2} ${y2}`}
+    <line
+      x1={fromPos.x}
+      y1={fromPos.y}
+      x2={toPos.x}
+      y2={toPos.y}
       stroke="var(--bronze-base)"
       strokeWidth="1.5"
+      strokeLinecap="round"
       fill="none"
       filter="url(#glow-line)"
       markerEnd="url(#arrowhead)"

@@ -6,7 +6,11 @@ import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { IOSShell } from '@/widgets/workflow-shell/ui/IOSShell';
 import { ChatCanvas } from '@/widgets/chat-panel/ui/ChatCanvas';
 
-export const ChatInterface: React.FC = () => {
+interface ChatInterfaceProps {
+  executionId?: string; // ADDED
+}
+
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ executionId }) => {
   const navigate = useNavigate();
   const { models, selectedModel, setSelectedModel } = useAppStore();
   const currentProjectId = useProjectStore(s => s.currentProjectId);
@@ -50,7 +54,7 @@ export const ChatInterface: React.FC = () => {
             </button>
           </header>
 
-          <ChatCanvas />
+          <ChatCanvas executionId={executionId} /> {/* MODIFIED: pass executionId */}
         </main>
       </div>
     </IOSShell>

@@ -15,6 +15,12 @@ from groq_client import GroqClient
 from artifact_service import ArtifactService
 from dependencies import init_dependencies
 
+# ADDED: импорты новых сервисов
+from prompt_loader import PromptLoader
+from prompt_service import PromptService
+from session_service import SessionService
+from services.llm_stream_service import LLMStreamService  # FIXED import path
+
 load_dotenv()
 
 def validate_env():
@@ -55,7 +61,22 @@ async def health():
 # Инициализация сервисов
 groq_client = GroqClient(api_key=os.getenv("GROQ_API_KEY"))
 artifact_service = ArtifactService(groq_client=groq_client)
-init_dependencies(artifact_service)
+
+# ADDED: создаём необходимые сервисы
+prompt_loader = PromptLoader(gh_token=os.getenv("GITHUB_TOKEN"))  # если нет токена, можно None
+# mode_map пока пустой, так как модуль modes отключён
+mode_map = {}
+prompt_service = PromptService(groq_client, prompt_loader, mode_map)
+llm_stream_service = LLMStreamService(groq_client, prompt_loader)
+session_service = SessionService()  # если нужны параметры, добавить
+
+# Инициализируем зависимости, передавая все сервисы
+init_dependencies(
+    artifact_service,
+    prompt_service,
+    llm_stream_service,
+    session_service
+)
 
 # Подключение роутеров
 app.include_router(projects.router)

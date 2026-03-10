@@ -11,14 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Health
-         * @description Health check endpoint for load balancers and monitoring.
-         *     Returns {"status": "ok"} if service is alive.
-         *
-         *     Returns:
-         *         dict: Status indicator.
-         */
+        /** Health */
         get: operations["health_health_get"];
         put?: never;
         post?: never;
@@ -221,6 +214,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/artifacts/{logical_key}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact Versions
+         * @description Возвращает все версии артефакта с данным logical_key в проекте.
+         *     Параметры:
+         *     - project_id: query parameter
+         *     - logical_key: path parameter
+         */
+        get: operations["get_artifact_versions_api_artifacts__logical_key__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/artifact-types": {
         parameters: {
             query?: never;
@@ -253,91 +269,6 @@ export interface paths {
         post?: never;
         /** Delete Artifact Type Endpoint */
         delete: operations["delete_artifact_type_endpoint_api_artifact_types__type__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/clarification/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start Clarification */
-        post: operations["start_clarification_api_clarification_start_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/clarification/{session_id}/message": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Add Message */
-        post: operations["add_message_api_clarification__session_id__message_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/clarification/{session_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Clarification Session Endpoint */
-        get: operations["get_clarification_session_endpoint_api_clarification__session_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/clarification/{session_id}/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Complete Clarification Session */
-        post: operations["complete_clarification_session_api_clarification__session_id__complete_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/clarification/active": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Active Sessions */
-        get: operations["get_active_sessions_api_projects__project_id__clarification_active_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -449,91 +380,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workflow/next": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Next Step */
-        get: operations["get_next_step_api_workflow_next_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/workflow/execute_next": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Execute Next Step */
-        post: operations["execute_next_step_api_workflow_execute_next_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/models": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Models */
-        get: operations["get_models_api_models_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/modes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Available Modes */
-        get: operations["get_available_modes_api_modes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/analyze": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Analyze */
-        post: operations["analyze_api_analyze_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -594,7 +440,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/": {
+    "/api/projects/{project_id}/truth": {
         parameters: {
             query?: never;
             header?: never;
@@ -602,12 +448,229 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Serve Frontend
-         * @description Serve frontend index.html for SPA routing.
-         *
-         *     Returns:
-         *         FileResponse: index.html if exists, else error JSON.
+         * Get Project Truth
+         * @description Возвращает текущее активное состояние архитектурных решений проекта.
+         *     Если указан параметр as_of, возвращает состояние на указанный момент времени.
          */
+        get: operations["get_project_truth_api_projects__project_id__truth_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Run
+         * @description Создаёт новый Run с проверкой существования проекта и воркфлоу.
+         */
+        post: operations["create_run_api_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/nodes/{node_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Node */
+        post: operations["execute_node_api_runs__run_id__nodes__node_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/executions/{exec_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Execution Messages
+         * @description Возвращает историю сообщений для выполнения, если у него есть clarification-сессия.
+         */
+        get: operations["get_execution_messages_api_executions__exec_id__messages_get"];
+        put?: never;
+        /**
+         * Send Execution Message
+         * @description Отправляет сообщение пользователя в диалог выполнения.
+         *     Возвращает потоковый ответ ассистента (text/event-stream).
+         */
+        post: operations["send_execution_message_api_executions__exec_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/executions/{exec_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Execution
+         * @description Валидирует выполнение: создаёт артефакт из последнего сообщения ассистента (если статус DRAFT),
+         *     переводит выполнение в VALIDATED и автоматически создаёт следующий узел (если есть).
+         */
+        post: operations["validate_execution_api_executions__exec_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/freeze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Freeze Run */
+        post: operations["freeze_run_api_runs__run_id__freeze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive Run */
+        post: operations["archive_run_api_runs__run_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/executions/{exec_id}/supersede": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Supersede Execution */
+        post: operations["supersede_execution_api_executions__exec_id__supersede_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Models */
+        get: operations["get_models_api_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/modes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Available Modes */
+        get: operations["get_available_modes_api_modes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analyze */
+        post: operations["analyze_api_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serve Frontend */
         get: operations["serve_frontend__get"];
         put?: never;
         post?: never;
@@ -624,16 +687,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Serve Spa
-         * @description Handle SPA client-side routing: serve index.html for unknown paths.
-         *
-         *     Args:
-         *         path: URL path segment.
-         *
-         *     Returns:
-         *         FileResponse or JSON error.
-         */
+        /** Serve Spa */
         get: operations["serve_spa__path__get"];
         put?: never;
         post?: never;
@@ -664,38 +718,18 @@ export interface components {
             generate: boolean;
             /** Model */
             model?: string | null;
-        };
-        /** ClarificationSessionResponse */
-        ClarificationSessionResponse: {
-            /** Id */
-            id: string;
-            /** Project Id */
-            project_id: string;
-            /** Target Artifact Type */
-            target_artifact_type: string;
-            /** History */
-            history: {
-                [key: string]: unknown;
-            }[];
-            /** Status */
-            status: string;
-            /** Context Summary */
-            context_summary?: {
-                [key: string]: unknown;
-            } | null;
-            /** Final Artifact Id */
-            final_artifact_id?: string | null;
-            /** Created At */
-            created_at: string;
-            /** Updated At */
-            updated_at: string;
+            /**
+             * Logical Key
+             * @description Логический ключ для версионирования (например, ADR-007)
+             */
+            logical_key?: string | null;
         };
         /** GenerateArtifactRequest */
         GenerateArtifactRequest: {
             /** Artifact Type */
             artifact_type: string;
             /** Parent Id */
-            parent_id: string;
+            parent_id?: string | null;
             /**
              * Feedback
              * @default
@@ -707,6 +741,11 @@ export interface components {
             project_id: string;
             /** Existing Content */
             existing_content?: unknown | null;
+            /**
+             * Logical Key
+             * @description Логический ключ для версионирования
+             */
+            logical_key?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -718,10 +757,64 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** NodeExecutionCreate */
+        NodeExecutionCreate: {
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Parent Execution Id */
+            parent_execution_id?: string | null;
+            /** Input Artifact Ids */
+            input_artifact_ids?: string[] | null;
+        };
+        /** NodeExecutionResponse */
+        NodeExecutionResponse: {
+            /** Id */
+            id: string;
+            /** Run Id */
+            run_id: string;
+            /** Node Definition Id */
+            node_definition_id: string;
+            /** Parent Execution Id */
+            parent_execution_id?: string | null;
+            status: components["schemas"]["NodeExecutionStatus"];
+            /** Input Artifact Ids */
+            input_artifact_ids?: string[] | null;
+            /** Output Artifact Id */
+            output_artifact_id?: string | null;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Attempt
+             * @description Номер попытки выполнения
+             */
+            attempt?: number | null;
+            /**
+             * Max Attempts
+             * @description Максимальное количество попыток
+             */
+            max_attempts?: number | null;
+            /**
+             * Base Idempotency Key
+             * @description Базовый ключ идемпотентности (без суффикса попытки)
+             */
+            base_idempotency_key?: string | null;
+        };
         /**
-         * ProjectCreate
-         * @description Схема для создания нового проекта.
+         * NodeExecutionStatus
+         * @enum {string}
          */
+        NodeExecutionStatus: "DRAFT" | "PROCESSING" | "COMPLETED" | "FAILED" | "VALIDATED" | "SUPERSEDED" | "ARCHIVED";
+        /** ProjectCreate */
         ProjectCreate: {
             /**
              * Name
@@ -735,10 +828,7 @@ export interface components {
              */
             description: string;
         };
-        /**
-         * ProjectResponse
-         * @description Схема для ответа с данными проекта.
-         */
+        /** ProjectResponse */
         ProjectResponse: {
             /**
              * Name
@@ -758,10 +848,7 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
-        /**
-         * ProjectUpdate
-         * @description Схема для обновления проекта (PUT — все поля обязательны).
-         */
+        /** ProjectUpdate */
         ProjectUpdate: {
             /**
              * Name
@@ -775,25 +862,54 @@ export interface components {
              */
             description: string;
         };
+        /** RunCreate */
+        RunCreate: {
+            /** Project Id */
+            project_id: string;
+            /** Workflow Id */
+            workflow_id: string;
+        };
+        /** RunResponse */
+        RunResponse: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Workflow Id */
+            workflow_id: string;
+            status: components["schemas"]["RunStatus"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /** Frozen At */
+            frozen_at?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
+        };
+        /**
+         * RunStatus
+         * @enum {string}
+         */
+        RunStatus: "OPEN" | "FROZEN" | "ARCHIVED";
         /** SavePackageRequest */
         SavePackageRequest: {
             /** Project Id */
             project_id: string;
             /** Parent Id */
-            parent_id: string;
+            parent_id?: string | null;
             /** Artifact Type */
             artifact_type: string;
             /** Content */
             content: unknown;
-        };
-        /** StartClarificationRequest */
-        StartClarificationRequest: {
-            /** Project Id */
-            project_id: string;
-            /** Target Artifact Type */
-            target_artifact_type: string;
-            /** Model */
-            model?: string | null;
+            /**
+             * Logical Key
+             * @description Логический ключ для версионирования
+             */
+            logical_key?: string | null;
         };
         /** ValidateArtifactRequest */
         ValidateArtifactRequest: {
@@ -801,6 +917,21 @@ export interface components {
             artifact_id: string;
             /** Status */
             status: string;
+        };
+        /** ValidateExecutionResponse */
+        ValidateExecutionResponse: {
+            /** Id */
+            id: string;
+            status: components["schemas"]["NodeExecutionStatus"];
+            /** Superseded Id */
+            superseded_id?: string | null;
+            /** Previous Active Id */
+            previous_active_id?: string | null;
+            /**
+             * Next Execution Id
+             * @description ID of the next execution automatically started
+             */
+            next_execution_id?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -811,10 +942,7 @@ export interface components {
             /** Error Type */
             type: string;
         };
-        /**
-         * WorkflowCreate
-         * @description Схема создания воркфлоу с опциональным графом.
-         */
+        /** WorkflowCreate */
         WorkflowCreate: {
             /** Name */
             name: string;
@@ -830,15 +958,9 @@ export interface components {
             is_default: boolean;
             /** Project Id */
             project_id: string;
-            /**
-             * Nodes
-             * @description Начальные узлы графа
-             */
+            /** Nodes */
             nodes?: components["schemas"]["WorkflowNodeCreate"][];
-            /**
-             * Edges
-             * @description Начальные рёбра графа
-             */
+            /** Edges */
             edges?: components["schemas"]["WorkflowEdgeCreate"][];
         };
         /** WorkflowEdgeCreate */
@@ -889,10 +1011,7 @@ export interface components {
             /** Position Y */
             position_y?: number | null;
         };
-        /**
-         * WorkflowUpdate
-         * @description Схема обновления воркфлоу. Поля nodes/edges могут отсутствовать (тогда граф не меняется).
-         */
+        /** WorkflowUpdate */
         WorkflowUpdate: {
             /** Name */
             name?: string | null;
@@ -900,15 +1019,9 @@ export interface components {
             description?: string | null;
             /** Is Default */
             is_default?: boolean | null;
-            /**
-             * Nodes
-             * @description Полный новый набор узлов (если указан)
-             */
+            /** Nodes */
             nodes?: components["schemas"]["WorkflowNodeCreate"][] | null;
-            /**
-             * Edges
-             * @description Полный новый набор рёбер (если указан)
-             */
+            /** Edges */
             edges?: components["schemas"]["WorkflowEdgeCreate"][] | null;
         };
     };
@@ -1349,6 +1462,39 @@ export interface operations {
             };
         };
     };
+    get_artifact_versions_api_artifacts__logical_key__versions_get: {
+        parameters: {
+            query: {
+                project_id: string;
+            };
+            header?: never;
+            path: {
+                logical_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_artifact_types_api_artifact_types_get: {
         parameters: {
             query?: never;
@@ -1478,167 +1624,6 @@ export interface operations {
             header?: never;
             path: {
                 type: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    start_clarification_api_clarification_start_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StartClarificationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClarificationSessionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_message_api_clarification__session_id__message_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MessageRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClarificationSessionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_clarification_session_endpoint_api_clarification__session_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClarificationSessionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    complete_clarification_session_api_clarification__session_id__complete_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_active_sessions_api_projects__project_id__clarification_active_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
             };
             cookie?: never;
         };
@@ -1993,13 +1978,91 @@ export interface operations {
             };
         };
     };
-    get_next_step_api_workflow_next_get: {
+    login_api_auth_login_post: {
         parameters: {
-            query: {
-                project_id: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_session_api_auth_session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_project_truth_api_projects__project_id__truth_get: {
+        parameters: {
+            query?: {
+                /** @description Исторический срез на указанное время (ISO 8601) */
+                as_of?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -2024,14 +2087,276 @@ export interface operations {
             };
         };
     };
-    execute_next_step_api_workflow_execute_next_post: {
+    create_run_api_runs_post: {
         parameters: {
-            query: {
-                project_id: string;
-                model?: string | null;
-            };
+            query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_node_api_runs__run_id__nodes__node_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                node_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeExecutionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeExecutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_execution_messages_api_executions__exec_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exec_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_execution_message_api_executions__exec_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exec_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_execution_api_executions__exec_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exec_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidateExecutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    freeze_run_api_runs__run_id__freeze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_run_api_runs__run_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    supersede_execution_api_executions__exec_id__supersede_post: {
+        parameters: {
+            query: {
+                new_execution_id: string;
+            };
+            header?: never;
+            path: {
+                exec_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -2097,81 +2422,6 @@ export interface operations {
         };
     };
     analyze_api_analyze_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    login_api_auth_login_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    logout_api_auth_logout_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_session_api_auth_session_get: {
         parameters: {
             query?: never;
             header?: never;

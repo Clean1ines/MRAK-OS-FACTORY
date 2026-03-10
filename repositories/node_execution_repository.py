@@ -24,11 +24,12 @@ async def create_node_execution(
     run_id: str,
     node_definition_id: str,
     parent_execution_id: Optional[str],
-    idempotency_key: str,                 # исходный ключ (без суффикса)
+    idempotency_key: str,
     input_artifact_ids: Optional[List[str]] = None,
     attempt: int = 1,
     max_attempts: int = 3,
     retry_parent_id: Optional[str] = None,
+    clarification_session_id: Optional[str] = None,  # ADDED for dialogue support
     tx=None
 ) -> str:
     """
@@ -43,16 +44,17 @@ async def create_node_execution(
         close_conn = True
     try:
         input_artifacts_json = json.dumps(input_artifact_ids) if input_artifact_ids is not None else None
+        # ADDED clarification_session_id to INSERT
         exec_id = await conn.fetchval("""
             INSERT INTO node_executions (
                 run_id, node_definition_id, parent_execution_id,
                 idempotency_key, input_artifact_ids, base_idempotency_key,
-                attempt, max_attempts, retry_parent_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                attempt, max_attempts, retry_parent_id, clarification_session_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id
         """, run_id, node_definition_id, parent_execution_id,
             idempotency_key, input_artifacts_json, idempotency_key,
-            attempt, max_attempts, retry_parent_id)
+            attempt, max_attempts, retry_parent_id, clarification_session_id)
         return str(exec_id)
     finally:
         if close_conn:
@@ -266,3 +268,62 @@ async def create_retry_attempt(
         retry_parent_id=failed_execution['id'],
         tx=tx
     )
+
+# ========== Функции для работы с диалоговыми узлами ==========
+
+async def get_next_node_for_execution(execution_id: str, tx=None) -> Optional[str]:
+    """
+    Возвращает node_definition_id (UUID) следующего узла после данного выполнения,
+    или None, если это конечный узел.
+    """
+    if tx:
+        conn = tx.conn
+        close_conn = False
+    else:
+        conn = await get_connection()
+        close_conn = True
+    try:
+        # 1. Получаем run_id и текущий node_definition_id
+        row = await conn.fetchrow("""
+            SELECT run_id, node_definition_id FROM node_executions WHERE id = $1
+        """, execution_id)
+        if not row:
+            return None
+        run_id = row['run_id']
+        current_node_uuid = row['node_definition_id']
+
+        # 2. Получаем workflow_id из runs
+        run_row = await conn.fetchrow("SELECT workflow_id FROM runs WHERE id = $1", run_id)
+        if not run_row:
+            return None
+        workflow_id = run_row['workflow_id']
+
+        # 3. Получаем node_id (текстовый) для текущего узла
+        node_row = await conn.fetchrow(
+            "SELECT node_id FROM workflow_nodes WHERE id = $1",
+            current_node_uuid
+        )
+        if not node_row:
+            return None
+        current_node_text = node_row['node_id']
+
+        # 4. Ищем исходящее ребро из этого узла
+        edge_row = await conn.fetchrow("""
+            SELECT target_node FROM workflow_edges
+            WHERE workflow_id = $1 AND source_node = $2
+        """, workflow_id, current_node_text)
+        if not edge_row:
+            return None
+        target_node_text = edge_row['target_node']
+
+        # 5. Получаем UUID целевого узла
+        target_node_uuid_row = await conn.fetchrow("""
+            SELECT id FROM workflow_nodes
+            WHERE workflow_id = $1 AND node_id = $2
+        """, workflow_id, target_node_text)
+        if not target_node_uuid_row:
+            return None
+        return str(target_node_uuid_row['id'])
+    finally:
+        if close_conn:
+            await conn.close()

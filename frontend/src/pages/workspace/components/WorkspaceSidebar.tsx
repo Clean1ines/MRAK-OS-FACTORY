@@ -23,6 +23,8 @@ interface WorkspaceSidebarProps {
   onCreateWorkflow: () => void;
   onOpenNodeList: () => void;
   onLogout: () => void;
+  // ADDED for workflow execution
+  onStartWorkflow: (workflowId: string) => void;
 }
 
 export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
@@ -39,6 +41,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onCreateWorkflow,
   onOpenNodeList,
   onLogout,
+  onStartWorkflow, // ADDED
 }) => {
   if (!sidebarOpen) return null;
 
@@ -125,6 +128,16 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               </div>
             </div>
             <div className="flex gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
+              {/* ADDED Play button */}
+              <button
+                onClick={() => onStartWorkflow(wf.id)}
+                className="text-[var(--text-muted)] hover:text-[var(--accent-success)] transition-colors p-1"
+                title="Run workflow"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5,3 19,12 5,21" />
+                </svg>
+              </button>
               <button
                 onClick={() => onEditWorkflow(wf)}
                 className="text-[var(--text-muted)] hover:text-[var(--bronze-base)] transition-colors p-1"

@@ -2,9 +2,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@shared/api/queryClient';
-// Пока импортируем из старых путей, они переедут на следующих шагах
 import { ChatInterface } from '@/widgets/chat-window/ui/ChatInterface';
 import { WorkspacePage } from '@/pages/workspace/WorkspacePage';
+import { WorkflowChatPage } from '@/pages/workspace/WorkflowChatPage'; // ADDED
 import { AuthGuard } from '@/features/auth/protect-routes/AuthGuard';
 import { LoginPage } from '@/pages/login/LoginPage';
 import { ProtectedLayout } from '@/widgets/layout/ui/ProtectedLayout';
@@ -63,6 +63,15 @@ function App() {
               element={
                 <AuthGuard>
                   <WorkspacePage />
+                </AuthGuard>
+              }
+            />
+            {/* ADDED: маршрут для страницы чата выполнения воркфлоу */}
+            <Route
+              path="/workspace/chat"
+              element={
+                <AuthGuard>
+                  <WorkflowChatPage />
                 </AuthGuard>
               }
             />

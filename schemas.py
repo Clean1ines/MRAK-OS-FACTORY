@@ -141,6 +141,8 @@ class StartClarificationRequest(BaseModel):
 
 class MessageRequest(BaseModel):
     message: str
+    # FIX: add optional model field to match frontend payload
+    model: Optional[str] = None
 
 class ClarificationSessionResponse(BaseModel):
     id: str
@@ -233,3 +235,4 @@ class ValidateExecutionResponse(BaseModel):
     status: NodeExecutionStatus
     superseded_id: Optional[str] = None
     previous_active_id: Optional[str] = None
+    next_execution_id: Optional[str] = Field(None, description="ID of the next execution automatically started")

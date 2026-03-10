@@ -2,7 +2,7 @@
 import asyncio
 import re
 import logging
-from typing import Optional, Dict, Any
+from typing import List, Dict, Optional, Any
 import db
 from groq_client import GroqClient
 from prompt_loader import PromptLoader
@@ -54,6 +54,59 @@ class LLMStreamService:
                         "tokens_remaining": rt,
                         "requests_remaining": rr
                     }
+                }
+                asyncio.create_task(
+                    db.save_artifact(
+                        artifact_type="LLMResponse",
+                        content=artifact_data,
+                        owner="system",
+                        status="GENERATED",
+                        project_id=project_id
+                    )
+                )
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "403" in err_msg:
+                yield "🔴 **ACCESS_DENIED**: API заблокирован в вашем регионе."
+            elif "429" in err_msg:
+                yield "🔴 **RATE_LIMIT**: Подождите, лимиты исчерпаны."
+            else:
+                yield f"🔴 **GROQ_API_ERROR**: {str(e)}"
+
+    # FIX: moved inside class
+    async def stream_chat(self, messages: List[Dict[str, str]], model_id: str, project_id: Optional[str] = None):
+        """
+        Streams a chat completion based on a full message history.
+        Yields chunks of the assistant's response.
+        """
+        # Optionally filter PII in each message content
+        filtered_messages = []
+        for msg in messages:
+            filtered_msg = msg.copy()
+            if msg.get("content"):
+                filtered_msg["content"] = self._pii_filter(msg["content"])
+            filtered_messages.append(filtered_msg)
+
+        full_response = ""
+        try:
+            raw_res = self.groq_client.client.chat.completions.with_raw_response.create(
+                model=model_id,
+                messages=filtered_messages,
+                stream=True,
+                temperature=0.6,
+            )
+            for chunk in raw_res.parse():
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    yield content
+
+            # Optionally save the full response as an artifact
+            if full_response and project_id:
+                artifact_data = {
+                    "messages": filtered_messages,
+                    "model": model_id,
+                    "response": full_response,
                 }
                 asyncio.create_task(
                     db.save_artifact(

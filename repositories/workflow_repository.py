@@ -157,6 +157,7 @@ async def create_workflow_node(
     config: Dict[str, Any],
     position_x: float,
     position_y: float,
+    requires_dialogue: bool = False,  # ADDED for dialogue support
     tx=None
 ) -> str:
     """Создаёт новый узел воркфлоу."""
@@ -169,10 +170,11 @@ async def create_workflow_node(
     try:
         record_id = str(uuid.uuid4())
         config_json = json.dumps(config)
+        # ADDED requires_dialogue field
         await conn.execute('''
-            INSERT INTO workflow_nodes (id, workflow_id, node_id, prompt_key, config, position_x, position_y)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ''', record_id, workflow_id, node_id, prompt_key, config_json, position_x, position_y)
+            INSERT INTO workflow_nodes (id, workflow_id, node_id, prompt_key, config, position_x, position_y, requires_dialogue)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ''', record_id, workflow_id, node_id, prompt_key, config_json, position_x, position_y, requires_dialogue)
         logger.info("Created node %s (record %s) in workflow %s", node_id, record_id, workflow_id)
         return record_id
     except Exception as e:
@@ -233,6 +235,7 @@ async def update_workflow_node(
     config: Optional[Dict[str, Any]] = None,
     position_x: Optional[float] = None,
     position_y: Optional[float] = None,
+    requires_dialogue: Optional[bool] = None,  # ADDED for dialogue support
     tx=None
 ) -> None:
     """Обновляет поля узла по его первичному ключу."""
@@ -261,6 +264,10 @@ async def update_workflow_node(
         if position_y is not None:
             set_clauses.append(f"position_y = ${idx}")
             values.append(position_y)
+            idx += 1
+        if requires_dialogue is not None:  # ADDED
+            set_clauses.append(f"requires_dialogue = ${idx}")
+            values.append(requires_dialogue)
             idx += 1
         if not set_clauses:
             return
@@ -380,6 +387,8 @@ async def sync_workflow_graph(workflow_id: str, nodes: List[Dict[str, Any]], edg
     # 3. Обработка узлов из запроса
     for node_data in nodes:
         node_id = node_data['node_id']
+        # Получаем requires_dialogue из данных, по умолчанию False
+        requires_dialogue = node_data.get('requires_dialogue', False)  # ADDED
         if node_id in node_map:
             # Обновить существующий
             record_id = node_map[node_id]['id']
@@ -389,7 +398,8 @@ async def sync_workflow_graph(workflow_id: str, nodes: List[Dict[str, Any]], edg
                 prompt_key=node_data['prompt_key'],
                 config=node_data.get('config', {}),
                 position_x=node_data['position_x'],
-                position_y=node_data['position_y']
+                position_y=node_data['position_y'],
+                requires_dialogue=requires_dialogue  # ADDED
             )
             del node_map[node_id]
         else:
@@ -401,6 +411,7 @@ async def sync_workflow_graph(workflow_id: str, nodes: List[Dict[str, Any]], edg
                 config=node_data.get('config', {}),
                 position_x=node_data['position_x'],
                 position_y=node_data['position_y'],
+                requires_dialogue=requires_dialogue,  # ADDED
                 tx=tx
             )
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { v4 as uuidv4 } from 'uuid';
 import { api } from '@shared/api';
 import { IOSShell } from '@/widgets/workflow-shell/ui/IOSShell';
 import { IOSCanvas } from '@/widgets/workflow-editor/ui/IOSCanvas';
@@ -18,6 +19,11 @@ import { useProjects } from '@/entities/project/api/useProjects';
 import { useWorkflowStore } from '@/entities/workflow/store/workflowStore';
 import { useLoadWorkflow } from '@/entities/workflow/store/useLoadWorkflow';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar';
+import { NodePickerModal } from '@/widgets/node-picker/ui/NodePickerModal';
+import { ModelPickerModal } from '@/features/ai-config/ui/ModelPickerModal';
+import { useModels } from '@entities/ai-config/api/useModels';
+import { useNotification } from '@/shared/lib/notification/useNotifications';
+import { GraphNode } from '@/entities/workflow/store/types';
 
 interface WorkflowSummary {
   id: string;
@@ -30,6 +36,8 @@ export const WorkspacePage: React.FC = () => {
   const [userClosedSidebar, setUserClosedSidebar] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const workflowIdFromUrl = searchParams.get('workflowId');
+  const navigate = useNavigate();
+  const { showNotification } = useNotification();
 
   const { projects } = useProjects();
   const { selectedProjectId } = useSelectedProject(projects);
@@ -98,6 +106,59 @@ export const WorkspacePage: React.FC = () => {
   const [nodeTitle, setNodeTitle] = useState('');
   const [nodePrompt, setNodePrompt] = useState('');
   const [nodePosition, setNodePosition] = useState<{ x: number; y: number } | null>(null);
+
+  // Состояния для запуска воркфлоу
+  const [showNodePicker, setShowNodePicker] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [selectedStartNode, setSelectedStartNode] = useState<GraphNode | null>(null);
+  const [isStartingWorkflow, setIsStartingWorkflow] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+
+  const { data: models } = useModels();
+
+  const handleStartWorkflow = useCallback((workflowId: string) => {
+    setSelectedWorkflowId(workflowId);
+    setShowNodePicker(true);
+  }, []);
+
+  const startWorkflow = useCallback(async (workflowId: string, node: GraphNode, _model: string) => { // неиспользуемый параметр помечен подчёркиванием
+    if (!selectedProjectId) {
+      showNotification('No project selected', 'error');
+      return;
+    }
+    if (!node.recordId) {
+      showNotification('Node is not fully synced yet. Please wait a moment and try again.', 'error');
+      return;
+    }
+    setIsStartingWorkflow(true);
+    try {
+      // 1. Создаём Run
+      const { data: runData, error: runError } = await api.runs.create({
+        project_id: selectedProjectId,
+        workflow_id: workflowId,
+      });
+      if (runError) throw runError;
+      const runId = (runData as { id: string }).id;
+
+      // 2. Выполняем стартовый узел (используем recordId)
+      const idempotencyKey = uuidv4();
+      const { data: execData, error: execError } = await api.runs.executeNode(runId, node.recordId, {
+        idempotency_key: idempotencyKey,
+        parent_execution_id: null,
+        input_artifact_ids: [],
+      });
+      if (execError) throw execError;
+      const executionId = (execData as { id: string }).id;
+
+      // 3. Переходим на страницу чата
+      navigate(`/workspace/chat?runId=${runId}&executionId=${executionId}`);
+    } catch (err) {
+      console.error('[startWorkflow] error:', err);
+      showNotification('Failed to start workflow', 'error');
+    } finally {
+      setIsStartingWorkflow(false);
+    }
+  }, [selectedProjectId, navigate, showNotification]);
 
   const handleCreateWorkflow = useCallback(async (name: string, description: string) => {
     console.log('[WorkspacePage] handleCreateWorkflow', { name, description, projectId: selectedProjectId });
@@ -227,6 +288,7 @@ export const WorkspacePage: React.FC = () => {
           onCreateWorkflow={() => setShowCreateModal(true)}
           onOpenNodeList={() => setShowNodeList(true)}
           onLogout={handleLogout}
+          onStartWorkflow={handleStartWorkflow}
         />
 
         <div className="flex-1 flex flex-col">
@@ -352,6 +414,32 @@ export const WorkspacePage: React.FC = () => {
           itemName={`edge`}
           itemType="edge"
           isPending={false}
+        />
+
+        {/* Модалка выбора стартового узла */}
+        <NodePickerModal
+          isOpen={showNodePicker}
+          onClose={() => setShowNodePicker(false)}
+          nodes={store.graph.nodes}
+          onSelect={(node) => {
+            setSelectedStartNode(node as GraphNode); // приведение типа
+            setShowNodePicker(false);
+            setShowModelPicker(true);
+          }}
+        />
+
+        {/* Модалка выбора модели */}
+        <ModelPickerModal
+          isOpen={showModelPicker}
+          onClose={() => setShowModelPicker(false)}
+          models={models || []}
+          onSelect={(model) => {
+            if (selectedWorkflowId && selectedStartNode) {
+              startWorkflow(selectedWorkflowId, selectedStartNode, model);
+            }
+            setShowModelPicker(false);
+          }}
+          isPending={isStartingWorkflow}
         />
       </div>
     </IOSShell>

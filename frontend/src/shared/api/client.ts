@@ -13,6 +13,10 @@ declare global {
 // ---------- Types ----------
 export type ProjectResponse = components['schemas']['ProjectResponse'];
 type ProjectCreate = components['schemas']['ProjectCreate'];
+type RunCreate = components['schemas']['RunCreate'];               // ADDED
+type NodeExecutionCreate = components['schemas']['NodeExecutionCreate']; // ADDED
+type MessageRequest = components['schemas']['MessageRequest'];     // ADDED
+export type ValidateExecutionResponse = components['schemas']['ValidateExecutionResponse']; // ADDED и экспортирован
 
 // ---------- Token Management ----------
 const getSessionToken = (): string | null => {
@@ -115,6 +119,52 @@ client.use({
 
 client.use(createTimeoutMiddleware(30000));
 
+// ---------- Helper for streaming requests ----------
+async function streamFetch(
+  url: string,
+  options: RequestInit,
+  onChunk: (chunk: string) => void,
+  onFinish: (fullText: string) => void,
+  onError: (err: Error) => void
+) {
+  try {
+    const token = getSessionToken();
+    const headers = new Headers(options.headers || {});
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    headers.set('Content-Type', 'application/json');
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(getErrorMessage(errData) || `HTTP ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      fullText += chunk;
+      onChunk(chunk);
+    }
+
+    onFinish(fullText);
+  } catch (err) {
+    onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 // ---------- Typed API Endpoints ----------
 export const api = {
   projects: {
@@ -193,6 +243,38 @@ export const api = {
         }),
     },
   },
+  // ==================== ADDED: runs and executions ====================
+  runs: {
+    create: (body: RunCreate) =>
+      client.POST('/api/runs', { body }),
+    get: (runId: string) =>
+      client.GET('/api/runs/{run_id}', { params: { path: { run_id: runId } } }),
+    executeNode: (runId: string, nodeId: string, body: NodeExecutionCreate) =>
+      client.POST('/api/runs/{run_id}/nodes/{node_id}/execute', {
+        params: { path: { run_id: runId, node_id: nodeId } },
+        body,
+      }),
+    freeze: (runId: string) =>
+      client.POST('/api/runs/{run_id}/freeze', { params: { path: { run_id: runId } } }),
+    archive: (runId: string) =>
+      client.POST('/api/runs/{run_id}/archive', { params: { path: { run_id: runId } } }),
+  },
+  executions: {
+    getMessages: (executionId: string) =>
+      client.GET('/api/executions/{exec_id}/messages', { params: { path: { exec_id: executionId } } }),
+    // Streaming message endpoint – returns a raw Response for use with streamFetch
+    sendMessageStream: (executionId: string, body: MessageRequest) =>
+      fetch(`/api/executions/${executionId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    validate: (executionId: string) =>
+      client.POST('/api/executions/{exec_id}/validate', {
+        params: { path: { exec_id: executionId } },
+        // body удалён, так как метод не требует тела
+      }),
+  },
   auth: {
     login: async (body: { master_key: string }) => {
       try {
@@ -239,3 +321,6 @@ export const api = {
     },
   },
 };
+
+// Re-export stream helper for use in hooks
+export { streamFetch };

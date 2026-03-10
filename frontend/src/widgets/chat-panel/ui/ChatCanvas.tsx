@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react'; // удалён неиспользуемый useState
 import { useAppStore, ChatMessageData } from '@/app/store';
 import { useProjectStore } from '@entities/project';
-import { useStreaming } from '@/shared/api/streaming';
 import { useNotification } from '@/shared/lib/notification/useNotifications';
 import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery';
 import { ChatMessage } from '@/entities/chat/ui/ChatMessage';
+import { useSendMessage } from '@/features/chat/send-message/useSendMessage';
+import { useExecutionMessages } from '@entities/chat/api/useExecutionMessages';
 import {
   TEXTAREA_LINE_HEIGHT,
   TEXTAREA_MAX_ROWS_DESKTOP,
@@ -12,7 +13,6 @@ import {
   TEXTAREA_MIN_HEIGHT,
 } from '@/shared/lib/constants/canvas';
 
-// Компонент расширяющегося textarea с кнопкой отправки внутри (без disabled)
 const ExpandingTextarea: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -58,60 +58,38 @@ const ExpandingTextarea: React.FC<{
   );
 };
 
-export const ChatCanvas: React.FC = () => {
-  const [message, setMessage] = useState('');
-  const [streamingContent, setStreamingContent] = useState<string | null>(null);
-  
+interface ChatCanvasProps {
+  executionId?: string;
+}
+
+export const ChatCanvas: React.FC<ChatCanvasProps> = ({ executionId }) => {
   const messages = useAppStore(s => s.messages);
-  const addMessage = useAppStore(s => s.addMessage);
   const currentProjectId = useProjectStore(s => s.currentProjectId);
-  const selectedModel = useAppStore(s => s.selectedModel);
-  
   const showNotification = useNotification().showNotification;
-  const { startStream } = useStreaming();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
+
+  // Загружаем историю сообщений, если передан executionId
+  const { isLoading, error } = useExecutionMessages(executionId || null);
+
+  // Параметризованный хук отправки сообщений
+  const { sendMessage, isStreaming, inputValue, setInputValue } = useSendMessage(executionId);
+
+  useEffect(() => {
+    if (error) {
+      showNotification('Failed to load messages', 'error');
+    }
+  }, [error, showNotification]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, streamingContent]);
+  }, [messages, isStreaming]);
 
   const handleSend = async () => {
-    if (!message.trim()) return;
-    if (!currentProjectId) {
-      showNotification('Сначала выберите проект', 'error');
-      return;
-    }
-
-    const userMsg: ChatMessageData = { role: 'user', content: message, timestamp: Date.now() };
-    addMessage(userMsg);
-    setMessage('');
-    setStreamingContent('');
-
-    await startStream(
-      {
-        prompt: userMsg.content,
-        mode: '01_CORE',
-        model: selectedModel || undefined,
-        project_id: currentProjectId,
-      },
-      {
-        onChunk: (chunk) => {
-          setStreamingContent((prev) => (prev || '') + chunk);
-        },
-        onFinish: (fullText) => {
-          addMessage({ role: 'assistant', content: fullText, timestamp: Date.now() });
-          setStreamingContent(null);
-        },
-        onError: (err) => {
-          const messageErr = err instanceof Error ? err.message : String(err);
-          showNotification('Ошибка: ' + messageErr, 'error');
-          setStreamingContent(null);
-        },
-      }
-    );
+    if (!inputValue.trim()) return;
+    await sendMessage(inputValue);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -121,11 +99,14 @@ export const ChatCanvas: React.FC = () => {
     }
   };
 
-  const showMrakBrand = messages.length === 0 && !streamingContent;
+  const showMrakBrand = messages.length === 0 && !isStreaming && !isLoading;
 
   return (
     <div className="flex-1 flex flex-col h-full">
       <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 p-4 relative">
+        {isLoading && (
+          <div className="text-center text-gray-500 py-4">Loading conversation...</div>
+        )}
         {showMrakBrand && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-6xl font-bold text-[var(--bronze-base)] opacity-[0.03] select-none">
@@ -136,14 +117,14 @@ export const ChatCanvas: React.FC = () => {
         {messages.map((msg: ChatMessageData, idx: number) => (
           <ChatMessage key={idx} role={msg.role} content={msg.content} />
         ))}
-        {streamingContent !== null && (
-          <ChatMessage role="assistant" content={streamingContent} isStreaming />
+        {isStreaming && (
+          <ChatMessage role="assistant" content="..." isStreaming />
         )}
       </div>
       <div className="p-4 border-t border-[var(--ios-border)] bg-[var(--ios-glass-dark)]">
         <ExpandingTextarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           onSend={handleSend}
           placeholder={currentProjectId ? "Type your message..." : "Select a project first"}

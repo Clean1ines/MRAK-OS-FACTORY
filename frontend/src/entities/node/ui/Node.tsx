@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GraphNode, GraphEdge } from '@/entities/workflow/store/types';
+import { useWorkflowStore } from '@/entities/workflow/store/workflowStore';
 
 interface StarNodeProps {
   node: GraphNode;
@@ -31,6 +32,8 @@ export const IOSNode = React.forwardRef<HTMLDivElement, StarNodeProps>(({
   onRequestDeleteEdge,
 }, ref) => {
   const [showEdgeMenu, setShowEdgeMenu] = useState(false);
+  const updateNodeSize = useWorkflowStore(state => state.updateNodeSize);
+  const labelGroupRef = useRef<HTMLDivElement>(null);
 
   const connectedEdges = edges.filter(e => e.source === node.id || e.target === node.id);
   const connections = connectedEdges.map(e => {
@@ -42,12 +45,22 @@ export const IOSNode = React.forwardRef<HTMLDivElement, StarNodeProps>(({
     };
   });
 
+  // Измеряем размеры группы при монтировании и при изменении текста
+  useEffect(() => {
+    if (labelGroupRef.current) {
+      const rect = labelGroupRef.current.getBoundingClientRect();
+      // Добавляем небольшой отступ, чтобы не было впритык
+      updateNodeSize(node.id, { width: rect.width + 4, height: rect.height + 4 });
+    }
+  }, [node.promptKey, updateNodeSize, node.id]);
+
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onEdit(node.id);
   };
 
   const handleClick = (e: React.MouseEvent) => {
+    console.log('[IOSNode] onNodeClick', node.id);
     e.stopPropagation();
     onNodeClick(node.id);
   };
@@ -58,6 +71,7 @@ export const IOSNode = React.forwardRef<HTMLDivElement, StarNodeProps>(({
   };
 
   const handleStartConnection = (e: React.MouseEvent) => {
+    console.log('[IOSNode] onStartConnection', node.id);
     e.stopPropagation();
     onStartConnection(node.id);
   };
@@ -96,6 +110,7 @@ export const IOSNode = React.forwardRef<HTMLDivElement, StarNodeProps>(({
       />
 
       <div
+        ref={labelGroupRef}
         style={{
           position: 'absolute',
           left: 8,
@@ -132,7 +147,6 @@ export const IOSNode = React.forwardRef<HTMLDivElement, StarNodeProps>(({
             </svg>
           </button>
         )}
-        {/* Кнопка удаления узла */}
         <button
           onClick={handleDeleteClick}
           className="text-[var(--text-muted)] hover:text-[var(--accent-danger)] transition-colors"

@@ -1,3 +1,4 @@
+// frontend/src/entities/workflow/store/types.ts
 export interface GraphNode {
   id: string;
   recordId?: string;
@@ -14,13 +15,7 @@ export interface GraphEdge {
 
 export interface Layout {
   positions: Record<string, { x: number; y: number }>;
-  sizes: Record<string, { width: number; height: number }>;
-}
-
-export interface Viewport {
-  zoom: number;
-  cameraX: number;
-  cameraY: number;
+  sizes: Record<string, { width: number; height: number }>; // теперь используем для хранения ширины лейбла
 }
 
 export interface UIState {
@@ -30,7 +25,6 @@ export interface UIState {
   currentWorkflowId: string | null;
 }
 
-// Типы для данных, получаемых с сервера
 export interface ApiNode {
   id: string;
   node_id: string;
@@ -53,7 +47,7 @@ export interface ApiEdge {
 }
 
 export interface ApiWorkflowDetail {
-  workflow: Record<string, unknown>; // можно уточнить позже
+  workflow: Record<string, unknown>;
   nodes: ApiNode[];
   edges: ApiEdge[];
 }
@@ -64,8 +58,12 @@ export interface WorkflowStore {
     edges: GraphEdge[];
   };
   layout: Layout;
-  viewport: Viewport;
   ui: UIState;
+  containerWidth: number;
+  containerHeight: number;
+
+  setContainerSize: (width: number, height: number) => void;
+  clampAllPositions: () => void;
 
   loadWorkflow: (data: ApiWorkflowDetail) => void;
   addNode: (nodeData: Omit<GraphNode, 'id' | 'recordId'>, position?: { x: number; y: number }) => void;
@@ -74,7 +72,6 @@ export interface WorkflowStore {
   removeNode: (nodeId: string) => void;
   addEdge: (source: string, target: string) => void;
   removeEdge: (edgeId: string) => void;
-  setViewport: (zoom: number, cameraX: number, cameraY: number) => void;
   selectNode: (nodeId: string | null) => void;
   toggleSidebar: () => void;
   setWorkflows: (workflows: UIState['workflows']) => void;

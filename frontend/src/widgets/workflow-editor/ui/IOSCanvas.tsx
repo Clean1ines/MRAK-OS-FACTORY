@@ -1,3 +1,4 @@
+// frontend/src/widgets/workflow-editor/ui/IOSCanvas.tsx
 import React, { useRef, useCallback, useState, useMemo, useEffect } from 'react';
 import { useWorkflowStore } from '@/entities/workflow/store/workflowStore';
 import { IOSNode } from '@/entities/node/ui/Node';
@@ -22,8 +23,6 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
 
   const {
-    handleWheel,
-    handlePanStart,
     handleNodeDragStart,
     draggedNodeId,
     draggedNodePosition,
@@ -32,27 +31,43 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   const visibleNodes = useWorkflowStore(state => state.graph.nodes);
   const edges = useWorkflowStore(state => state.graph.edges);
   const positions = useWorkflowStore(state => state.layout.positions);
-  const viewport = useWorkflowStore(state => state.viewport);
   const selectedNodeId = useWorkflowStore(state => state.ui.selectedNodeId);
   const addEdge = useWorkflowStore(state => state.addEdge);
+  const setContainerSize = useWorkflowStore(state => state.setContainerSize);
+
+  // Обновляем размеры контейнера при изменении окна или сайдбара
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setContainerSize(rect.width, rect.height);
+      }
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    // также следим за изменением сайдбара (можно добавить observer)
+    const observer = new ResizeObserver(updateSize);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      observer.disconnect();
+    };
+  }, [setContainerSize]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!containerRef.current || !connectingNode) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const worldX = (e.clientX - rect.left - viewport.cameraX) / viewport.zoom;
-    const worldY = (e.clientY - rect.top - viewport.cameraY) / viewport.zoom;
+    const worldX = e.clientX - rect.left;
+    const worldY = e.clientY - rect.top;
     setMousePos({ x: worldX, y: worldY });
-  }, [connectingNode, viewport]);
+  }, [connectingNode]);
 
-  // Сбрасываем позицию мыши при отключении режима соединения
   useEffect(() => {
     if (!connectingNode) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMousePos(null);
     }
   }, [connectingNode]);
 
-  // Подписываемся на движение мыши только в режиме соединения
   useEffect(() => {
     if (connectingNode) {
       window.addEventListener('mousemove', handleMouseMove);
@@ -63,6 +78,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
   }, [connectingNode, handleMouseMove]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
+    console.log('[IOSCanvas] handleNodeClick', nodeId);
     if (connectingNode && connectingNode !== nodeId) {
       addEdge(connectingNode, nodeId);
       setConnectingNode(null);
@@ -111,10 +127,7 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     if (!connectingNode) return null;
     const fromPos = positions[connectingNode];
     if (!fromPos) return null;
-    const toPos = mousePos || {
-      x: (viewport.cameraX + 0) / viewport.zoom,
-      y: (viewport.cameraY + 0) / viewport.zoom,
-    };
+    const toPos = mousePos || { x: 0, y: 0 };
     return (
       <line
         x1={fromPos.x}
@@ -127,16 +140,16 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
         opacity="0.8"
       />
     );
-  }, [connectingNode, positions, mousePos, viewport]);
+  }, [connectingNode, positions, mousePos]);
 
   const getCanvasCoords = useCallback((clientX: number, clientY: number) => {
     if (!containerRef.current) return { x: 0, y: 0 };
     const rect = containerRef.current.getBoundingClientRect();
     return {
-      x: (clientX - rect.left - viewport.cameraX) / viewport.zoom,
-      y: (clientY - rect.top - viewport.cameraY) / viewport.zoom,
+      x: clientX - rect.left,
+      y: clientY - rect.top,
     };
-  }, [viewport]);
+  }, []);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -151,67 +164,44 @@ export const IOSCanvas: React.FC<IOSCanvasProps> = ({
     <div
       ref={containerRef}
       className="flex-1 relative overflow-hidden bg-[var(--bg-canvas)] cursor-crosshair"
-      onWheel={(e) => {
-        if (containerRef.current) {
-          handleWheel(e, containerRef.current.getBoundingClientRect());
-        }
-      }}
-      onMouseDown={handlePanStart}
-      onTouchStart={handlePanStart}
       onDoubleClick={handleDoubleClick}
       onClick={handleBackgroundClick}
     >
-      <div
-        className="absolute w-full h-full origin-top-left"
-        style={{
-          transform: `translate3d(${viewport.cameraX}px, ${viewport.cameraY}px, 0) scale(${viewport.zoom})`,
-          willChange: 'transform',
-        }}
-      >
-        <svg className="absolute top-0 left-0 w-[20000px] h-[20000px]" style={{ pointerEvents: 'none' }}>
-          <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="var(--bronze-base)" />
-            </marker>
-            <filter id="glow-line" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="2" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-          {edgeElements}
-          {connectionLine}
-        </svg>
+      <svg className="absolute top-0 left-0 w-full h-full" style={{ pointerEvents: 'none' }}>
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="var(--bronze-base)" />
+          </marker>
+          <filter id="glow-line" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        {edgeElements}
+        {connectionLine}
+      </svg>
 
-        <div style={{ pointerEvents: 'auto' }}>
-          {visibleNodes.map(node => (
-            <IOSNode
-              key={node.id}
-              node={node}
-              position={positions[node.id]}
-              edges={edges}
-              allNodes={visibleNodes}
-              isSelected={selectedNodeId === node.id}
-              isConnecting={connectingNode === node.id}
-              onDragStart={handleNodeDragStart}
-              onEdit={onOpenEditModal || (() => {})}
-              onStartConnection={() => setConnectingNode(node.id)}
-              onNodeClick={handleNodeClick}
-              onRequestDelete={onRequestDeleteNode || (() => {})}
-              onRequestDeleteEdge={onRequestDeleteEdge || (() => {})}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="absolute bottom-4 right-4 text-[10px] text-[var(--text-muted)] bg-[var(--ios-glass-dark)] px-2 py-1 rounded border border-[var(--ios-border)]">
-        {Math.round(viewport.zoom * 100)}%
-      </div>
-
-      <div className="absolute top-4 right-4 text-[10px] text-[var(--bronze-dim)] bg-black/80 px-2 py-1 rounded font-mono border border-[var(--bronze-dim)]">
-        Scale: {viewport.zoom.toFixed(2)} | Pan: {Math.round(viewport.cameraX)}, {Math.round(viewport.cameraY)}
+      <div style={{ pointerEvents: 'auto' }}>
+        {visibleNodes.map(node => (
+          <IOSNode
+            key={node.id}
+            node={node}
+            position={positions[node.id]}
+            edges={edges}
+            allNodes={visibleNodes}
+            isSelected={selectedNodeId === node.id}
+            isConnecting={connectingNode === node.id}
+            onDragStart={handleNodeDragStart}
+            onEdit={onOpenEditModal || (() => {})}
+            onStartConnection={() => setConnectingNode(node.id)}
+            onNodeClick={handleNodeClick}
+            onRequestDelete={onRequestDeleteNode || (() => {})}
+            onRequestDeleteEdge={onRequestDeleteEdge || (() => {})}
+          />
+        ))}
       </div>
     </div>
   );

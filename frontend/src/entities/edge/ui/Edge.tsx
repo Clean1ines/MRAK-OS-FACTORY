@@ -8,6 +8,7 @@ interface EdgeProps {
 }
 
 export const Edge: React.FC<EdgeProps> = ({ fromPos, toPos }) => {
+  console.log('[Edge] rendering', fromPos, toPos);
   return (
     <line
       x1={fromPos.x}

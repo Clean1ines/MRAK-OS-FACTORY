@@ -51,15 +51,27 @@ export const WorkspacePage: React.FC = () => {
       if (!selectedProjectId) return [];
       const { data } = await api.workflows.list(selectedProjectId);
       console.log('[WorkspacePage] workflows loaded:', (data as WorkflowSummary[] | undefined)?.length);
-      return (data as WorkflowSummary[]) || [];
+      // Гарантируем, что возвращаем массив
+      return Array.isArray(data) ? data : [];
     },
     enabled: !!selectedProjectId,
   });
 
+  // Effect: update store with new list and reset if current workflow not found
   useEffect(() => {
     if (workflowsList) {
-      console.log('[WorkspacePage] setting workflows to store, count:', workflowsList.length);
-      useWorkflowStore.getState().setWorkflows(workflowsList);
+      const safeList = Array.isArray(workflowsList) ? workflowsList : [];
+      console.log('[WorkspacePage] setting workflows to store, count:', safeList.length);
+      useWorkflowStore.getState().setWorkflows(safeList);
+
+      const currentId = useWorkflowStore.getState().ui.currentWorkflowId;
+      console.log('[WorkspacePage] current workflow id after set:', currentId);
+      if (currentId && !safeList.some(w => w.id === currentId)) {
+        console.log('[WorkspacePage] current workflow not in new project, resetting');
+        useWorkflowStore.getState().selectWorkflow(null);
+        // FIX: clear graph directly instead of calling non-existent method
+        useWorkflowStore.setState({ graph: { nodes: [], edges: [] } });
+      }
     }
   }, [workflowsList]);
 

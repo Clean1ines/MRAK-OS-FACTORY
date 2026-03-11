@@ -1,14 +1,10 @@
+// frontend/src/entities/workflow/store/workflowStore.ts
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { WorkflowStore, GraphNode, ApiWorkflowDetail, ApiNode, ApiEdge } from './types';
 import { deterministicNodeId, deterministicEdgeId } from '@/shared/lib/deterministicId';
 import { syncWithServer } from './syncMiddleware';
 import toast from 'react-hot-toast';
-
-const savedViewport = localStorage.getItem('workflowViewport');
-const initialViewport = savedViewport
-  ? JSON.parse(savedViewport)
-  : { zoom: 1, cameraX: 0, cameraY: 0 };
 
 export const useWorkflowStore = create<WorkflowStore>()(
   subscribeWithSelector((set, get) => ({
@@ -20,15 +16,44 @@ export const useWorkflowStore = create<WorkflowStore>()(
       positions: {},
       sizes: {},
     },
-    viewport: initialViewport,
     ui: {
       selectedNodeId: null,
       sidebarOpen: true,
       workflows: [],
       currentWorkflowId: null,
     },
+    containerWidth: 0,
+    containerHeight: 0,
 
-    // Загрузка данных с сервера
+    setContainerSize: (width: number, height: number) => {
+      set({ containerWidth: width, containerHeight: height });
+      get().clampAllPositions();
+    },
+
+    clampAllPositions: () => {
+      const { containerWidth, containerHeight, layout } = get();
+      if (containerWidth === 0 || containerHeight === 0) return;
+
+      const newPositions = { ...layout.positions };
+      let changed = false;
+
+      Object.entries(newPositions).forEach(([id, pos]) => {
+        const size = layout.sizes[id];
+        const maxX = containerWidth - (size?.width ?? 0);
+        const maxY = containerHeight - (size?.height ?? 0);
+        const clampedX = Math.max(0, Math.min(pos.x, maxX));
+        const clampedY = Math.max(0, Math.min(pos.y, maxY));
+        if (clampedX !== pos.x || clampedY !== pos.y) {
+          newPositions[id] = { x: clampedX, y: clampedY };
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        set({ layout: { ...layout, positions: newPositions } });
+      }
+    },
+
     loadWorkflow: (data: ApiWorkflowDetail) => {
       console.log('[loadWorkflow] loading workflow with data:', data);
       const nodes: GraphNode[] = data.nodes.map((n: ApiNode) => {
@@ -55,8 +80,9 @@ export const useWorkflowStore = create<WorkflowStore>()(
       console.log('[loadWorkflow] positions:', Object.keys(positions).length);
       set({
         graph: { nodes, edges },
-        layout: { ...get().layout, positions, sizes: {} },
+        layout: { ...get().layout, positions },
       });
+      get().clampAllPositions();
     },
 
     addNode: (nodeData, position = { x: 100, y: 100 }) => {
@@ -73,7 +99,6 @@ export const useWorkflowStore = create<WorkflowStore>()(
         layout: {
           ...state.layout,
           positions: { ...state.layout.positions, [id]: position },
-          sizes: { ...state.layout.sizes, [id]: { width: 0, height: 0 } },
         },
       }));
 
@@ -103,16 +128,12 @@ export const useWorkflowStore = create<WorkflowStore>()(
               positions: Object.fromEntries(
                 Object.entries(state.layout.positions).filter(([k]) => k !== id)
               ),
-              sizes: Object.fromEntries(
-                Object.entries(state.layout.sizes).filter(([k]) => k !== id)
-              ),
             },
           }));
           toast.error('Failed to create node');
         });
     },
 
-    // Оптимистичное обновление позиции при перетаскивании (без отправки на сервер)
     setNodePositionOptimistic: (nodeId: string, position: { x: number; y: number }) => 
       set((state) => ({
         layout: {
@@ -121,25 +142,30 @@ export const useWorkflowStore = create<WorkflowStore>()(
         },
       })),
 
-    // Перемещение узла (с сохранением на сервере)
     moveNode: (nodeId, position) => {
       const node = get().graph.nodes.find(n => n.id === nodeId);
       if (!node) return;
 
+      const { containerWidth, containerHeight, layout } = get();
+      const size = layout.sizes[nodeId];
+      const maxX = containerWidth - (size?.width ?? 0);
+      const maxY = containerHeight - (size?.height ?? 0);
+      const clampedX = Math.max(0, Math.min(position.x, maxX));
+      const clampedY = Math.max(0, Math.min(position.y, maxY));
+
       set((state) => ({
         layout: {
           ...state.layout,
-          positions: { ...state.layout.positions, [nodeId]: position },
+          positions: { ...state.layout.positions, [nodeId]: { x: clampedX, y: clampedY } },
         },
       }));
 
-      syncWithServer('moveNode', { nodeId: node.recordId, position }).catch((error) => {
+      syncWithServer('moveNode', { nodeId: node.recordId, position: { x: clampedX, y: clampedY } }).catch((error) => {
         console.error('[moveNode] error:', error);
         toast.error('Failed to save node position');
       });
     },
 
-    // Обновление конфигурации узла
     updateNodeConfig: (nodeId, config) => {
       const node = get().graph.nodes.find(n => n.id === nodeId);
       if (!node) return;
@@ -153,7 +179,6 @@ export const useWorkflowStore = create<WorkflowStore>()(
         },
       }));
 
-      // Приводим config к формату, ожидаемому syncMiddleware
       syncWithServer('updateNode', {
         nodeId: node.recordId,
         config: {
@@ -166,7 +191,6 @@ export const useWorkflowStore = create<WorkflowStore>()(
       });
     },
 
-    // Удаление узла
     removeNode: (nodeId) => {
       const node = get().graph.nodes.find(n => n.id === nodeId);
       if (!node) return;
@@ -194,8 +218,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
       });
     },
 
-    // Добавление ребра
     addEdge: (sourceId, targetId) => {
+      console.log('[workflowStore] addEdge', sourceId, targetId);
       const nodes = get().graph.nodes;
       const sourceNode = nodes.find(n => n.id === sourceId);
       const targetNode = nodes.find(n => n.id === targetId);
@@ -230,7 +254,6 @@ export const useWorkflowStore = create<WorkflowStore>()(
       });
     },
 
-    // Удаление ребра
     removeEdge: (edgeId) => {
       set((state) => ({
         graph: {
@@ -244,11 +267,6 @@ export const useWorkflowStore = create<WorkflowStore>()(
       });
     },
 
-    setViewport: (zoom, cameraX, cameraY) => {
-      set({ viewport: { zoom, cameraX, cameraY } });
-      localStorage.setItem('workflowViewport', JSON.stringify({ zoom, cameraX, cameraY }));
-    },
-
     selectNode: (nodeId) => set((state) => ({ ui: { ...state.ui, selectedNodeId: nodeId } })),
     toggleSidebar: () => set((state) => ({ ui: { ...state.ui, sidebarOpen: !state.ui.sidebarOpen } })),
     setWorkflows: (workflows) => {
@@ -259,13 +277,15 @@ export const useWorkflowStore = create<WorkflowStore>()(
       console.log('[selectWorkflow] selecting workflow:', workflowId);
       set((state) => ({ ui: { ...state.ui, currentWorkflowId: workflowId } }));
     },
-    updateNodeSize: (nodeId, size) => {
+    updateNodeSize: (nodeId: string, size: { width: number; height: number }) => {
       set((state) => ({
         layout: {
           ...state.layout,
           sizes: { ...state.layout.sizes, [nodeId]: size },
         },
       }));
+      // после обновления размера пересчитываем позицию, чтобы узел не вылез за границы
+      get().clampAllPositions();
     },
   }))
 );

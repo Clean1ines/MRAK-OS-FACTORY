@@ -20,7 +20,7 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
 }) => {
   const [promptKey, setPromptKey] = useState(initialPromptKey);
   const [customPrompt, setCustomPrompt] = useState(
-    typeof initialConfig.custom_prompt === 'string' ? initialConfig.custom_prompt : ''
+    typeof initialConfig.system_prompt === 'string' ? initialConfig.system_prompt : ''
   );
   const [error, setError] = useState('');
   const prevIsOpenRef = useRef(isOpen);
@@ -31,7 +31,7 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
       setPromptKey(initialPromptKey);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCustomPrompt(
-        typeof initialConfig.custom_prompt === 'string' ? initialConfig.custom_prompt : ''
+        typeof initialConfig.system_prompt === 'string' ? initialConfig.system_prompt : ''
       );
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('');
@@ -46,7 +46,7 @@ export const EditNodeModal: React.FC<EditNodeModalProps> = ({
       return;
     }
     setError('');
-    const newConfig = { custom_prompt: customPrompt };
+    const newConfig = { system_prompt: customPrompt };
     await onSave(promptKey.trim(), newConfig);
     onClose();
   };

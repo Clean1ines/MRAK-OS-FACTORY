@@ -35,10 +35,8 @@ async def perform_node_processing(node_exec: dict) -> str:
         raise RuntimeError(f"Node {node_id} not found")
 
     node_config = node.get('config', {})
-    # FIX: use custom_prompt if system_prompt is missing
     system_prompt = node_config.get('system_prompt')
     if system_prompt is None:
-        system_prompt = node_config.get('custom_prompt')
     generation_config = {
         'system_prompt': system_prompt,
         'user_prompt_template': node_config.get('user_prompt_template'),

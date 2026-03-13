@@ -249,7 +249,7 @@ export const WorkspacePage: React.FC = () => {
       { 
         type: 'prompt', 
         promptKey: title, 
-        config: { custom_prompt: nodePrompt },
+        config: { system_prompt: nodePrompt },
         requiresDialogue, // ADDED for feature X
       },
       position

@@ -107,22 +107,12 @@ class ExecuteNodeUseCase:
                 if not self.prompt_service or not self.session_service:
                     raise RuntimeError("PromptService and SessionService are required for dialogue nodes")
 
-                # Получаем системный промпт из конфига узла (приоритет custom_prompt, затем system_prompt)
-                system_prompt = node.get('config', {}).get('custom_prompt') or node.get('config', {}).get('system_prompt', '')
-
                 # Создаём clarification сессию
                 session_id = await session_repository.create_clarification_session(
                     project_id=run['project_id'],
                     target_artifact_type=node['node_id'],
                     tx=tx
                 )
-
-                # Сохраняем системный промпт в context_summary сессии (как простую строку)
-                await tx.conn.execute("""
-                    UPDATE clarification_sessions
-                    SET context_summary = $1
-                    WHERE id = $2
-                """, system_prompt, session_id)
 
                 # Обновляем выполнение: привязываем сессию и ставим статус DRAFT
                 await tx.conn.execute("""

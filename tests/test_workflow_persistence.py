@@ -24,7 +24,7 @@ def test_create_node_persistence(sync_client: TestClient):
     node_data = {
         "node_id": "test-node-1",
         "prompt_key": "TEST_PROMPT",
-        "config": {"custom_prompt": "Hello"},
+        "config": {"system_prompt": "Hello"},
         "position_x": 100,
         "position_y": 200
     }
@@ -40,7 +40,7 @@ def test_create_node_persistence(sync_client: TestClient):
     assert node["id"] == node_record_id
     assert node["node_id"] == "test-node-1"
     assert node["prompt_key"] == "TEST_PROMPT"
-    assert node["config"] == {"custom_prompt": "Hello"}
+    assert node["config"] == {"system_prompt": "Hello"}
     assert node["position_x"] == 100
     assert node["position_y"] == 200
 

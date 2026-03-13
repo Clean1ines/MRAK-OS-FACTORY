@@ -1,3 +1,4 @@
+# use_cases/execute_node.py
 import logging
 from typing import Optional, List
 from fastapi import BackgroundTasks
@@ -7,10 +8,9 @@ from repositories import (
     workflow_repository,
     node_execution_repository,
     execution_queue_repository,
-    session_repository,  # ADDED for dialogue support
+    session_repository,
 )
 from repositories.base import transaction
-# ADDED for dialogue support
 from prompt_service import PromptService
 from session_service import SessionService
 
@@ -24,11 +24,6 @@ class ExecuteNodeUseCase:
     """
 
     def __init__(self, artifact_service, prompt_service: Optional[PromptService] = None, session_service: Optional[SessionService] = None):
-        """
-        :param artifact_service: сохранён для обратной совместимости (не используется)
-        :param prompt_service: требуется для узлов с requires_dialogue = true
-        :param session_service: требуется для узлов с requires_dialogue = true
-        """
         self.artifact_service = artifact_service
         self.prompt_service = prompt_service
         self.session_service = session_service
@@ -43,10 +38,6 @@ class ExecuteNodeUseCase:
         model: Optional[str],
         background_tasks: BackgroundTasks,
     ):
-        """
-        Выполняет логику создания выполнения узла с учётом идемпотентности
-        и повторных попыток. Для диалоговых узлов создаёт сессию и первое сообщение.
-        """
         async with transaction() as tx:
             # 1. Блокируем run и проверяем статус
             run_row = await tx.conn.fetchrow(
@@ -58,7 +49,7 @@ class ExecuteNodeUseCase:
             if run["status"] != "OPEN":
                 raise ValueError(f"Run {run_id} is not OPEN (status={run['status']})")
 
-            # 2. Проверяем узел (получаем его с новым полем requires_dialogue)
+            # 2. Проверяем узел
             node = await workflow_repository.get_workflow_node_by_id(node_definition_id)
             if not node:
                 raise ValueError(f"Node {node_definition_id} not found")
@@ -82,23 +73,18 @@ class ExecuteNodeUseCase:
                 tx=tx
             )
 
-            # 5. Определяем, нужно ли создавать новое выполнение
             if last:
-                # Существующее выполнение найдено
                 if last["status"] in ("COMPLETED", "PROCESSING"):
                     return last
 
                 if last["status"] == "FAILED" and last["attempt"] < last["max_attempts"]:
-                    # Создаём повторную попытку
                     exec_id = await node_execution_repository.create_retry_attempt(last, tx=tx)
                     new_exec = await node_execution_repository.get_node_execution(exec_id, tx=tx)
                     if not new_exec:
                         raise RuntimeError("Failed to retrieve newly created execution")
                 else:
-                    # Попытки исчерпаны или другой статус
                     return last
             else:
-                # Первая попытка
                 max_attempts = node.get('config', {}).get('max_attempts', 3)
                 exec_id = await node_execution_repository.create_node_execution(
                     run_id=run_id,
@@ -115,52 +101,39 @@ class ExecuteNodeUseCase:
                 if not new_exec:
                     raise RuntimeError("Failed to retrieve newly created execution")
 
-            # ===== НОВАЯ ЛОГИКА: обработка диалоговых узлов =====
             requires_dialogue = node.get('requires_dialogue', False)
 
             if requires_dialogue:
-                # Проверяем наличие необходимых сервисов
                 if not self.prompt_service or not self.session_service:
                     raise RuntimeError("PromptService and SessionService are required for dialogue nodes")
 
-                # 1. Создаём clarification сессию
+                # Получаем системный промпт из конфига узла (приоритет custom_prompt, затем system_prompt)
+                system_prompt = node.get('config', {}).get('custom_prompt') or node.get('config', {}).get('system_prompt', '')
+
+                # Создаём clarification сессию
                 session_id = await session_repository.create_clarification_session(
                     project_id=run['project_id'],
-                    target_artifact_type=node['node_id'],  # используем текстовый ID узла как тип
+                    target_artifact_type=node['node_id'],
                     tx=tx
                 )
 
-                # 2. Обновляем выполнение: устанавливаем сессию и статус DRAFT
+                # Сохраняем системный промпт в context_summary сессии (как простую строку)
+                await tx.conn.execute("""
+                    UPDATE clarification_sessions
+                    SET context_summary = $1
+                    WHERE id = $2
+                """, system_prompt, session_id)
+
+                # Обновляем выполнение: привязываем сессию и ставим статус DRAFT
                 await tx.conn.execute("""
                     UPDATE node_executions
                     SET clarification_session_id = $1, status = 'DRAFT', updated_at = NOW()
                     WHERE id = $2
                 """, session_id, exec_id)
 
-                # 3. Генерируем первое сообщение ассистента
-                system_prompt = node.get('config', {}).get('system_prompt', '')
-                if not system_prompt:
-                    # Если системный промпт не задан, используем нейтральный
-                    system_prompt = "Начни диалог с пользователем для уточнения требований."
-
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Начни диалог."}
-                ]
-
-                # Используем переданную модель или дефолтную
-                effective_model = model or "llama-3.3-70b-versatile"
-                assistant_message = await self.prompt_service.get_chat_completion(messages, effective_model)
-
-                # 4. Сохраняем сообщение ассистента в сессию
-                await session_repository.add_message_to_session(session_id, "assistant", assistant_message, tx=tx)
-
-                # 5. Получаем обновлённый объект выполнения
                 new_exec = await node_execution_repository.get_node_execution(exec_id, tx=tx)
-
                 # Не ставим в очередь
             else:
-                # Обычный узел: ставим в очередь
                 await execution_queue_repository.enqueue(exec_id, tx=tx)
 
             return new_exec

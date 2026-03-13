@@ -157,7 +157,7 @@ async def create_workflow_node(
     config: Dict[str, Any],
     position_x: float,
     position_y: float,
-    requires_dialogue: bool = False,  # ADDED for dialogue support
+    requires_dialogue: Optional[bool] = None,  # CHANGED: now Optional, if None, use DB default
     tx=None
 ) -> str:
     """Создаёт новый узел воркфлоу."""
@@ -170,11 +170,17 @@ async def create_workflow_node(
     try:
         record_id = str(uuid.uuid4())
         config_json = json.dumps(config)
-        # ADDED requires_dialogue field
-        await conn.execute('''
-            INSERT INTO workflow_nodes (id, workflow_id, node_id, prompt_key, config, position_x, position_y, requires_dialogue)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ''', record_id, workflow_id, node_id, prompt_key, config_json, position_x, position_y, requires_dialogue)
+        # CHANGED: dynamic insert based on whether requires_dialogue is provided
+        if requires_dialogue is not None:
+            await conn.execute('''
+                INSERT INTO workflow_nodes (id, workflow_id, node_id, prompt_key, config, position_x, position_y, requires_dialogue)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ''', record_id, workflow_id, node_id, prompt_key, config_json, position_x, position_y, requires_dialogue)
+        else:
+            await conn.execute('''
+                INSERT INTO workflow_nodes (id, workflow_id, node_id, prompt_key, config, position_x, position_y)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ''', record_id, workflow_id, node_id, prompt_key, config_json, position_x, position_y)
         logger.info("Created node %s (record %s) in workflow %s", node_id, record_id, workflow_id)
         return record_id
     except Exception as e:
@@ -387,7 +393,7 @@ async def sync_workflow_graph(workflow_id: str, nodes: List[Dict[str, Any]], edg
     # 3. Обработка узлов из запроса
     for node_data in nodes:
         node_id = node_data['node_id']
-        # Получаем requires_dialogue из данных, по умолчанию False
+        # Получаем requires_dialogue из данных, по умолчанию False (для обратной совместимости)
         requires_dialogue = node_data.get('requires_dialogue', False)  # ADDED
         if node_id in node_map:
             # Обновить существующий

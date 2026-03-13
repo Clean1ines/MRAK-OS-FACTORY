@@ -85,9 +85,11 @@ async def create_workflow_node(workflow_id: str, node: WorkflowNodeCreate):
     if any(n['node_id'] == node.node_id for n in existing_nodes):
         return JSONResponse(content={"error": f"Node with id '{node.node_id}' already exists in this workflow"}, status_code=400)
     async with transaction() as tx:
+        # ADDED: pass requires_dialogue from request to repository
         record_id = await db.create_workflow_node(
             workflow_id, node.node_id, node.prompt_key, node.config,
-            node.position_x, node.position_y, tx=tx
+            node.position_x, node.position_y,
+            requires_dialogue=node.requires_dialogue, tx=tx
         )
     return {"id": record_id}
 

@@ -88,6 +88,8 @@ class WorkflowNodeCreate(BaseModel):
     config: Dict[str, Any] = {}
     position_x: float
     position_y: float
+    # ADDED for dialogue support: optional field, if not provided, DB default (false) will be used
+    requires_dialogue: Optional[bool] = Field(None, description="Whether this node requires dialogue")
 
 class WorkflowEdgeCreate(BaseModel):
     source_node: str

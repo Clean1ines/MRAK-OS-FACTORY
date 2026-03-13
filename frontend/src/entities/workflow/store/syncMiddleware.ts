@@ -2,12 +2,13 @@ import { api } from '@/shared/api';
 import { useWorkflowStore } from './workflowStore';
 import { getErrorMessage } from '@/shared/api/client';
 
-// Типы для данных каждого действия
+// MODIFIED: added requiresDialogue to AddNodeData
 interface AddNodeData {
   id: string;
   promptKey: string;
   config: Record<string, unknown>;
   position: { x: number; y: number };
+  requiresDialogue?: boolean; // ADDED for feature X
 }
 
 interface MoveNodeData {
@@ -67,13 +68,17 @@ export async function syncWithServer<T extends keyof ActionDataMap>(
           console.error('[syncWithServer] position missing or invalid', d.position);
           throw new Error('position with x and y is required');
         }
-        const payload = {
+        const payload: any = {
           node_id: d.id,
           prompt_key: d.promptKey,
           config: d.config || {},
           position_x: d.position.x,
           position_y: d.position.y,
         };
+        // ADDED for feature X: include requires_dialogue if provided
+        if (d.requiresDialogue !== undefined) {
+          payload.requires_dialogue = d.requiresDialogue;
+        }
         console.log('[syncWithServer] addNode payload:', payload);
         const response = await api.workflows.nodes.create(workflowId, payload);
         if (response.error) {

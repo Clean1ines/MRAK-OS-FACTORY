@@ -10,6 +10,8 @@ interface NodeModalProps {
   onTitleChange: (title: string) => void;
   prompt: string;
   onPromptChange: (prompt: string) => void;
+  requiresDialogue: boolean;          // ADDED for feature X
+  onRequiresDialogueChange: (value: boolean) => void; // ADDED for feature X
   onConfirm: () => void;
   validationError: string | null;
 }
@@ -21,6 +23,8 @@ export const NodeModal: React.FC<NodeModalProps> = ({
   onTitleChange,
   prompt,
   onPromptChange,
+  requiresDialogue,
+  onRequiresDialogueChange,
   onConfirm,
   validationError,
 }) => {
@@ -59,6 +63,19 @@ export const NodeModal: React.FC<NodeModalProps> = ({
             placeholder="Enter your system prompt..."
             className="w-full h-40 bg-[var(--ios-glass-dark)] border border-[var(--ios-border)] rounded p-3 text-sm text-[var(--text-main)] outline-none focus:border-[var(--bronze-base)] font-mono"
           />
+        </div>
+        {/* ADDED: Checkbox for requires dialogue */}
+        <div className="mb-4 flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="requiresDialogue"
+            checked={requiresDialogue}
+            onChange={(e) => onRequiresDialogueChange(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <label htmlFor="requiresDialogue" className="text-xs text-[var(--text-main)]">
+            Requires dialogue (node will enter chat mode)
+          </label>
         </div>
         {validationError && (
           <div className="mb-4 text-[10px] text-[var(--accent-warning)] bg-[var(--accent-warning)]/10 border border-[var(--accent-warning)] rounded px-3 py-2">

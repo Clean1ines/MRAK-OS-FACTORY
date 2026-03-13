@@ -5,6 +5,7 @@ export interface GraphNode {
   type: string;
   promptKey: string;
   config: Record<string, unknown>;
+  requiresDialogue?: boolean; // ADDED for feature X
 }
 
 export interface GraphEdge {
@@ -35,6 +36,7 @@ export interface ApiNode {
   type?: string;
   created_at?: string;
   updated_at?: string;
+  requires_dialogue?: boolean; // ADDED for feature X
 }
 
 export interface ApiEdge {

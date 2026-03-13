@@ -117,6 +117,7 @@ export const WorkspacePage: React.FC = () => {
 
   const [nodeTitle, setNodeTitle] = useState('');
   const [nodePrompt, setNodePrompt] = useState('');
+  const [requiresDialogue, setRequiresDialogue] = useState(true); // ADDED for feature X
   const [nodePosition, setNodePosition] = useState<{ x: number; y: number } | null>(null);
 
   // Состояния для запуска воркфлоу
@@ -230,6 +231,7 @@ export const WorkspacePage: React.FC = () => {
     console.log('[WorkspacePage] open create modal at', { x, y });
     setNodeTitle('');
     setNodePrompt('');
+    setRequiresDialogue(true); // ADDED for feature X: reset to default true
     setNodePosition({ x, y });
     setShowNodeModal(true);
   }, []);
@@ -244,12 +246,17 @@ export const WorkspacePage: React.FC = () => {
     const position = nodePosition || { x: 100, y: 100 };
     console.log('[WorkspacePage] creating node with title:', title, 'position:', position);
     store.addNode(
-      { type: 'prompt', promptKey: title, config: { custom_prompt: nodePrompt } },
+      { 
+        type: 'prompt', 
+        promptKey: title, 
+        config: { custom_prompt: nodePrompt },
+        requiresDialogue, // ADDED for feature X
+      },
       position
     );
     setShowNodeModal(false);
     setNodePosition(null);
-  }, [currentWorkflowId, nodeTitle, nodePrompt, nodePosition, store]);
+  }, [currentWorkflowId, nodeTitle, nodePrompt, nodePosition, store, requiresDialogue]);
 
   const handleOpenEditModal = useCallback((nodeId: string) => {
     console.log('[WorkspacePage] open edit modal for node:', nodeId);
@@ -351,6 +358,8 @@ export const WorkspacePage: React.FC = () => {
           onTitleChange={setNodeTitle}
           prompt={nodePrompt}
           onPromptChange={setNodePrompt}
+          requiresDialogue={requiresDialogue}          // ADDED for feature X
+          onRequiresDialogueChange={setRequiresDialogue} // ADDED for feature X
           onConfirm={handleCreateNode}
           validationError={
             nodeTitle.trim() ? null : 'Node title cannot be empty'

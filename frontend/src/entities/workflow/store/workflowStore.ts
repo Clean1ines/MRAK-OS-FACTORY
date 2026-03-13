@@ -64,6 +64,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
           type: n.type || 'prompt',
           promptKey: n.prompt_key,
           config: n.config,
+          requiresDialogue: n.requires_dialogue, // ADDED for feature X
         };
       });
       const positions: Record<string, { x: number; y: number }> = {};
@@ -85,7 +86,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
       get().clampAllPositions();
     },
 
-    addNode: (nodeData, position = { x: 100, y: 100 }) => {
+    addNode: (nodeData: Omit<GraphNode, 'id' | 'recordId'>, position = { x: 100, y: 100 }) => {
       const id = deterministicNodeId(nodeData.type, nodeData.promptKey, nodeData.config);
       console.log('[addNode] creating node with id:', id);
       console.log('[addNode] nodeData:', nodeData);

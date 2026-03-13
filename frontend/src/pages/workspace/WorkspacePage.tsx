@@ -285,6 +285,13 @@ export const WorkspacePage: React.FC = () => {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
 
+  // Добавляем компонент-лоадер перед return
+  const LoadingSpinner = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[var(--bronze-base)]"></div>
+    </div>
+  );
+
   return (
     <IOSShell>
       <div className="flex h-full">
@@ -463,6 +470,7 @@ export const WorkspacePage: React.FC = () => {
           isPending={isStartingWorkflow}
         />
       </div>
+      {isStartingWorkflow && <LoadingSpinner />}
     </IOSShell>
   );
 };

@@ -32,13 +32,12 @@ COPY routers/ ./routers/
 COPY repositories/ ./repositories/
 COPY services/ ./services/
 COPY domain/ ./domain/
-COPY generators/ ./generators/
 COPY use_cases/ ./use_cases/
 COPY utils/ ./utils/
 # Worker for background job processing
 COPY worker.py ./
 # Additional backend modules
-COPY prompt_service.py prompt_loader.py artifact_service.py session_service.py dependencies.py logic.py groq_client.py ./
+COPY prompt_service.py prompt_loader.py artifact_service.py session_service.py dependencies.py groq_client.py ./
 
 # Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/frontend/dist ./static

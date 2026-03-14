@@ -184,6 +184,7 @@ class NodeExecutionStatus(str, Enum):
     VALIDATED = "VALIDATED"
     SUPERSEDED = "SUPERSEDED"
     ARCHIVED = "ARCHIVED"
+    MANUAL = "MANUAL"
 
 class RunCreate(BaseModel):
     project_id: str

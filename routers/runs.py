@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
 from schemas import (
     RunCreate, RunResponse,
@@ -79,7 +79,7 @@ async def execute_node(
         )
         return execution
     except ValueError as e:
-        logger.error(f"Execute node failed: {e}", exc_info=True)  # добавьте эту строку
+        logger.error(f"Execute node failed: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== DIALOGUE ENDPOINTS ====================
@@ -106,6 +106,7 @@ async def get_execution_messages(exec_id: str):
 
 @router.post("/executions/{exec_id}/messages")
 async def send_execution_message(
+    request: Request,
     exec_id: str,
     req: MessageRequest,
     stream_service: LLMStreamService = Depends(get_llm_stream_service),
@@ -114,7 +115,7 @@ async def send_execution_message(
 ):
     """
     Отправляет сообщение пользователя в диалог выполнения.
-    Возвращает потоковый ответ ассистента (text/event-stream).
+    Возвращает потоковый ответ ассистента (text/event-stream) или JSON-ответ.
     """
     # 1. Получаем выполнение и проверяем статус
     execution = await node_execution_repository.get_node_execution(exec_id)
@@ -137,6 +138,8 @@ async def send_execution_message(
     # 3. Сохраняем сообщение пользователя в сессию
     await session_service.add_message_to_session(session_id, "user", req.message)
 
+    accept_json = "application/json" in request.headers.get("accept", "")
+
     # Если выполнение в ручном режиме, передаём сообщение оператору и не вызываем LLM.
     if execution["status"] == "MANUAL":
         await execution_queue_repository.enqueue(
@@ -144,10 +147,11 @@ async def send_execution_message(
             task_type="notify_manager",
             payload={"exec_id": exec_id, "message": req.message},
         )
-
+        response_text = "Ваше сообщение передано оператору. Ожидайте ответа."
+        if accept_json:
+            return {"response": response_text}
         async def generate_manual():
-            yield "Ваше сообщение передано оператору. Ожидайте ответа."
-
+            yield response_text
         return StreamingResponse(generate_manual(), media_type="text/event-stream")
 
     # 4. Получаем полную историю сессии для передачи в LLM
@@ -162,7 +166,7 @@ async def send_execution_message(
     # 6. Определяем модель: можно из запроса или из конфига узла
     model = req.model or node.get("config", {}).get("default_model", "llama-3.3-70b-versatile")
 
-    # 7. Стримим ответ с помощью нового метода stream_chat
+    # 7. Стримим ответ с помощью метода stream_chat
     async def generate():
         full_response = ""
         try:
@@ -181,6 +185,11 @@ async def send_execution_message(
             if full_response:
                 await session_service.add_message_to_session(session_id, "assistant", full_response)
 
+    if accept_json:
+        full_response = ""
+        async for chunk in generate():
+            full_response += chunk
+        return {"response": full_response}
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 

@@ -11,6 +11,8 @@ import logging
 
 logger = logging.getLogger("MRAK-SERVER")
 
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN")
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 active_sessions = {}
@@ -24,6 +26,9 @@ def generate_session_token(master_key: str) -> str:
     return f"{key_hash[:32]}:{session_salt}"
 
 def validate_session(session_token: str) -> bool:
+    # Если токен совпадает с INTERNAL_TOKEN – разрешаем
+    if session_token == INTERNAL_TOKEN:
+        return True
     if session_token not in active_sessions:
         return False
     session = active_sessions[session_token]

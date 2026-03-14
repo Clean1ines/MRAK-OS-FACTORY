@@ -34,6 +34,7 @@ COPY services/ ./services/
 COPY domain/ ./domain/
 COPY use_cases/ ./use_cases/
 COPY utils/ ./utils/
+COPY telegram_bot/ ./telegram_bot/
 # Worker for background job processing
 COPY worker.py ./
 # Additional backend modules

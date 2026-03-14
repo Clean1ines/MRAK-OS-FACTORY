@@ -74,7 +74,9 @@ class ExecuteNodeUseCase:
             )
 
             if last:
-                if last["status"] in ("COMPLETED", "PROCESSING"):
+                # Идемпотентность: для завершённых, обрабатываемых и ручных выполнений
+                # возвращаем последнюю попытку без создания новой.
+                if last["status"] in ("COMPLETED", "PROCESSING", "MANUAL"):
                     return last
 
                 if last["status"] == "FAILED" and last["attempt"] < last["max_attempts"]:

@@ -10,6 +10,7 @@ import structlog
 from routers import projects, artifacts, workflows, auth, truth
 from routers import runs
 from routers import modes
+from routers import telegram
 import db
 from groq_client import GroqClient
 from artifact_service import ArtifactService
@@ -86,6 +87,7 @@ app.include_router(workflows.router)
 app.include_router(auth.router)
 app.include_router(truth.router)
 app.include_router(runs.router)
+app.include_router(telegram.router)
 
 # Модуль modes временно отключён — будет переписан позже
 app.include_router(modes.router)

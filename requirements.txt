@@ -2,6 +2,7 @@
 fastapi==0.109.2
 uvicorn==0.27.1
 python-multipart==0.0.9
+python-telegram-bot==20.7
 
 # AI & Network (Твои проверенные версии)
 groq==0.4.2

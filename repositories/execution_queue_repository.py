@@ -3,10 +3,17 @@
 """
 import uuid
 from typing import Optional, Dict, Any
+import json
 from .base import get_connection
 
-async def enqueue(node_execution_id: str, tx=None) -> str:
-    """Добавляет задачу в очередь со статусом PENDING."""
+async def enqueue(node_execution_id: Optional[str] = None, task_type: str = "node_execution", payload: Optional[Dict[str, Any]] = None, tx=None) -> str:
+    """
+    Добавляет задачу в очередь со статусом PENDING.
+
+    По умолчанию используется тип 'node_execution' и ссылка на node_execution_id.
+    Для других типов задач (например, notify_manager) node_execution_id может быть None,
+    а дополнительные данные передаются в payload.
+    """
     if tx:
         conn = tx.conn
         close_conn = False
@@ -15,10 +22,17 @@ async def enqueue(node_execution_id: str, tx=None) -> str:
         close_conn = True
     try:
         job_id = str(uuid.uuid4())
-        await conn.execute("""
-            INSERT INTO execution_queue (id, node_execution_id, status, created_at, updated_at)
-            VALUES ($1, $2, 'PENDING', NOW(), NOW())
-        """, job_id, node_execution_id)
+        payload_json = json.dumps(payload) if payload is not None else None
+        await conn.execute(
+            """
+            INSERT INTO execution_queue (id, node_execution_id, status, task_type, payload, created_at, updated_at)
+            VALUES ($1, $2, 'PENDING', $3, $4, NOW(), NOW())
+            """,
+            job_id,
+            node_execution_id,
+            task_type,
+            payload_json,
+        )
         return job_id
     finally:
         if close_conn:
@@ -37,7 +51,8 @@ async def claim_job(worker_id: str, tx=None) -> Optional[Dict[str, Any]]:
         conn = await get_connection()
         close_conn = True
     try:
-        row = await conn.fetchrow("""
+        row = await conn.fetchrow(
+            """
             UPDATE execution_queue
             SET status = 'PROCESSING',
                 locked_by = $1,
@@ -52,14 +67,23 @@ async def claim_job(worker_id: str, tx=None) -> Optional[Dict[str, Any]]:
                 FOR UPDATE SKIP LOCKED
             )
             RETURNING *
-        """, worker_id)
+            """,
+            worker_id,
+        )
         if row:
             job = dict(row)
-            job['id'] = str(job['id'])
-            job['node_execution_id'] = str(job['node_execution_id'])
-            job['created_at'] = job['created_at'].isoformat() if job['created_at'] else None
-            job['updated_at'] = job['updated_at'].isoformat() if job['updated_at'] else None
-            job['locked_at'] = job['locked_at'].isoformat() if job['locked_at'] else None
+            job["id"] = str(job["id"])
+            if job.get("node_execution_id") is not None:
+                job["node_execution_id"] = str(job["node_execution_id"])
+            if job.get("payload") and isinstance(job["payload"], str):
+                try:
+                    job["payload"] = json.loads(job["payload"])
+                except json.JSONDecodeError:
+                    # оставляем как есть, если формат неожиданный
+                    pass
+            job["created_at"] = job["created_at"].isoformat() if job["created_at"] else None
+            job["updated_at"] = job["updated_at"].isoformat() if job["updated_at"] else None
+            job["locked_at"] = job["locked_at"].isoformat() if job["locked_at"] else None
             return job
         return None
     finally:

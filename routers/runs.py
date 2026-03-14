@@ -120,8 +120,9 @@ async def send_execution_message(
     execution = await node_execution_repository.get_node_execution(exec_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    if execution["status"] != "DRAFT":
-        raise HTTPException(status_code=409, detail="Execution is not in DRAFT status")
+    # Поддерживаем как диалоговый (DRAFT), так и ручной (MANUAL) режимы.
+    if execution["status"] not in ("DRAFT", "MANUAL"):
+        raise HTTPException(status_code=409, detail="Execution must be in DRAFT or MANUAL status")
 
     session_id = execution.get("clarification_session_id")
     if not session_id:
@@ -135,6 +136,19 @@ async def send_execution_message(
 
     # 3. Сохраняем сообщение пользователя в сессию
     await session_service.add_message_to_session(session_id, "user", req.message)
+
+    # Если выполнение в ручном режиме, передаём сообщение оператору и не вызываем LLM.
+    if execution["status"] == "MANUAL":
+        await execution_queue_repository.enqueue(
+            node_execution_id=None,
+            task_type="notify_manager",
+            payload={"exec_id": exec_id, "message": req.message},
+        )
+
+        async def generate_manual():
+            yield "Ваше сообщение передано оператору. Ожидайте ответа."
+
+        return StreamingResponse(generate_manual(), media_type="text/event-stream")
 
     # 4. Получаем полную историю сессии для передачи в LLM
     session = await session_service.get_clarification_session(session_id)

@@ -157,6 +157,18 @@ class ClarificationSessionResponse(BaseModel):
     created_at: str
     updated_at: str
 
+
+# ==================== Telegram / Manager Schemas ====================
+
+class TelegramRegisterRequest(BaseModel):
+    chat_id: int
+    email: str
+    project_id: str
+
+
+class ManagerReplyRequest(BaseModel):
+    message: str
+
 # ==================== Run & NodeExecution Models (ADR-001) ====================
 
 class RunStatus(str, Enum):

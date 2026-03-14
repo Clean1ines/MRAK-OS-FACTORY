@@ -4,6 +4,7 @@ import socket
 import logging
 import signal  # ADDED for graceful shutdown
 from dotenv import load_dotenv
+import httpx
 
 from repositories.base import get_connection, transaction
 from repositories import node_execution_repository, execution_queue_repository, artifact_repository, workflow_repository
@@ -66,6 +67,55 @@ async def worker_loop():
                 if not job:
                     # Ожидание с проверкой события
                     await asyncio.sleep(0.5)
+                    continue
+                task_type = job.get("task_type") or "node_execution"
+
+                # Обработка нестандартных задач (например, notify_manager)
+                if task_type != "node_execution":
+                    logger.info(f"Handling non-node_execution job {job['id']} with task_type={task_type}")
+                    try:
+                        if task_type == "notify_manager":
+                            payload = job.get("payload") or {}
+                            exec_id = payload.get("exec_id")
+                            user_message = payload.get("message", "")
+
+                            manager_chat_id = os.getenv("MANAGER_CHAT_ID")
+                            internal_token = os.getenv("INTERNAL_TOKEN")
+                            bot_internal_url = os.getenv("TELEGRAM_INTERNAL_URL")
+
+                            if not (manager_chat_id and internal_token and bot_internal_url):
+                                logger.warning(
+                                    "Missing MANAGER_CHAT_ID, INTERNAL_TOKEN or TELEGRAM_INTERNAL_URL; "
+                                    "cannot send manager notification for job %s",
+                                    job["id"],
+                                )
+                                await execution_queue_repository.complete_job(job["id"], success=False, tx=tx)
+                            else:
+                                full_message = (
+                                    f"Новое сообщение от клиента по execution {exec_id}:\n\n"
+                                    f"{user_message}"
+                                )
+                                url = bot_internal_url.rstrip("/") + "/send-message"
+                                headers = {"Authorization": f"Bearer {internal_token}"}
+                                json_body = {
+                                    "chat_id": int(manager_chat_id),
+                                    "message": full_message,
+                                }
+                                async with httpx.AsyncClient(timeout=10.0) as client:
+                                    resp = await client.post(url, headers=headers, json=json_body)
+                                    resp.raise_for_status()
+
+                                logger.info("Manager notification sent for job %s", job["id"])
+                                await execution_queue_repository.complete_job(job["id"], success=True, tx=tx)
+                        else:
+                            # Для неизвестных типов пока просто логируем и помечаем как завершённые
+                            logger.warning(
+                                "Unknown task_type '%s' for job %s, marking as DONE", task_type, job["id"]
+                            )
+                            await execution_queue_repository.complete_job(job["id"], success=True, tx=tx)
+                    except Exception as e:
+                        logger.error(f"Non-node_execution job {job['id']} failed: {e}", exc_info=True)
+                        await execution_queue_repository.complete_job(job["id"], success=False, tx=tx)
                     continue
 
                 node_exec_id = job['node_execution_id']

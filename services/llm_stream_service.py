@@ -113,7 +113,7 @@ class LLMStreamService:
                         artifact_type="LLMResponse",
                         content=artifact_data,
                         owner="system",
-                        status="GENERATED",
+                        status="CREATED",
                         project_id=project_id
                     )
                 )

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from telegram import Update
@@ -18,8 +19,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global _api_client
+
+    # Запускаем фоновую задачу для периодической отправки "печатает"
+    async def send_typing():
+        while True:
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+            await asyncio.sleep(5)
+
+    typing_task = asyncio.create_task(send_typing())
+
     text = update.message.text
-    # TODO: получать project_id, workflow_id, start_node_id из контекста (по chat_id)
     project_id = "ddbee36b-1c76-4bcd-94a7-162cb854f661"
     workflow_id = "0040c020-bcc1-4452-9466-e60b3466b692"
     start_node_id = "0fd2e911-537f-4a73-8cd9-286e594dfee8"
@@ -35,9 +44,20 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         response = await _api_client.send_message(execution_id, text)
         logger.info(f"Got response: {response}")
 
+        typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
+
         await update.message.reply_text(response)
 
     except Exception as e:
+        typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
         logger.exception("Error processing message")
         await update.message.reply_text("Произошла ошибка. Попробуйте позже.")
 
@@ -52,7 +72,6 @@ def get_application() -> Application:
     return _application
 
 async def init_application():
-    """Инициализирует и запускает Application (должно вызываться один раз при старте)."""
     global _initialized
     if not _initialized:
         app = get_application()
@@ -62,7 +81,6 @@ async def init_application():
         logger.info("Telegram Application initialized and started")
 
 async def handle_webhook(data: dict) -> None:
-    """Обрабатывает входящий update от Telegram."""
     if not _initialized:
         raise RuntimeError("Application not initialized. Call init_application() first.")
     app = get_application()

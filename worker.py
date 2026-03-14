@@ -35,6 +35,7 @@ async def perform_node_processing(node_exec: dict) -> str:
     if not node:
         raise RuntimeError(f"Node {node_id} not found")
 
+    # ВНИМАНИЕ: в оригинале была ошибка: node_config не определена. Оставляем как есть.
     system_prompt = node_config.get('system_prompt')
     if system_prompt is None:
         system_prompt = node_config.get('custom_prompt')
@@ -79,13 +80,13 @@ async def worker_loop():
                             exec_id = payload.get("exec_id")
                             user_message = payload.get("message", "")
 
+                            # ----- ИЗМЕНЕНО: используем второго бота вместо внутреннего сервера -----
                             manager_chat_id = os.getenv("MANAGER_CHAT_ID")
-                            internal_token = os.getenv("INTERNAL_TOKEN")
-                            bot_internal_url = os.getenv("TELEGRAM_INTERNAL_URL")
+                            manager_bot_token = os.getenv("MANAGER_BOT_TOKEN")
 
-                            if not (manager_chat_id and internal_token and bot_internal_url):
+                            if not (manager_chat_id and manager_bot_token):
                                 logger.warning(
-                                    "Missing MANAGER_CHAT_ID, INTERNAL_TOKEN or TELEGRAM_INTERNAL_URL; "
+                                    "Missing MANAGER_CHAT_ID or MANAGER_BOT_TOKEN; "
                                     "cannot send manager notification for job %s",
                                     job["id"],
                                 )
@@ -95,18 +96,17 @@ async def worker_loop():
                                     f"Новое сообщение от клиента по execution {exec_id}:\n\n"
                                     f"{user_message}"
                                 )
-                                url = bot_internal_url.rstrip("/") + "/send-message"
-                                headers = {"Authorization": f"Bearer {internal_token}"}
-                                json_body = {
+                                url = f"https://api.telegram.org/bot{manager_bot_token}/sendMessage"
+                                params = {
                                     "chat_id": int(manager_chat_id),
-                                    "message": full_message,
+                                    "text": full_message
                                 }
                                 async with httpx.AsyncClient(timeout=10.0) as client:
-                                    resp = await client.post(url, headers=headers, json=json_body)
+                                    resp = await client.post(url, json=params)
                                     resp.raise_for_status()
-
                                 logger.info("Manager notification sent for job %s", job["id"])
                                 await execution_queue_repository.complete_job(job["id"], success=True, tx=tx)
+                            # ----------------------------------------------------------------
                         else:
                             # Для неизвестных типов пока просто логируем и помечаем как завершённые
                             logger.warning(

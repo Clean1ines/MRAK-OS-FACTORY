@@ -11,16 +11,18 @@ RUN npm ci && npm cache clean --force
 COPY frontend/ ./
 RUN npm run build
 
-# ==================== STAGE 2: Minimal Python Runtime ====================
-FROM python:3.10-alpine
+# ==================== STAGE 2: Python Runtime (Debian slim) ====================
+FROM python:3.10-slim
 
-# Install system dependencies (including supervisor for process management)
-RUN apk add --no-cache libffi openssl ca-certificates supervisor && \
-    update-ca-certificates
+# Install system dependencies (supervisor and build tools if needed)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    supervisor \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Python dependencies
+# Python dependencies (now fastembed/onnxruntime will install smoothly)
 COPY requirements-prod.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements-prod.txt && \

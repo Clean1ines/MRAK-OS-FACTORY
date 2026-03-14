@@ -1,17 +1,16 @@
 import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, JSONResponse
 from schemas import (
     RunCreate, RunResponse,
     NodeExecutionCreate, NodeExecutionResponse,
     ValidateExecutionResponse,
-    MessageRequest,               # ADDED
-    ClarificationSessionResponse  # ADDED
+    MessageRequest,
 )
 from repositories import (
     run_repository, node_execution_repository, project_repository,
     workflow_repository, artifact_repository, session_repository,
-    execution_queue_repository    # ADDED
+    execution_queue_repository
 )
 from repositories.base import transaction
 from use_cases.execute_node import ExecuteNodeUseCase
@@ -24,6 +23,9 @@ from dependencies import (
 from services.llm_stream_service import LLMStreamService
 from prompt_service import PromptService
 from session_service import SessionService
+from repositories.knowledge_repository import find_relevant_knowledge
+from services.embedding_service import embed_text
+from utils.response_parser import extract_client_response, extract_system_data
 import logging
 
 logger = logging.getLogger(__name__)
@@ -103,7 +105,6 @@ async def get_execution_messages(exec_id: str):
 
     return session.get("history", [])
 
-
 @router.post("/executions/{exec_id}/messages")
 async def send_execution_message(
     request: Request,
@@ -115,13 +116,13 @@ async def send_execution_message(
 ):
     """
     Отправляет сообщение пользователя в диалог выполнения.
-    Возвращает потоковый ответ ассистента (text/event-stream) или JSON-ответ.
+    Если next_move указывает на эскалацию, передаёт менеджеру и отвечает уведомлением.
+    Иначе возвращает текст из CLIENT_RESPONSE.
     """
     # 1. Получаем выполнение и проверяем статус
     execution = await node_execution_repository.get_node_execution(exec_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    # Поддерживаем как диалоговый (DRAFT), так и ручной (MANUAL) режимы.
     if execution["status"] not in ("DRAFT", "MANUAL"):
         raise HTTPException(status_code=409, detail="Execution must be in DRAFT or MANUAL status")
 
@@ -135,12 +136,24 @@ async def send_execution_message(
         raise HTTPException(status_code=404, detail="Node definition not found")
     system_prompt = node.get("config", {}).get("system_prompt", "You are a helpful assistant.")
 
+    # ========== RAG ==========
+    try:
+        query_emb = await embed_text(req.message)
+        relevant_rules = await find_relevant_knowledge(query_emb, limit=1)  # берём одно самое релевантное правило
+        if relevant_rules:
+            logger.info(f"RAG: found rule: {relevant_rules[0][:100]}...")
+            rules_text = "\n\n".join(relevant_rules)
+            system_prompt = f"{system_prompt}\n\nИспользуй следующее правило при ответе клиенту:\n{rules_text}"
+            logger.info("Added 1 rule to system prompt")
+    except Exception as e:
+        logger.warning(f"RAG search failed: {e}")
+
     # 3. Сохраняем сообщение пользователя в сессию
     await session_service.add_message_to_session(session_id, "user", req.message)
 
     accept_json = "application/json" in request.headers.get("accept", "")
 
-    # Если выполнение в ручном режиме, передаём сообщение оператору и не вызываем LLM.
+    # Если выполнение в ручном режиме – просто передаём оператору и отвечаем
     if execution["status"] == "MANUAL":
         await execution_queue_repository.enqueue(
             node_execution_id=None,
@@ -150,48 +163,60 @@ async def send_execution_message(
         response_text = "Ваше сообщение передано оператору. Ожидайте ответа."
         if accept_json:
             return {"response": response_text}
-        async def generate_manual():
-            yield response_text
-        return StreamingResponse(generate_manual(), media_type="text/event-stream")
+        return Response(content=response_text, media_type="text/plain")
 
-    # 4. Получаем полную историю сессии для передачи в LLM
+    # 4. Получаем историю сессии
     session = await session_service.get_clarification_session(session_id)
-    history = session["history"]  # список сообщений с ключами role, content
+    history = session["history"]
 
-    # 5. Формируем сообщения для LLM: системный + вся история
+    # 5. Формируем сообщения для LLM
     messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
         messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # 6. Определяем модель: можно из запроса или из конфига узла
     model = req.model or node.get("config", {}).get("default_model", "llama-3.3-70b-versatile")
 
-    # 7. Стримим ответ с помощью метода stream_chat
-    async def generate():
-        full_response = ""
-        try:
-            async for chunk in stream_service.stream_chat(
-                messages=messages,
-                model_id=model,
-                project_id=execution.get("project_id")
-            ):
-                full_response += chunk
-                yield chunk
-        except Exception as e:
-            logger.error(f"Streaming failed: {e}")
-            yield f"🔴 **STREAMING_ERROR**: {str(e)}"
-        finally:
-            # После завершения стрима сохраняем полный ответ ассистента
-            if full_response:
-                await session_service.add_message_to_session(session_id, "assistant", full_response)
-
-    if accept_json:
-        full_response = ""
-        async for chunk in generate():
+    # 6. Собираем полный ответ от LLM
+    full_response = ""
+    try:
+        async for chunk in stream_service.stream_chat(
+            messages=messages,
+            model_id=model,
+            project_id=execution.get("project_id")
+        ):
             full_response += chunk
-        return {"response": full_response}
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        raise HTTPException(status_code=500, detail="LLM error")
 
+    # 7. Сохраняем полный ответ в сессию
+    if full_response:
+        await session_service.add_message_to_session(session_id, "assistant", full_response)
+
+    # 8. Парсим системные данные и клиентский ответ
+    from utils.response_parser import extract_client_response, extract_system_data
+    system_data = extract_system_data(full_response)
+    client_text = extract_client_response(full_response)
+
+    # 9. Проверяем, требуется ли эскалация
+    next_move = system_data.get("next_move", "").upper()
+    need_escalation = next_move in ("PERSONAL_CONTROL", "MANUAL", "MANAGER_REQUIRED", "PERSONAL_CONTROL_MODE", "NEGOTIATION", "ESCALATE")
+
+    if need_escalation:
+        # Ставим задачу менеджеру
+        await execution_queue_repository.enqueue(
+            node_execution_id=None,
+            task_type="notify_manager",
+            payload={"exec_id": exec_id, "message": req.message, "context": client_text},
+        )
+        response_text = "Ваш вопрос требует вмешательства специалиста. Менеджер свяжется с вами в ближайшее время."
+    else:
+        response_text = client_text
+
+    # 10. Возвращаем ответ
+    if accept_json:
+        return {"response": response_text}
+    return Response(content=response_text, media_type="text/plain")
 
 @router.post("/executions/{exec_id}/validate", response_model=ValidateExecutionResponse)
 async def validate_execution(
@@ -215,7 +240,7 @@ async def validate_execution(
             if target.get(k):
                 target[k] = str(target[k])
 
-        # 2. Проверяем статус: допускаем DRAFT или COMPLETED
+        # 2. Проверяем статус
         if target["status"] not in ("DRAFT", "COMPLETED"):
             raise HTTPException(
                 status_code=409,
@@ -240,7 +265,6 @@ async def validate_execution(
             if not node:
                 raise HTTPException(status_code=404, detail="Node definition not found")
 
-            # Создаём артефакт
             logical_key = f"node-{node['node_id']}-{exec_id}"
             artifact_id = await artifact_repository.save_artifact(
                 project_id=target["project_id"],
@@ -249,15 +273,13 @@ async def validate_execution(
                 logical_key=logical_key,
                 tx=tx
             )
-            # Обновляем выполнение: статус COMPLETED + output_artifact_id
             await node_execution_repository.update_node_execution_status(
                 exec_id, "COMPLETED", output_artifact_id=artifact_id, tx=tx
             )
             target["status"] = "COMPLETED"
             target["output_artifact_id"] = artifact_id
 
-        # 4. Далее стандартная валидация (как в исходном коде)
-        # Блокируем соответствующий run и проверяем его статус
+        # 4. Далее стандартная валидация (блокировка run и т.д.)
         run_row = await tx.conn.fetchrow(
             "SELECT * FROM runs WHERE id = $1 FOR UPDATE", target["run_id"]
         )
@@ -267,7 +289,6 @@ async def validate_execution(
         if run["status"] != "OPEN":
             raise HTTPException(status_code=409, detail="Run is not OPEN, cannot validate")
 
-        # Ищем активное выполнение для этого node_definition_id и блокируем его
         active_row = await tx.conn.fetchrow("""
             SELECT * FROM node_executions
             WHERE project_id = $1
@@ -295,7 +316,6 @@ async def validate_execution(
                     active["output_artifact_id"], "SUPERSEDED", tx=tx
                 )
 
-        # Валидируем текущее выполнение
         await node_execution_repository.validate_execution(exec_id, tx=tx)
 
         if target.get("output_artifact_id"):
@@ -303,7 +323,7 @@ async def validate_execution(
                 target["output_artifact_id"], "ACTIVE", tx=tx
             )
 
-        # Обновляем снапшот истины (ADR-006)
+        # Обновляем снапшот истины
         project_id = run["project_id"]
         node_def_id = target["node_definition_id"]
         artifact_id = target.get("output_artifact_id")
@@ -349,7 +369,6 @@ async def validate_execution(
                     tx=tx
                 )
                 if next_node.get('requires_dialogue', False):
-                    # Создаём clarification сессию и первое сообщение
                     session_id = await session_repository.create_clarification_session(
                         project_id=run["project_id"],
                         target_artifact_type=next_node['node_id'],
@@ -383,8 +402,7 @@ async def validate_execution(
         next_execution_id=next_execution_id,
     )
 
-
-# ==================== EXISTING ENDPOINTS (unchanged) ====================
+# ==================== FREEZE, ARCHIVE, SUPERSEDE (без изменений) ====================
 
 @router.post("/runs/{run_id}/freeze", response_model=RunResponse)
 async def freeze_run(run_id: str):

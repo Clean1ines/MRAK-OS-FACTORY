@@ -1,12 +1,13 @@
 import asyncio
 import logging
 import os
-import re
 import sys
 
 import httpx
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+
+from services.redis_client import get_redis_client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,71 +26,99 @@ if not MANAGER_API_TOKEN:
     raise RuntimeError("MANAGER_API_TOKEN is not set or empty")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ответ на команду /start."""
     await update.message.reply_text(
         "👋 Я бот для менеджеров MRAK-OS.\n\n"
-        "Чтобы ответить клиенту, отправьте сообщение в формате:\n"
-        "`EXEC:<идентификатор выполнения> ваш ответ`\n\n"
-        "Ответ может занимать несколько строк.\n"
-        "Пример:\n"
-        "`EXEC:123e4567-e89b-12d3-a456-426614174000 Здравствуйте,\n"
-        "чем могу помочь?`"
+        "Вы будете получать уведомления о новых обращениях клиентов. "
+        "Под каждым уведомлением есть кнопка ✏️ Ответить. "
+        "Нажмите её, затем введите ваш ответ – он будет отправлен клиенту."
     )
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает текстовые сообщения от менеджера."""
-    text = update.message.text
-    # Ожидаем формат: EXEC:<exec_id> <текст ответа> (с поддержкой многострочности)
-    match = re.match(r"EXEC:(\S+)\s+(.+)", text, re.IGNORECASE | re.DOTALL)
-    if not match:
-        await update.message.reply_text(
-            "❌ Неверный формат. Используйте:\n"
-            "`EXEC:<идентификатор выполнения> ваш ответ`\n"
-            "(можно в несколько строк)"
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает нажатие на inline-кнопку."""
+    query = update.callback_query
+    await query.answer()  # убираем "часики"
+
+    data = query.data
+    if data.startswith("reply:"):
+        exec_id = data.split(":", 1)[1]
+        chat_id = query.message.chat_id
+
+        # Сохраняем состояние ожидания ответа от этого менеджера
+        redis = await get_redis_client()
+        key = f"awaiting_reply:{chat_id}"
+        await redis.setex(key, 600, exec_id)  # 10 минут на ответ
+
+        await query.message.reply_text(
+            "✍️ Введите ваш ответ на это обращение (можно несколько строк).\n"
+            "Отправьте сообщение сейчас, и оно будет доставлено клиенту."
         )
+    else:
+        await query.message.reply_text("Неизвестная команда.")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает текстовые сообщения – возможно, это ответ на уведомление."""
+    if not update.message or not update.message.text:
         return
 
-    exec_id = match.group(1)
-    reply_text = match.group(2).strip()
+    chat_id = update.message.chat_id
+    text = update.message.text.strip()
 
-    if not reply_text:
-        await update.message.reply_text("❌ Пустой ответ. Пожалуйста, напишите сообщение.")
-        return
+    redis = await get_redis_client()
+    key = f"awaiting_reply:{chat_id}"
+    exec_id = await redis.get(key)
 
-    # Отправляем ответ через внутренний API
-    url = f"{API_URL}/api/executions/{exec_id}/manager-reply"
-    headers = {
-        "X-Manager-Token": MANAGER_API_TOKEN,
-        "Content-Type": "application/json"
-    }
-    payload = {"message": reply_text}
+    if exec_id:
+        # Это ответ на ожидающее уведомление
+        await redis.delete(key)  # сразу удаляем, чтобы нельзя было ответить дважды
 
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            if resp.status_code == 200:
-                await update.message.reply_text("✅ Ответ успешно отправлен клиенту.")
-            else:
-                # Попробуем извлечь детали ошибки из JSON
-                detail = "неизвестная ошибка"
-                try:
-                    data = resp.json()
-                    detail = data.get("detail", str(resp.status_code))
-                except Exception:
-                    detail = f"HTTP {resp.status_code}"
-                await update.message.reply_text(f"❌ Ошибка при отправке: {detail}")
-    except Exception as e:
-        logger.exception("Failed to send manager reply")
-        await update.message.reply_text(f"❌ Техническая ошибка: {str(e)}")
+        # Отправляем ответ через API
+        url = f"{API_URL}/api/executions/{exec_id}/manager-reply"
+        headers = {
+            "X-Manager-Token": MANAGER_API_TOKEN,
+            "Content-Type": "application/json"
+        }
+        payload = {"message": text}
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code == 200:
+                    await update.message.reply_text("✅ Ответ успешно отправлен клиенту.")
+                else:
+                    detail = "неизвестная ошибка"
+                    try:
+                        data = resp.json()
+                        detail = data.get("detail", str(resp.status_code))
+                    except Exception:
+                        detail = f"HTTP {resp.status_code}"
+                    await update.message.reply_text(f"❌ Ошибка при отправке: {detail}")
+        except Exception as e:
+            logger.exception("Failed to send manager reply")
+            await update.message.reply_text(f"❌ Техническая ошибка: {str(e)}")
+    else:
+        # Нет ожидающего ответа – отправляем подсказку
+        await update.message.reply_text(
+            "Чтобы ответить клиенту, нажмите кнопку ✏️ Ответить под соответствующим уведомлением."
+        )
 
 def main():
-    """Запуск бота."""
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # Принудительный сброс
+    async def setup():
+        await app.bot.delete_webhook(drop_pending_updates=True)
+        # Получаем все обновления с offset = -1, чтобы очистить очередь
+        await app.bot.get_updates(offset=-1)
+        logger.info("Webhook cleared and updates reset, starting polling...")
+
+    import asyncio
+    asyncio.get_event_loop().run_until_complete(setup())
+
     logger.info("Manager bot started, polling...")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()

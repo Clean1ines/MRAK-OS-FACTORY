@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from .config import BOT_TOKEN, API_URL, INTERNAL_TOKEN, validate_config
 from .api_client import BackendAPIClient
+from repositories import telegram_clients_repository  # ADDED
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,11 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     typing_task = asyncio.create_task(send_typing())
 
     text = update.message.text
+    # TODO: получать project_id, workflow_id, start_node_id из контекста (по chat_id)
     project_id = "ddbee36b-1c76-4bcd-94a7-162cb854f661"
     workflow_id = "0040c020-bcc1-4452-9466-e60b3466b692"
     start_node_id = "0fd2e911-537f-4a73-8cd9-286e594dfee8"
+    chat_id = update.effective_chat.id  # ADDED
 
     try:
         run_id = await _api_client.create_run(project_id, workflow_id)
@@ -40,6 +43,15 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         idempotency_key = str(uuid.uuid4())
         execution_id = await _api_client.execute_node(run_id, start_node_id, idempotency_key)
         logger.info(f"Execution created: {execution_id}")
+
+        # Обновляем last_run_id и last_execution_id для этого клиента
+        await telegram_clients_repository.update_last_run_and_execution(
+            chat_id=chat_id,
+            project_id=project_id,
+            run_id=run_id,
+            execution_id=execution_id
+        )
+        logger.info(f"Updated last_run/execution for chat {chat_id}")
 
         response = await _api_client.send_message(execution_id, text)
         logger.info(f"Got response: {response}")

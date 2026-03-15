@@ -153,8 +153,11 @@ async def validate_session_middleware(request: Request, call_next):
         request_logger.debug("Skipping auth for health endpoint")
         return await call_next(request)
     if request.url.path == "/webhook":
-        # Для вебхука Telegram аутентификация не требуется
         request_logger.debug("Skipping auth for Telegram webhook")
+        return await call_next(request)
+    # НОВОЕ: пропускаем manager-reply
+    if request.url.path.startswith("/api/executions/") and request.url.path.endswith("/manager-reply"):
+        request_logger.debug("Skipping auth for manager reply endpoint")
         return await call_next(request)
     if request.url.path.startswith("/api"):
         auth_header = request.headers.get("Authorization", "")
@@ -174,7 +177,7 @@ async def validate_session_middleware(request: Request, call_next):
             return JSONResponse(status_code=401, content={"detail": "Session expired or invalid"})
         request_logger.debug("200: Valid session")
     return await call_next(request)
-
+    
 # ==================== STATIC FILES ====================
 BASE_DIR = Path(__file__).parent
 static_dir = BASE_DIR / "static"

@@ -3,6 +3,7 @@ import os
 import socket
 import logging
 import signal  # ADDED for graceful shutdown
+import json  # ADDED for JSON handling (if needed, but not used directly)
 from dotenv import load_dotenv
 import httpx
 
@@ -10,6 +11,7 @@ from repositories.base import get_connection, transaction
 from repositories import node_execution_repository, execution_queue_repository, artifact_repository, workflow_repository
 from artifact_service import ArtifactService
 from groq_client import GroqClient
+from services.redis_client import get_redis_client  # ADDED for storing message-execution mapping
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -80,7 +82,7 @@ async def worker_loop():
                             exec_id = payload.get("exec_id")
                             user_message = payload.get("message", "")
 
-                            # ----- ИЗМЕНЕНО: используем второго бота вместо внутреннего сервера -----
+                            # ----- ИЗМЕНЕНО: используем второго бота с inline-кнопкой и сохраняем в Redis -----
                             manager_chat_id = os.getenv("MANAGER_CHAT_ID")
                             manager_bot_token = os.getenv("MANAGER_BOT_TOKEN")
 
@@ -96,14 +98,29 @@ async def worker_loop():
                                     f"Новое сообщение от клиента по execution {exec_id}:\n\n"
                                     f"{user_message}"
                                 )
+                                # Отправляем сообщение с inline-кнопкой
                                 url = f"https://api.telegram.org/bot{manager_bot_token}/sendMessage"
                                 params = {
                                     "chat_id": int(manager_chat_id),
-                                    "text": full_message
+                                    "text": full_message,
+                                    "reply_markup": {
+                                        "inline_keyboard": [[{
+                                            "text": "✏️ Ответить",
+                                            "callback_data": f"reply:{exec_id}"
+                                        }]]
+                                    }
                                 }
                                 async with httpx.AsyncClient(timeout=10.0) as client:
                                     resp = await client.post(url, json=params)
                                     resp.raise_for_status()
+                                    # Получаем message_id отправленного сообщения для возможного использования
+                                    resp_data = resp.json()
+                                    if resp_data.get("ok"):
+                                        message_id = resp_data["result"]["message_id"]
+                                        # Сохраняем связь в Redis (для отказоустойчивости, но кнопка уже содержит execution_id)
+                                        redis_client = await get_redis_client()
+                                        key = f"msg_map:{manager_chat_id}:{message_id}"
+                                        await redis_client.setex(key, 86400, exec_id)  # TTL 24 часа
                                 logger.info("Manager notification sent for job %s", job["id"])
                                 await execution_queue_repository.complete_job(job["id"], success=True, tx=tx)
                             # ----------------------------------------------------------------

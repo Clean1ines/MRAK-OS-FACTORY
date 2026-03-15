@@ -209,6 +209,8 @@ async def send_execution_message(
             task_type="notify_manager",
             payload={"exec_id": exec_id, "message": req.message, "context": client_text},
         )
+        # Переводим выполнение в ручной режим, чтобы менеджер мог ответить
+        await node_execution_repository.update_node_execution_status(exec_id, "MANUAL")
         response_text = "Ваш вопрос требует вмешательства специалиста. Менеджер свяжется с вами в ближайшее время."
     else:
         response_text = client_text

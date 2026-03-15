@@ -71,7 +71,7 @@ async def manager_reply(
     - Проверяет, что выполнение существует и находится в статусе MANUAL.
     - Добавляет сообщение в clarification-сессию как ответ ассистента.
     - Находит chat_id клиента по last_run_id в telegram_clients.
-    - Отправляет сообщение клиенту через внутренний /send-message Telegram-бота.
+    - Отправляет сообщение клиенту через второго бота (MANAGER_BOT_TOKEN) напрямую.
     """
     expected_token = get_manager_api_token()
     if x_manager_token != expected_token:
@@ -106,26 +106,33 @@ async def manager_reply(
     if chat_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Telegram client has no chat_id")
 
-    # Отправляем сообщение через внутренний HTTP-интерфейс бота
-    internal_token = os.getenv("INTERNAL_TOKEN")
-    bot_internal_url = os.getenv("TELEGRAM_INTERNAL_URL")
-    if not (internal_token and bot_internal_url):
+    # ----- ИЗМЕНЕНО: используем второго бота напрямую вместо внутреннего сервера -----
+    manager_bot_token = os.getenv("MANAGER_BOT_TOKEN")
+    if not manager_bot_token:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="INTERNAL_TOKEN or TELEGRAM_INTERNAL_URL is not configured",
+            detail="MANAGER_BOT_TOKEN is not configured",
         )
 
-    url = bot_internal_url.rstrip("/") + "/send-message"
-    headers = {"Authorization": f"Bearer {internal_token}"}
-    json_body = {"chat_id": int(chat_id), "message": body.message}
+    url = f"https://api.telegram.org/bot{manager_bot_token}/sendMessage"
+    params = {
+        "chat_id": int(chat_id),
+        "text": body.message,
+    }
 
     async with httpx.AsyncClient(timeout=10.0) as client_http:
-        resp = await client_http.post(url, headers=headers, json=json_body)
+        resp = await client_http.post(url, json=params)
         if resp.status_code >= 400:
+            # Пробуем получить текст ошибки от Telegram
+            error_detail = "Unknown error"
+            try:
+                error_data = resp.json()
+                error_detail = error_data.get("description", str(resp.status_code))
+            except Exception:
+                error_detail = f"HTTP {resp.status_code}"
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Failed to send Telegram message: {resp.status_code}",
+                detail=f"Failed to send Telegram message: {error_detail}",
             )
 
     return {"status": "ok"}
-
